@@ -1,0 +1,33 @@
+name: Feature / vertical slice
+description: A verifiable product increment.
+title: "[FEATURE] "
+labels: ["feature"]
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: User outcome
+      description: What user problem is solved?
+    validations:
+      required: true
+  - type: textarea
+    id: rules
+    attributes:
+      label: PRD/business rules
+      placeholder: INV-001, INV-007...
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+    validations:
+      required: true
+  - type: textarea
+    id: security
+    attributes:
+      label: Authorization / security considerations
+  - type: textarea
+    id: ux
+    attributes:
+      label: Mobile/UX considerations

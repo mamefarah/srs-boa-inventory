@@ -1,0 +1,28 @@
+name: Bug / control failure
+description: Report incorrect behavior, security failure or reconciliation issue.
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior / violated rule
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    id: effect
+    attributes:
+      label: Inventory/security effect
+      description: Include warehouse/item/transaction references; never paste secrets.
