@@ -9,6 +9,82 @@ permissions:
   contents: read
 
 jobs:
+  frontend-checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      # Public/publishable-only placeholder values — these are never secret (see
+      # docs/SECURITY.md and frontend/src/lib/supabase/env.ts, which only ever reads
+      # NEXT_PUBLIC_-prefixed vars). The build needs *some* valid-looking config to
+      # complete; it does not call a real Supabase project during `next build` or
+      # `vitest run`, so a placeholder is sufficient and no real project credentials are
+      # ever needed in CI. Real values are supplied by the deployment platform at actual
+      # deploy time, which is out of scope for this workflow.
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: placeholder-key
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      # NOTE: pinned by tag, not by commit SHA like actions/checkout above — this
+      # session's sandbox had no network access to look up and verify the current
+      # actions/setup-node release SHA, and a fabricated hash is worse than an
+      # unpinned tag. Align this to the same SHA-pinning convention as actions/checkout
+      # once that lookup can be done (see CLAUDE.md: never invent unverifiable facts).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Unit tests
+        run: npm run test
+
+      - name: Verify no service-role/private-key material in the build output
+        run: npm run check:bundle
+
+  db-security-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      # See the note on the frontend-checks job above: tag-pinned, not SHA-pinned.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: supabase/tests/package-lock.json
+
+      - name: Install PostgreSQL
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y postgresql
+          sudo service postgresql start
+          sudo -u postgres psql -c "alter role postgres with password 'ci_test_password';"
+
+      - name: Install RLS test dependencies
+        working-directory: supabase/tests
+        run: npm ci
+
+      - name: Run RLS/security test suite against a real PostgreSQL instance
+        env:
+          TEST_DB_PASSWORD: ci_test_password
+        run: bash supabase/tests/run.sh
+
   repository-guardrails:
     runs-on: ubuntu-latest
     steps:

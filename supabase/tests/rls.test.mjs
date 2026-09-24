@@ -256,3 +256,95 @@ describe("permitted access succeeds, with an audit trail", () => {
     assert.equal(other.length, 0);
   });
 });
+
+describe("log_audit_event is not directly callable by clients", () => {
+  // log_audit_event() takes an unchecked, caller-suppliable actor id, so it must never be
+  // reachable by anon/authenticated directly — only from inside other SECURITY DEFINER
+  // functions/triggers. A direct client grant would let any user forge audit_events rows
+  // attributed to someone else (see the migration's grant-list comment).
+  test("admin cannot call log_audit_event directly (no client grant)", async () => {
+    await assert.rejects(
+      () => asUser(USERS.admin, (c) => c.query("select public.log_audit_event('forged.event')")),
+      /permission denied/i,
+    );
+  });
+
+  test("store clerk cannot call log_audit_event directly to forge an entry attributed to admin", async () => {
+    await assert.rejects(
+      () =>
+        asUser(USERS.storeClerk, (c) =>
+          c.query(
+            "select public.log_audit_event('forged.event', 'profiles', $1, '{}'::jsonb, $2)",
+            [USERS.admin, USERS.admin],
+          ),
+        ),
+      /permission denied/i,
+    );
+  });
+});
+
+describe("privilege self-escalation is denied", () => {
+  test("store clerk cannot grant their own role an extra capability via role_capabilities", async () => {
+    await assert.rejects(
+      () =>
+        asUser(USERS.storeClerk, (c) =>
+          c.query(
+            "insert into public.role_capabilities (role_id, capability_key) values ('20000000-0000-0000-0000-000000000001', 'admin.manage_users')",
+          ),
+        ),
+      /new row violates row-level security policy|permission denied/i,
+    );
+  });
+});
+
+describe("set_user_active is the sole working path to change profiles.active", () => {
+  test("the authenticated-role column grant on profiles does not include active", async () => {
+    await assert.rejects(
+      () =>
+        asUser(USERS.storeClerk, (c) =>
+          c.query("update public.profiles set active = false where id = $1", [USERS.storeClerk]),
+        ),
+      /permission denied/i,
+    );
+  });
+
+  test("non-admin cannot call set_user_active", async () => {
+    await assert.rejects(
+      () =>
+        asUser(USERS.storeClerk, (c) =>
+          c.query("select public.set_user_active($1, false)", [USERS.noAccess]),
+        ),
+      /insufficient privilege/i,
+    );
+  });
+
+  test("admin can deactivate another user and it is logged to audit_events", async () => {
+    const { activeAfter, auditRow } = await asUser(USERS.admin, async (c) => {
+      await c.query("select public.set_user_active($1, false)", [USERS.noAccess]);
+      const profileResult = await c.query("select active from public.profiles where id = $1", [
+        USERS.noAccess,
+      ]);
+      const auditResult = await c.query(
+        "select * from public.audit_events where target_id = $1 and event_type = 'admin.user_active_changed'",
+        [USERS.noAccess],
+      );
+      return { activeAfter: profileResult.rows[0]?.active, auditRow: auditResult.rows[0] };
+    });
+    assert.equal(activeAfter, false);
+    assert.ok(auditRow, "expected admin.user_active_changed to be logged");
+    assert.equal(auditRow.actor_user_id, USERS.admin);
+    assert.deepEqual(auditRow.metadata, { active: false });
+  });
+
+  test("set_user_active on an unknown user id raises an error", async () => {
+    await assert.rejects(
+      () =>
+        asUser(USERS.admin, (c) =>
+          c.query("select public.set_user_active($1, false)", [
+            "99999999-0000-0000-0000-000000000099",
+          ]),
+        ),
+      /user not found/i,
+    );
+  });
+});

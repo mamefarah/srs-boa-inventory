@@ -8,6 +8,12 @@
 -- This migration assumes it runs inside a Supabase project, where the `auth` schema,
 -- `auth.users` and `auth.uid()` already exist and are managed by Supabase Auth. It must
 -- never create or modify objects in the `auth` schema itself.
+--
+-- Rollback / forward-fix policy: this is the first migration in the project (no prior
+-- state to preserve), so a local/dev environment can be rolled back by resetting the
+-- database and not reapplying it. Once this migration has been applied to any shared
+-- (staging/production) environment, never edit this file — ship a new, later-numbered
+-- migration that alters or reverses the affected objects instead (expand/contract).
 
 -- ── profiles ────────────────────────────────────────────────────────────────────────
 create table public.profiles (
@@ -213,7 +219,10 @@ end;
 $$;
 
 comment on function public.log_audit_event(text, text, text, jsonb, uuid) is
-  'Sole insert path for audit_events. No table-level INSERT grant is given to application roles.';
+  'Sole insert path for audit_events. Internal-only: must never be granted EXECUTE to '
+  'anon/authenticated, since p_actor_user_id is caller-suppliable and unchecked. Only '
+  'other SECURITY DEFINER functions/triggers owned by this migration''s applying role may '
+  'call it (they run as that owner and need no separate EXECUTE grant to do so).';
 
 create or replace function public.foundation_demo_create(p_note text)
 returns bigint
@@ -245,6 +254,40 @@ $$;
 
 comment on function public.foundation_demo_create(text) is
   'Non-business fixture RPC. Sole mutation path for foundation_protected_demo; proves the privileged-mutation pattern only.';
+
+create or replace function public.set_user_active(p_user_id uuid, p_active boolean)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.has_capability('admin.manage_users') then
+    raise exception 'insufficient privilege' using errcode = '42501';
+  end if;
+
+  update public.profiles
+  set active = p_active
+  where id = p_user_id;
+
+  if not found then
+    raise exception 'user not found' using errcode = 'P0002';
+  end if;
+
+  perform public.log_audit_event(
+    'admin.user_active_changed',
+    'profiles',
+    p_user_id::text,
+    jsonb_build_object('active', p_active)
+  );
+end;
+$$;
+
+comment on function public.set_user_active(uuid, boolean) is
+  'Sole path to change profiles.active. Requires admin.manage_users. The authenticated-role '
+  'column grant on profiles deliberately covers only display_name (never active), so a '
+  'self-update can never reactivate/deactivate the caller''s own row — this RPC is the only '
+  'route, and it is gated on the caller''s own current grants via has_capability().';
 
 -- ── new-user bootstrap trigger ────────────────────────────────────────────────────────
 create or replace function public.handle_new_auth_user()
@@ -416,12 +459,17 @@ create policy foundation_protected_demo_select on public.foundation_protected_de
   using (created_by = auth.uid() or public.has_capability('admin.manage_users'));
 
 -- explicit function grants (deny-by-default revoked all above; grant back narrowly)
+-- Note: log_audit_event() is deliberately NOT granted to authenticated/anon. It takes an
+-- unchecked, caller-suppliable actor id, so a direct client grant would let any
+-- authenticated user forge audit_events rows attributed to another user. It is called
+-- only from inside other SECURITY DEFINER functions/triggers, which need no separate
+-- EXECUTE grant since they already run as the owning role.
 grant execute on function public.has_capability(text) to authenticated;
 grant execute on function public.has_warehouse_access(uuid) to authenticated;
 grant execute on function public.my_capabilities() to authenticated;
 grant execute on function public.my_warehouse_ids() to authenticated;
-grant execute on function public.log_audit_event(text, text, text, jsonb, uuid) to authenticated;
 grant execute on function public.foundation_demo_create(text) to authenticated;
+grant execute on function public.set_user_active(uuid, boolean) to authenticated;
 
 -- ── seed data: exactly one bootstrap role, no Bureau-specific titles/thresholds ──────
 insert into public.capabilities (key, description) values

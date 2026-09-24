@@ -17,6 +17,14 @@ GoTrue). It proves what the database does once a request arrives with a given ve
 `sub` claim — which is the boundary the frontend's `getClaims()`-based session validation
 (`frontend/src/lib/auth/session.ts`) relies on.
 
+`has_capability()`/`has_warehouse_access()`/etc. rely on their SECURITY DEFINER owner
+bypassing `FORCE ROW LEVEL SECURITY` (Postgres exempts the table owner and any
+`BYPASSRLS` role from RLS). `run.sh` applies every migration as the local superuser, and
+in a real Supabase project migrations are applied by a superuser-equivalent role too — so
+this property holds in both places for the same reason. If this stub is ever changed to
+apply migrations as a non-superuser role, re-verify `BYPASSRLS` is still granted, or these
+helper functions will silently stop working.
+
 ## Running
 
 Requires a local PostgreSQL 16+ server reachable as a superuser (`createdb`/`dropdb`/
@@ -52,4 +60,10 @@ other. It proves:
   a permitted active user and is recorded in `audit_events` with the correct actor;
 - a user without `audit.read`/`admin.manage_users` cannot read the audit trail, but an
   admin can, including other users' actions;
-- a user can read their own profile but not another user's.
+- a user can read their own profile but not another user's;
+- `log_audit_event()` cannot be called directly by any client role (no client EXECUTE
+  grant at all), including an attempt to forge an entry attributed to another user;
+- a non-admin cannot grant their own role an extra capability via `role_capabilities`;
+- `profiles.active` cannot be changed by a raw client UPDATE (the column grant excludes
+  it); `set_user_active()` is the sole working path, requires `admin.manage_users`, and
+  logs an `admin.user_active_changed` audit event.

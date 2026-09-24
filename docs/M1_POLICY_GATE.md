@@ -34,3 +34,14 @@ deployment, or production Supabase changes. `roles`/`capabilities` in this slice
 purely technical (see `frontend/src/lib/auth/capabilities.ts`) and must not be extended
 with a real Bureau title, signatory or threshold until the corresponding HB item above is
 resolved with evidence.
+
+## Known limitations carried forward (found in REDTEAM review, not fixed speculatively)
+
+- Capability grants are global to a user, not scoped per warehouse — see
+  `docs/ADR/0003-capability-based-authorization-foundation.md`'s "Known limitation".
+  Revisit before seeding any HB-4-resolved role that must be warehouse-restricted.
+- `audit_events` has no warehouse/scope column and no correlation id across multiple rows
+  from one business event. `metadata jsonb` can absorb richer event content without a
+  column migration, but a warehouse-scoped auditor role or grouping several ledger legs
+  from one transfer would need a schema addition. Not added now — no current feature
+  needs it, and this slice does not build the ledger tables that would.

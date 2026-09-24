@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { safeRedirectTarget } from "@/lib/auth/redirect";
 
 export interface SignInState {
   error: string | null;
@@ -27,6 +28,5 @@ export async function signInAction(
     return { error: "Could not sign in. Check your email and password and try again." };
   }
 
-  const target = typeof redirectTo === "string" && redirectTo.startsWith("/") ? redirectTo : "/dashboard";
-  redirect(target);
+  redirect(safeRedirectTarget(redirectTo, "/dashboard"));
 }

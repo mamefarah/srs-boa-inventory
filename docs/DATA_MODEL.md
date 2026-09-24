@@ -13,6 +13,15 @@
 
 Approval authority should be scopeable by transaction type, warehouse, item category and value/quantity threshold when policy requires.
 
+> **M1 Slice 1 naming note:** `supabase/migrations/0001_identity_and_access_foundation.sql`
+> implements this section's `users`/`roles`/`permissions`/`user_roles`/
+> `user_warehouse_access` concepts as `profiles`/`roles`/`capabilities`/`user_roles`/
+> `user_warehouse_access` respectively (the shipped schema is authoritative for these
+> names — this file remains design-only, per the note above). `approval_authorities` is
+> not yet built (blocked on HB-4); when it is, also note that `role_capabilities`/
+> `user_roles` grant capabilities globally, not scoped by warehouse — see
+> `docs/ADR/0003-capability-based-authorization-foundation.md`'s "Known limitation".
+
 ## Organization/master data
 
 - warehouses
@@ -177,7 +186,8 @@ Disposal workflow may place a hold/commitment on stock before final terminal tra
 ## Governance
 - attachments
 - notifications
-- audit_logs
+- audit_logs (implemented in M1 Slice 1 as `audit_events` — see the naming note under
+  "Identity and authorization" above; this file remains design-only)
 - idempotency_records if idempotency is not fully represented on transaction headers
 
 ## Read/write boundaries

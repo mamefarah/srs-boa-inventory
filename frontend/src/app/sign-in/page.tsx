@@ -1,4 +1,5 @@
 import { SignInForm } from "./sign-in-form";
+import { safeRedirectTarget } from "@/lib/auth/redirect";
 
 export default async function SignInPage({
   searchParams,
@@ -6,7 +7,7 @@ export default async function SignInPage({
   searchParams: Promise<{ redirectTo?: string }>;
 }) {
   const { redirectTo } = await searchParams;
-  const safeRedirectTo = redirectTo && redirectTo.startsWith("/") ? redirectTo : "/dashboard";
+  const safeRedirectTo = safeRedirectTarget(redirectTo, "/dashboard");
 
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-6 p-4">
