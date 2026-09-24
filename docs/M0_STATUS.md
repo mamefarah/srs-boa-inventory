@@ -36,7 +36,9 @@
 
 ## M1 areas that could theoretically start without government-policy risk
 
-Foundation capabilities backed by SAFE DEFAULT behavior that needs no Bureau-specific evidence (`docs/M0_BLOCKER_MATRIX.md` §3 S-1..S-8): authentication, user/role scaffolding (mechanism, not real signatory data), warehouse/location master, item-master skeleton (excluding the stock-vs-asset control flag, HB-2), the `inventory_transactions`/`inventory_entries`/`inventory_commitments` ledger shape from ADR-0001, direct-write prohibition + RLS scaffolding, append-only audit logging, and idempotent/atomic posting infrastructure.
+Foundation capabilities backed by SAFE DEFAULT behavior that needs no Bureau-specific evidence (`docs/M0_BLOCKER_MATRIX.md` §3 S-1..S-8): authentication, user/role scaffolding (mechanism, not real signatory data), warehouse/location master, item-master skeleton (excluding the stock-vs-asset control flag, HB-2), `inventory_transactions` (carries no funding/project field), direct-write prohibition + RLS scaffolding, append-only audit logging, and idempotent/atomic posting infrastructure.
+
+`inventory_entries` and `inventory_commitments` are **excluded** from this list: per `docs/DATA_MODEL.md`, both carry `funding_source_id`/`project_id` as part of the stock-position key, which is exactly what HB-3 (funding/project segregation policy) decides. Building their final shape now risks the same retrofit cost HB-3 already warns against — do not start these two tables speculatively either way.
 
 UI: only the structure-agnostic elements — navigation shell, item search/list, warehouse selector, page header, status badges, empty/loading states. Approval, inspection, disposal and fixed-asset-handover screens are explicitly **excluded**: their step count and structure (single approver vs. committee panel, one document vs. GRN+SRV as two) depend on HB-1, HB-2, HB-4 and HB-8 and are not yet known (`docs/M0_BLOCKER_MATRIX.md` §1, "Blocks workflow/UI design" column).
 
