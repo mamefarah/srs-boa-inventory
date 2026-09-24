@@ -36,7 +36,9 @@
 
 ## M1 areas that could theoretically start without government-policy risk
 
-Foundation capabilities backed by SAFE DEFAULT behavior that needs no Bureau-specific evidence (`docs/M0_BLOCKER_MATRIX.md` §3 S-1..S-8): authentication, user/role scaffolding (mechanism, not real signatory data), warehouse/location master, item-master skeleton (excluding the stock-vs-asset control flag, HB-2), the `inventory_transactions`/`inventory_entries`/`inventory_commitments` ledger shape from ADR-0001, direct-write prohibition + RLS scaffolding, append-only audit logging, idempotent/atomic posting infrastructure, and the generic UI shell per `docs/DESIGN_SYSTEM.md`/`docs/UX_PATTERNS.md`.
+Foundation capabilities backed by SAFE DEFAULT behavior that needs no Bureau-specific evidence (`docs/M0_BLOCKER_MATRIX.md` §3 S-1..S-8): authentication, user/role scaffolding (mechanism, not real signatory data), warehouse/location master, item-master skeleton (excluding the stock-vs-asset control flag, HB-2), the `inventory_transactions`/`inventory_entries`/`inventory_commitments` ledger shape from ADR-0001, direct-write prohibition + RLS scaffolding, append-only audit logging, and idempotent/atomic posting infrastructure.
+
+UI: only the structure-agnostic elements — navigation shell, item search/list, warehouse selector, page header, status badges, empty/loading states. Approval, inspection, disposal and fixed-asset-handover screens are explicitly **excluded**: their step count and structure (single approver vs. committee panel, one document vs. GRN+SRV as two) depend on HB-1, HB-2, HB-4 and HB-8 and are not yet known (`docs/M0_BLOCKER_MATRIX.md` §1, "Blocks workflow/UI design" column).
 
 This is a readiness observation only. **M1 is not authorized to start by this document.**
 
