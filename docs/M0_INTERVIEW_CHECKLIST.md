@@ -8,10 +8,10 @@ Do not ask respondents to design the software. Ask them to show how the official
 
 1. What is the current Somali Region Stock Management Manual?
 2. What is the current Property Administration Manual/directive?
-3. Which proclamation/directive/manual currently governs Bureau stores?
-4. Are older 2011 regional manuals still valid, amended or replaced?
-5. Can copies be provided?
-6. Which BoFED office gives authoritative interpretation?
+3. Proclamation No. 196/2020 is now the identified controlling regional proclamation. Which current implementing property/stock directive was issued under it?
+4. Which older stock/fixed-asset manuals remain officially in force to the extent they are consistent with Proclamation 196/2020?
+5. Can the current implementing directive, approved forms package and delegation matrix be provided?
+6. Which BoFED office gives authoritative interpretation when an older manual conflicts with Proclamation 196/2020?
 
 ## B. Goods receipt
 
@@ -81,7 +81,7 @@ Do not ask respondents to design the software. Ask them to show how the official
 1. How are damaged/expired/obsolete items identified?
 2. Is stock kept physically separate?
 3. Show condition/disposal forms.
-4. What committee/authority approves disposal?
+4. What committee/authority approves **disposal**, and separately who approves **deletion/write-off/loss**?
 5. What valuation or thresholds alter approval authority?
 6. What evidence is retained after destruction/sale/transfer?
 
@@ -92,7 +92,7 @@ Do not ask respondents to design the software. Ask them to show how the official
 3. Show property number/asset registration and custody handover forms.
 4. Who is accountable after issue?
 5. How are asset transfers/returns/disposals recorded?
-6. The Bureau's own FM Manual defines the fixed-asset register threshold as useful life longer than 1 year **and** value of Birr 2,000 or above — this is currently BoA-IMS's working baseline. Does a current Somali Region/BoFED manual or directive state a different figure that should supersede it, and is the test "and" (both conditions) or "or" (either condition)? If a different figure applies, please show the current controlling manual/directive page.
+6. Proclamation No. 196/2020 confirms the useful-life concept but delegates the monetary value threshold to directive. Historical regional evidence uses Birr 1,000 while current Bureau operational evidence uses Birr 2,000. Show the **current implementing directive** and confirm the effective threshold, effective date, and whether the classification test requires both useful-life and value conditions.
 
 ## I. UOM and item coding
 
