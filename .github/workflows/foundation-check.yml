@@ -157,9 +157,10 @@ jobs:
             check_skill_md "$f"
           done
 
-          # Resolve each external skill symlink exactly one level (no recursive -L walk,
-          # so a symlink cycle cannot cause unbounded traversal), require the target stay
-          # inside the checkout, and require a SKILL.md with frontmatter at that target.
+          # Resolve each external skill symlink via `readlink -f` (glibc's own ELOOP
+          # detection rules out a cycle; we never recurse with `find -L`, so no
+          # traversal can be unbounded either way), require the target stay inside the
+          # checkout, and require a SKILL.md with frontmatter at that target.
           for name in "${required_external_skills[@]}"; do
             link=".claude/skills/$name"
             if [ ! -e "$link" ] && [ ! -L "$link" ]; then
