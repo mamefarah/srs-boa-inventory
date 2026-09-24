@@ -6,52 +6,52 @@ Stable rule IDs are referenced by requirements, tests and code review.
 Current inventory balances cannot be directly edited.
 
 ## INV-002
-Posted inventory movements are immutable.
+Posted inventory transactions and entries are immutable.
 
 ## INV-003
-Corrections to posted movements use an authorized reversal linked to the original.
+Corrections to posted inventory use an authorized direct reversal only when safe; otherwise use an authorized compensating/current-period correction linked to the original.
 
 ## INV-004
-Every stock change must trace to a business document/line and user.
+Every physical stock change must trace to an inventory transaction, business document/line and posting user.
 
 ## INV-005
-Internal warehouse transfers must conserve total Bureau inventory.
+Internal warehouse transfers must conserve Bureau logistics inventory across source warehouse, in-transit and destination warehouse.
 
 ## INV-006
-Stock cannot be issued beyond current authorized/reserved availability.
+A new commitment cannot exceed eligible available-to-promise quantity unless an explicit validated exception policy exists. Fulfilment of an existing commitment must not subtract that same commitment twice; it is limited by the commitment's remaining quantity and actual eligible physical stock.
 
 ## INV-007
 Critical posting operations must be atomic and concurrency-safe.
 
 ## INV-008
-Every retry-safe posting operation must enforce a unique idempotency key.
+Every retry-safe posting operation must enforce a unique idempotency intent and verify request-hash consistency.
 
 ## INV-009
-Only accepted receipt quantity becomes AVAILABLE.
+Only accepted receipt quantity may become USABLE/available-to-promise.
 
 ## INV-010
-Rejected receipt quantity must never increase available inventory.
+Rejected receipt quantity remains traceable as REJECTED_PENDING_RETURN until returned/resolved and must never increase available-to-promise.
 
 ## INV-011
-Expired, damaged, quarantined, obsolete and disposal-pending stock is not ordinarily issuable.
+Expired, damaged, quarantined, obsolete, rejected and disposal-held stock is not ordinarily issuable.
 
 ## INV-012
-Damage/expiry are condition changes and do not automatically reduce physical inventory.
+Damage/expiry/quarantine/rejection are condition/control changes and do not automatically reduce physical quantity.
 
 ## INV-013
-Disposal is a separate approved transaction with evidence.
+Disposal is a separate approved transaction with evidence and terminal disposition.
 
 ## INV-014
-Physical count book quantity is hidden during blind count.
+Physical count book quantity is hidden during the first blind count.
 
 ## INV-015
-Physical-count variance does not change stock until approved adjustment posts.
+Physical-count variance does not change stock until an approved adjustment/correction transaction posts.
 
 ## INV-016
 A user cannot approve a restricted transaction they initiated when segregation is required.
 
 ## INV-017
-Destination receipt is distinct from source transfer dispatch.
+Destination transfer receipt is distinct from source dispatch.
 
 ## INV-018
 A transfer discrepancy remains explicitly unresolved until formally reconciled.
@@ -60,49 +60,85 @@ A transfer discrepancy remains explicitly unresolved until formally reconciled.
 Closed periods reject ordinary backdated inventory posting.
 
 ## INV-020
-Period reopen requires elevated authority, reason and audit evidence.
+Period reopen requires elevated authority, reason and audit evidence; historical periods are not routinely reopened merely to correct later-discovered errors.
 
 ## INV-021
 Item codes are unique Bureau-wide and cannot be reused.
 
 ## INV-022
-Base UOM cannot be casually changed after transactional use.
+Every item has one authoritative base UOM; authoritative ledger and commitment quantities are stored in base UOM.
 
 ## INV-023
-Duplicate serial numbers are prohibited within their defined uniqueness scope.
+Alternate-UOM posting requires an approved deterministic item conversion; otherwise it is prohibited.
 
 ## INV-024
-Expiry-controlled stock requires expiry data before acceptance where policy requires.
+Duplicate serial numbers are prohibited within their defined uniqueness scope.
 
 ## INV-025
-FEFO is the default issue sequence for expiry-controlled stock; override requires reason.
+Expiry-controlled stock requires expiry data before acceptance where policy requires.
 
 ## INV-026
-Funding/project source must be preserved when policy requires segregation.
+FEFO is the default issue sequence for expiry-controlled stock; override requires reason and authority where policy requires.
 
 ## INV-027
-Opening balances require physical verification and approved migration-batch evidence.
+Funding/project source must be preserved when policy requires segregation.
 
 ## INV-028
-System administrators do not automatically receive inventory approval authority.
+Opening balances require physical verification and approved migration-batch evidence.
 
 ## INV-029
-Authorization is enforced at server/database level, not by UI visibility.
+System administrators do not automatically receive inventory approval authority.
 
 ## INV-030
-Every critical action creates an append-only audit event.
+Authorization is enforced at server/database level, not by UI visibility.
 
 ## INV-031
-Authoritative timestamps use standard database timestamp types.
+Application clients cannot directly INSERT/UPDATE/DELETE inventory_transactions, inventory_entries, balance projections, audit logs or closed-period control records.
 
 ## INV-032
-Ethiopian Calendar/Fiscal Year is a reporting/display dimension, not the sole stored timestamp.
+Every critical action creates an append-only audit event.
 
 ## INV-033
-Offline/draft capture cannot silently post critical stock movements without server confirmation.
+Authoritative timestamps use standard database timestamp types.
 
 ## INV-034
-Durable-item custody/fixed-asset lifecycle is separated from ordinary consumable inventory unless formally integrated.
+Ethiopian Calendar/Fiscal Year is a reporting/display dimension, not the sole stored timestamp.
 
 ## INV-035
+Offline/draft capture cannot silently post critical stock movements without server confirmation.
+
+## INV-036
+Durable-item warehouse issue is distinct from full fixed-asset lifecycle; internal custody/property handoff must be explicit where applicable.
+
+## INV-037
+Reservation/commitment is not a physical inventory movement.
+
+## INV-038
+Approved requisitions and transfers may create commitments that reduce available-to-promise.
+
+## INV-039
+Dispatch consumes/reduces its related transfer commitment and creates physical IN_TRANSIT stock atomically.
+
+## INV-040
+Inventory condition is orthogonal to custody/location; the model must support combinations such as IN_TRANSIT + DAMAGED.
+
+## INV-041
+Balance projections are derived only and must reconcile to authoritative inventory entries.
+
+## INV-042
+One inventory transaction groups all physical entries/legs produced by one posting intent.
+
+## INV-043
+Internal/reclassification transaction entries for the same item/base-UOM must conserve quantity across controlled buckets.
+
+## INV-044
+A direct reversal must not create negative/impossible stock or violate downstream dependencies; otherwise a compensating correction is required.
+
+## INV-045
+A later-discovered error in a closed period is normally corrected in the current open period with reference to the original.
+
+## INV-046
+Warehouse on-hand, logistics inventory and broader Bureau custody/property totals must be reported as distinct concepts.
+
+## INV-047
 Formal valuation method remains TO BE VALIDATED until Finance/Property policy is confirmed.

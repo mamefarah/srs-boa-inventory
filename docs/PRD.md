@@ -1,4 +1,4 @@
-# BoA-IMS Product Requirements Document — v2.0
+# BoA-IMS Product Requirements Document — v2.1
 
 ## 1. Product definition
 
@@ -9,12 +9,15 @@ It is not a commercial POS, procurement tendering system, general accounting pac
 ## 2. Primary questions the system must prove
 
 At any time the system must be able to show:
-- what the Bureau controls;
-- where each item is physically/operationally located;
-- available, reserved, in-transit, quarantine, damaged, expired and other controlled quantities;
+- what stock is physically held in Bureau warehouses;
+- what stock is in transit between Bureau warehouses;
+- what stock has left warehouse control and entered internal custody or terminal use/disposition;
+- where each item is located;
+- its physical/control condition;
+- how much is committed/reserved versus still available to promise;
 - batch/lot/serial identity where applicable;
 - project/funding source where applicable;
-- how stock entered custody;
+- how stock entered, moved, changed condition, was issued, returned, adjusted, disposed or reversed;
 - who requested, approved, posted, received, transferred, counted, adjusted or reversed it;
 - the supporting document and audit trail;
 - the balance at a reporting-period cutoff.
@@ -31,187 +34,370 @@ Before final workflow/database implementation, validate current Somali Region/Bu
 - disposal procedures;
 - approval/signatory authorities;
 - numbering conventions;
-- fiscal-period and audit requirements.
+- fiscal-period and audit requirements;
+- whether project/funding sources restrict use;
+- base-UOM and conversion rules;
+- treatment of durable equipment after warehouse issue.
 
 Unconfirmed rules are marked **TO BE VALIDATED**. Approved procedure overrides this PRD.
 
 ## 4. Objectives
 
 1. One standardized item master.
-2. Separate stock positions by warehouse/location/condition and other required dimensions.
-3. No direct stock-balance edits.
-4. Traceable receipt, inspection, requisition, reservation, issue, transfer, return, condition change, count, adjustment, reversal and disposal.
-5. Strong segregation of duties and approval scoping.
-6. Accurate funding/project attribution where policy requires.
-7. Ethiopian Fiscal Year reporting plus standard timestamps.
-8. Period closing and reproducible reconciliation.
-9. Mobile-first operational UX.
-10. Complete auditability.
+2. Separate physical stock position from reservation/commitment state.
+3. Separate custody/location from item condition.
+4. No direct stock-balance edits.
+5. Traceable receipt, inspection, requisition, commitment, issue, transfer, return, condition change, count, adjustment, reversal and disposal.
+6. Strong segregation of duties and approval scoping.
+7. Accurate funding/project attribution where policy requires.
+8. Ethiopian Fiscal Year reporting plus standard timestamps.
+9. Period closing and reproducible reconciliation.
+10. Mobile-first operational UX.
+11. Complete auditability.
 
-## 5. Inventory-account model
+## 5. Corrected inventory model
 
-Inventory is controlled through movements between accounts/states:
+BoA-IMS uses **orthogonal dimensions** rather than one overloaded inventory-state enum.
 
-- EXTERNAL
-- RECEIVING_PENDING_INSPECTION
-- AVAILABLE
-- RESERVED
-- IN_TRANSIT
+### 5.1 Custody/location scope
+
+A physical stock bucket identifies where custody resides:
+
+- WAREHOUSE — physically held at a Bureau warehouse;
+- IN_TRANSIT — dispatched between Bureau warehouses but not yet received;
+- INTERNAL_CUSTODY — issued from warehouse control into a Bureau directorate/custodian when the item remains Bureau property;
+- EXTERNAL — supplier, donor, recipient/consumption or other non-Bureau counterparty;
+- TERMINAL_DISPOSITION — approved disposal/write-off endpoint;
+- OPENING_BALANCE_CONTRA — virtual counterparty used only to establish an approved opening position.
+
+Warehouse/location IDs are required where custody is WAREHOUSE.
+
+### 5.2 Condition
+
+Condition is separate from custody:
+
+- PENDING_INSPECTION
+- USABLE
 - QUARANTINE
 - DAMAGED
 - EXPIRED
 - OBSOLETE
-- DISPOSAL_PENDING
-- DISPOSED
-- DIRECTORATE_CUSTODY
-- INVENTORY_LOSS
+- REJECTED_PENDING_RETURN
 
-A business transaction creates balanced, traceable movement(s) from a source state/location to a destination state/location.
+This allows valid combinations such as:
+- WAREHOUSE + DAMAGED;
+- IN_TRANSIT + DAMAGED;
+- WAREHOUSE + QUARANTINE;
+- WAREHOUSE + EXPIRED.
 
-Examples:
-- Receipt: EXTERNAL → RECEIVING_PENDING_INSPECTION → AVAILABLE
-- Reservation: AVAILABLE → RESERVED
-- Issue: RESERVED → DIRECTORATE_CUSTODY
-- Transfer: AVAILABLE-WH-A → IN_TRANSIT → AVAILABLE-WH-B
-- Damage: AVAILABLE → DAMAGED
-- Expiry: AVAILABLE → EXPIRED
-- Disposal: EXPIRED/DAMAGED/OBSOLETE → DISPOSED
-- Count shortage: AVAILABLE → INVENTORY_LOSS after approval
+A disposal workflow may place a quantity on a disposal hold/commitment without inventing a new physical condition.
+
+### 5.3 Commitments/reservations
+
+Reservation is **not a physical stock movement**.
+
+Approved requisitions and approved transfers may create active `inventory_commitments` against an eligible physical stock bucket. Commitments reduce available-to-promise but do not change on-hand quantity.
+
+Example:
+
+```text
+Warehouse on-hand usable     100
+Active requisition reserve    80
+Available to promise          20
+```
+
+No physical ledger entry is posted until an actual issue/dispatch occurs.
+
+### 5.4 Availability
+
+For creation of a **new** commitment:
+
+```text
+Eligible on-hand physical stock
+- active competing commitments
+= available to promise
+```
+
+Eligible stock normally means WAREHOUSE custody + USABLE condition, subject to item/funding/batch policy.
+
+For fulfilment of an **existing** commitment, do not subtract that same commitment twice. The posting operation must validate:
+- remaining quantity on the commitment;
+- actual eligible physical stock still present;
+- competing commitments according to the locking/allocation policy.
+
+A committed issue/dispatch may fulfil up to its own remaining committed quantity when the underlying eligible physical stock still supports it.
 
 ## 6. Authoritative ledger
 
-`inventory_movements` is the source of truth. A balance projection/view may exist for performance but must reconcile to the ledger.
+The authoritative physical inventory ledger has two layers:
 
-Every movement records item, quantity/UOM, source/destination account, source/destination warehouse/location, batch/lot/serial where applicable, project/funding source, business document/line, posted timestamp/user, approval reference, reason, reversal link and idempotency key.
+### 6.1 inventory_transactions
 
-## 7. Stock-position dimensions
+One immutable business posting command/event containing:
+- transaction id/type;
+- business document type/id;
+- transaction/effective date;
+- posted timestamp/user;
+- unique idempotency key;
+- request hash/payload fingerprint;
+- approval reference;
+- reason;
+- reversal/correction reference;
+- reporting period.
 
-Depending on item policy, a stock position may include:
+### 6.2 inventory_entries
 
-`item + warehouse + location + inventory account/condition + batch/lot + funding source + project`.
+One transaction has two or more entries/legs. Each entry records:
+- transaction id;
+- item;
+- signed quantity in base UOM;
+- custody/location bucket;
+- condition;
+- batch/lot/serial dimensions;
+- funding source/project dimensions;
+- related business line.
 
-Serialized equipment additionally uses serial number.
+For internal reclassification/movement, signed entries for the same item/base-UOM must net to zero.
 
-## 8. Core scope
+Examples:
+
+Inspection of 100 delivered, 95 accepted, 5 rejected:
+
+```text
+WAREHOUSE/PENDING_INSPECTION       -100
+WAREHOUSE/USABLE                    +95
+WAREHOUSE/REJECTED_PENDING_RETURN    +5
+                                      0
+```
+
+Transfer dispatch:
+
+```text
+WH-A/USABLE       -40
+IN_TRANSIT/USABLE +40
+                    0
+```
+
+Transfer receipt:
+
+```text
+IN_TRANSIT/USABLE -40
+WH-B/USABLE       +40
+                    0
+```
+
+## 7. Derived balances
+
+`inventory_balance_projection` or equivalent read models may exist for performance, but they are derived/cache structures only and must reconcile to authoritative entries.
+
+Authenticated application clients must never directly INSERT/UPDATE/DELETE:
+- inventory_transactions;
+- inventory_entries;
+- balance projections;
+- audit logs;
+- closed-period control records.
+
+Critical stock posting occurs only through approved transactional server/database operations.
+
+## 8. Stock-position dimensions
+
+A physical stock position may include:
+
+`item + custody scope + warehouse/location + condition + batch/lot + funding source + project`.
+
+Serialized items additionally use serial number.
+
+Allocation is deliberately excluded from the physical stock key; it is represented by commitments.
+
+## 9. Inventory totals
+
+The system must distinguish at least three concepts.
+
+### Warehouse on-hand inventory
+Physical stock with WAREHOUSE custody.
+
+### Logistics inventory
+Warehouse on-hand + stock IN_TRANSIT between Bureau warehouses.
+
+### Broader Bureau property/custody
+May additionally include durable items in INTERNAL_CUSTODY after warehouse issue. Full fixed-asset accounting remains outside initial BoA-IMS scope unless formally integrated.
+
+An ordinary issue therefore always reduces warehouse inventory. Whether it also reduces broader Bureau property depends on item type and validated property procedure.
+
+## 10. Core scope
 
 ### Foundation
 Authentication, users, roles, warehouse scope, warehouses/locations, item categories, item master, UOM, funding/project master, suppliers/directorates and audit logs.
 
 ### Inventory
-Opening balance, receipt, inspection/acceptance, requisition, approval, reservation, issue, transfer, transfer receipt/discrepancy, return, condition change, physical count/recount, adjustment, reversal, period close/reopen, batch/lot/expiry/serial controls and disposal.
+Opening balance, receipt, inspection/acceptance, requisition, approval, commitments, issue, transfer, transfer receipt/discrepancy, return, condition change, physical count/recount, adjustment, reversal/correction, period close/reopen, batch/lot/expiry/serial controls and disposal.
 
 ### Reporting
-Stock position, stock ledger/bin card, receipts, issues, transfers, returns, adjustments, disposal, low/out-of-stock, expiry, condition, non-moving stock, physical variance, approval history, period close and audit reports.
+Stock position, commitments, available-to-promise, ledger/bin card, receipts, issues, transfers, returns, adjustments, disposal, low/out-of-stock, expiry, condition, non-moving stock, physical variance, approval history, period close and audit reports.
 
-## 9. Out of initial scope
+## 11. Receipt and rejection
 
-- procurement tender/bid workflow;
-- general ledger/accounting;
-- payroll;
-- woreda/zone inventory outside direct Regional Bureau warehouse control;
-- beneficiary distribution MIS;
-- full fixed-asset accounting lifecycle;
-- fleet management;
-- sales/POS.
+Delivery entering Bureau physical custody may be posted:
 
-Durable items may be received and handed off to a future/formal asset register.
+`EXTERNAL → WAREHOUSE/PENDING_INSPECTION`.
 
-## 10. Key workflows
+After inspection:
+- accepted quantity → WAREHOUSE/USABLE or another authorized condition;
+- rejected quantity → WAREHOUSE/REJECTED_PENDING_RETURN.
 
-### Receipt
-Delivery registered → RECEIVING_PENDING_INSPECTION → inspection/acceptance → accepted quantity to AVAILABLE; rejected quantity never becomes available.
+Rejected quantity remains physically traceable until returned to the supplier/source:
 
-### Requisition/issue
-Draft → submit → approval → availability check → reservation → issue queue → batch/serial selection → post issue → recipient acknowledgement.
+`WAREHOUSE/REJECTED_PENDING_RETURN → EXTERNAL`.
 
-### Transfer
-Request/approval → source dispatch → AVAILABLE source to IN_TRANSIT → destination receipt → IN_TRANSIT to AVAILABLE destination. Any discrepancy stays explicit and unresolved until reconciled.
+Rejected quantity never becomes available-to-promise.
 
-### Physical count
-Authorize → define scope/cutoff → blind count → reveal book quantity → variance → recount/investigation when required → approval → adjustment → close count.
+## 12. Requisition and commitments
 
-### Period close
-Review open receipts/issues/transfers/adjustments/count variances → ledger reconciliation → reports → authorized close → lock period. Reopen requires elevated authority, reason and audit evidence.
+Approval may create a REQUISITION commitment. The commitment:
+- identifies item/warehouse and required dimensions;
+- has approved quantity;
+- has lifecycle ACTIVE/PARTIALLY_FULFILLED/FULFILLED/RELEASED/EXPIRED/CANCELLED;
+- is consumed as issues post;
+- is released on cancellation/expiry according to policy.
 
-## 11. Reservations
+## 13. Transfer commitments
 
-Approval may reserve stock so concurrent requests cannot overcommit the same inventory. Reservations support active, partial, fulfilled, released, expired and cancelled states.
+Approval of a future warehouse transfer may create a TRANSFER commitment against source eligible stock before dispatch. This prevents a requisition and a transfer from both consuming the same remaining stock.
 
-Available-to-promise must exclude active reservations and committed transfer-out quantities.
+Dispatch consumes the transfer commitment and posts the physical move to IN_TRANSIT.
 
-## 12. Funding/project policy
+## 14. Transfer discrepancies
+
+If 40 is dispatched and 39 is received, the unmatched 1 remains explicitly represented in transit or an approved exception-resolution bucket/process until investigated and formally resolved. It must never disappear through a destination quantity edit.
+
+Damage discovered during receipt may move the applicable quantity from IN_TRANSIT/USABLE to destination WAREHOUSE/DAMAGED while preserving quantity.
+
+## 15. Funding/project policy
 
 Phase 0 must determine whether source is:
 - reporting-only; or
-- a controlled inventory dimension restricting which activity can consume stock.
+- a controlled physical-stock dimension restricting which activity can consume stock.
 
-When restricted, funding/project source is part of the stock position and cannot be silently substituted.
+When restricted, funding/project source is preserved in physical stock and commitment dimensions and cannot be silently substituted.
 
-## 13. Concurrency and idempotency
+## 16. Base UOM policy
+
+Every item has exactly one authoritative base UOM.
+
+All inventory ledger quantities and commitment quantities are stored in base UOM.
+
+If operational transactions use alternate units, conversion must:
+- use an approved item-specific conversion factor;
+- be deterministic and versioned;
+- retain entered UOM/quantity for evidence;
+- convert to base UOM before availability and ledger logic.
+
+Until conversion policy is validated, mixed-UOM stock posting must be prohibited rather than guessed.
+
+## 17. Concurrency and idempotency
 
 All critical posting operations:
-- authorize;
-- lock affected positions in a consistent order;
-- recalculate current availability;
+- authenticate and authorize;
+- claim/check the idempotency intent atomically;
+- verify reused idempotency key has the same request hash;
+- lock affected physical positions/commitments in consistent order;
+- recalculate eligible physical stock and competing commitments;
+- when fulfilling an existing commitment, exclude that same commitment from the competing-commitment subtraction so it is not counted twice;
 - validate quantity, condition, batch/expiry/funding rules;
-- post business state and inventory movements in one transaction;
-- use unique idempotency keys;
-- write audit evidence before commit.
+- write business state, inventory transaction and entries in one DB transaction;
+- write audit evidence;
+- commit once.
 
-## 14. Physical conditions
+A duplicate retry with the same intent must never duplicate stock effect.
 
-Damage/expiry/quarantine do not automatically reduce total physical inventory. Condition changes move stock between controlled accounts. Only approved loss, issue, return-to-external or disposal reduces Bureau-controlled physical inventory.
+## 18. Physical conditions
 
-## 15. Time and periods
+Damage/expiry/quarantine/rejection do not automatically reduce Bureau-controlled physical inventory. They change condition. Only an authorized external issue/consumption, verified loss, supplier return, or disposal changes the relevant Bureau-controlled total.
 
-Store authoritative timestamps in standard timestamp types. Support Ethiopian Calendar/Fiscal Year labels and Q1–Q4 reporting. Closed periods reject ordinary backdated posting.
+## 19. Physical counts
 
-## 16. UX requirements
+Counts operate against a defined physical stock scope and cutoff. First count is blind. Variance alone never changes stock. Approved adjustment/correction posts a distinct inventory transaction.
+
+## 20. Reversal and correction
+
+A posted transaction is never edited or deleted.
+
+### Direct reversal
+An equal-and-opposite reversal may be used only when downstream dependencies, current quantities and closed-period rules allow reversal without creating impossible stock states.
+
+### Compensating/current-period correction
+If downstream use exists or the original period is closed, create an authorized correction in the current open period referencing the original transaction. Do not routinely reopen historical periods to rewrite history.
+
+Both forms preserve original evidence and reason/approval traceability.
+
+## 21. Time and periods
+
+Store authoritative timestamps in standard timestamp types. Support Ethiopian Calendar/Fiscal Year labels and Q1–Q4 reporting.
+
+Closed periods reject ordinary backdated posting. Reopen is exceptional and requires elevated authority, documented reason and audit evidence.
+
+## 22. Durable equipment boundary
+
+Warehouse issue always reduces warehouse inventory.
+
+For a durable item that remains Bureau property, the issue may hand off to INTERNAL_CUSTODY/asset-register control. Full depreciation, asset accounting, maintenance and disposal accounting remain outside initial scope unless formally integrated.
+
+For consumables issued for authorized use, the destination may be an EXTERNAL/CONSUMED counterparty according to validated procedure.
+
+## 23. UX requirements
 
 - Responsive PWA, phone-first.
 - Fast item search and scanning-ready layout.
 - Large touch targets and plain language.
 - State, warehouse, item code/name and transaction reference always visible.
+- Show physical on-hand, committed and available-to-promise as distinct values.
 - No color-only status communication.
 - Tables have mobile card/compact alternatives.
 - Safe defaults and strong confirmation for reversal/disposal/period reopen.
-- Errors explain what happened and how to recover.
+- Errors explain whether a critical posting succeeded, failed or has unknown status.
 
-## 17. MVP sequence
+## 24. MVP sequence
 
 M0 Procedure validation  
-M1 Foundation/access control  
-M2 Item + warehouse master  
+M1 Foundation/access control + baseline security controls  
+M2 Item + warehouse master + base UOM  
 M3 Opening balance  
 M4 Receipt + inspection  
-M5 Requisition + approval  
-M6 Reservation + issue  
-M7 Warehouse transfer  
+M5 Requisition + approval + commitments  
+M6 Issue  
+M7 Warehouse transfer commitments/dispatch/receipt  
 M8 Returns + conditions  
 M9 Physical count  
-M10 Adjustment + reversal  
+M10 Adjustment + reversal/correction  
 M11 Period close  
 M12 Batch/expiry/serial  
 M13 Disposal  
-M14 Reporting/dashboard  
-M15 Security hardening  
+M14 Reports/dashboard  
+M15 Final security assurance & pilot hardening  
 M16 Pilot readiness
 
-## 18. Pilot
+Security, authorization, RLS, concurrency and negative testing are cross-cutting requirements implemented in every applicable milestone; M15 is final assurance, not first implementation.
 
-Pilot one main warehouse and one secondary warehouse. Scale only after ledger reconciliation, transfer conservation, physical count, approval controls, period close, backups/restores and mobile usability are proven.
+## 25. Pilot
 
-## 19. Acceptance invariants
+Pilot one main warehouse and one secondary warehouse. Scale only after ledger reconciliation, transfer conservation, physical count, commitments, approval controls, period close, backups/restores and mobile usability are proven.
 
-- No unauthorized direct stock update.
-- No negative available stock.
-- Internal transfer does not change Bureau total.
-- Condition change does not change physical total.
-- Duplicate retry with same idempotency key posts once.
+## 26. Acceptance invariants
+
+- No application client can directly mutate authoritative ledger/audit/projection tables.
+- No negative available-to-promise for creation of new commitments.
+- Active commitments cannot exceed eligible stock except through an explicitly approved exceptional policy.
+- Fulfilment of an existing commitment is validated against its remaining committed quantity and underlying physical stock, without subtracting the same commitment twice.
+- Internal transfer dispatch/receipt does not change logistics inventory total.
+- Condition change does not change physical quantity.
+- Duplicate retry with same idempotency intent posts once.
+- Reused idempotency key with a different request hash is rejected.
 - Closed period rejects ordinary backdated posting.
 - Physical count variance requires approval before stock changes.
-- Every posted movement traces to user, document and audit event.
+- Every posted transaction traces to user, document, entries and audit event.
+- Balance projections reconcile to authoritative entries.
+- All ledger/commitment quantities are in item base UOM.
 
-## 20. Final control principle
+## 27. Final control principle
 
-The system must not merely display a number. It must prove how that number was produced from beginning inventory plus/minus authorized movements and show the evidence behind every movement.
+The system must not merely display a number. It must prove physical quantity from immutable entries and separately prove commitments and available-to-promise. Warehouse stock, in-transit stock, internal custody and terminal exits must never be conflated.

@@ -1,56 +1,124 @@
-# Test Plan
+# Test Plan — v2.1
 
 ## Quality layers
 
 1. Unit tests — pure business calculations/state helpers.
-2. Database tests — constraints, RLS, RPC authorization, movement invariants.
-3. Integration tests — complete business transaction posting.
+2. Database tests — constraints, grants/RLS, RPC authorization, ledger/commitment invariants.
+3. Integration tests — complete business posting.
 4. Browser/E2E tests — user workflows and responsive behavior.
-5. Security negative tests — unauthorized/invalid operations.
+5. Security negative tests — unauthorized/direct-write operations.
 6. Reconciliation tests — ledger vs derived balances.
+7. Concurrency/idempotency tests — competing commitments/postings and retry storms.
 
 ## Mandatory invariant tests
 
-- Internal transfer conserves Bureau-wide quantity.
-- Condition change conserves physical quantity.
+- Application client cannot directly insert/update/delete inventory_transactions.
+- Application client cannot directly mutate inventory_entries, balance projection or audit logs.
+- Reservation/commitment does not change physical on-hand.
+- Available-to-promise = eligible physical on-hand - active commitments.
+- Requisition and transfer commitments cannot jointly overcommit eligible stock.
+- Transfer dispatch consumes transfer commitment and creates IN_TRANSIT atomically.
+- Internal transfer conserves logistics inventory.
+- Condition/custody reclassification conserves physical quantity where counterparty remains Bureau-controlled.
 - Duplicate idempotency key cannot double-post.
-- Concurrent issues cannot exceed available quantity.
-- Accepted receipt quantity cannot exceed delivered quantity.
-- Expired/quarantined/damaged stock cannot be normally issued.
+- Same idempotency key with different request hash is rejected.
+- Concurrent issues/commitments cannot exceed availability.
+- Accepted receipt quantity cannot exceed delivered/inspected quantity.
+- Rejected receipt quantity remains traceable and unavailable.
+- Expired/quarantined/damaged/rejected stock cannot be normally issued.
 - Closed period blocks ordinary posting.
-- Reversal produces equal/opposite inventory effect and preserves original.
+- Direct reversal is blocked when dependencies/current quantities make it unsafe.
+- Closed-period correction posts in current period unless an authorized reopen explicitly occurs.
 - Physical-count variance alone does not change stock.
 - Unauthorized warehouse/user action is blocked at DB/API level.
+- All authoritative quantities use item base UOM.
 
 ## Workflow acceptance scenarios
 
 ### Receipt
-100 delivered, 95 accepted, 5 rejected → AVAILABLE increases only 95.
+100 delivered into pending inspection; 95 accepted, 5 rejected:
+- pending inspection returns to 0;
+- WH usable +95;
+- rejected pending return +5;
+- available-to-promise increases only 95.
+
+### Supplier return
+5 rejected items physically returned:
+- rejected pending return -5;
+- external counterparty +5;
+- no hidden write-off.
 
 ### Reservation
-100 available, request A reserves 80 → available-to-promise 20; request B cannot reserve 60.
+100 WH usable; request A commits 80:
+- physical on-hand remains 100;
+- active commitments = 80;
+- available-to-promise = 20.
 
-### Issue
-80 reserved, issue 50 → custody +50 and reservation remaining 30.
+### Competing commitment
+With 20 available-to-promise, transfer request attempts to commit 30:
+- must fail or partially approve according to validated rules.
+
+### Issue against own commitment
+Physical eligible stock 100; commitment A = 80; therefore available-to-promise for new requests = 20.
+Issue 50 against commitment A must **succeed**:
+- the system must not compare 50 only to the 20 available-to-promise remaining for other/new commitments;
+- physical warehouse quantity decreases 50;
+- destination custody/consumption increases 50 as applicable;
+- commitment A remaining = 30;
+- remaining eligible physical stock = 50;
+- available-to-promise for new commitments = 20 if no other changes occurred.
 
 ### Transfer
-WH-A 100; dispatch 40 → WH-A available 60, IN_TRANSIT 40. Receive 40 → destination +40, IN_TRANSIT 0; Bureau total unchanged.
+WH-A usable 100; transfer commitment 40.
+Dispatch:
+- WH-A physical = 60;
+- IN_TRANSIT = 40;
+- transfer commitment consumed/reduced appropriately.
+Receipt 40:
+- IN_TRANSIT = 0;
+- WH-B usable +40;
+- logistics inventory unchanged end-to-end.
+
+### Damaged in transit
+Dispatch 40; destination receives 38 usable +2 damaged:
+- IN_TRANSIT = 0;
+- WH-B usable +38;
+- WH-B damaged +2;
+- logistics quantity conserved.
 
 ### Transfer discrepancy
-Dispatch 40, receive 39 → explicit discrepancy 1 remains unresolved.
+Dispatch 40, receive only 39 with no explanation:
+- WH-B +39;
+- unresolved/in-transit/discrepancy quantity = 1;
+- nothing disappears.
 
 ### Condition
-100 available, 5 damaged → 95 available + 5 damaged; physical total 100.
+WH usable 100, 5 damaged:
+- WH usable 95;
+- WH damaged 5;
+- warehouse physical total 100.
 
 ### Count
-Book 100, blind count 97 → variance -3; no stock change until approved adjustment.
+Book physical 100, blind count 97:
+- variance -3;
+- no physical ledger change until approved adjustment.
 
 ### Concurrency
-Available 10; simultaneous issue 8 and 7 → both must not commit.
+Available-to-promise 10; simultaneous issue/commit 8 and 7:
+- both must not commit in a way that exceeds 10.
 
 ### Retry
-Same idempotency intent sent twice → one committed business transaction.
+Same idempotency intent sent twice with same hash:
+- one committed transaction.
+
+Same key with different hash:
+- reject.
+
+### Reversal dependency
+Receipt 100 followed by issue 80; attempt to reverse full original receipt:
+- direct reversal blocked if it would create impossible stock;
+- correction path required.
 
 ## UI testing
 
-Test 360–430px mobile widths, tablet and desktop. Verify keyboard access, visible focus, labels, error recovery, empty/loading states and no color-only status.
+Test 360–430px mobile widths, tablet and desktop. Verify keyboard access, visible focus, labels, error recovery, empty/loading states and no color-only status. Verify on-hand, committed and available-to-promise are not visually conflated.

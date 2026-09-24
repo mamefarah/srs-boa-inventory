@@ -18,7 +18,7 @@ Use this skill whenever the task touches the process described above, or when re
 ## Required evidence
 - Relevant PRD/business-rule IDs.
 - Source document or validated process mapping where policy is involved.
-- Before/after state and expected ledger effect.
+- Before/after state and expected physical-ledger and/or commitment effect where applicable; explicitly state "no inventory effect" when none is expected.
 - Authorization evidence.
 - Tests or reconciliation evidence for any implemented change.
 

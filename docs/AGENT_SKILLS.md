@@ -28,11 +28,13 @@ Located in `.claude/skills/` and versioned with the repository:
 - boa-inventory-audit
 - boa-ui-review
 
+Skill evidence requirements such as ledger effect apply **where applicable**. A master-data or UX-only review must not invent a stock movement merely to satisfy a template.
+
 ## Recommended external engineering skills
 
 Source: `addyosmani/agent-skills`.
 
-Install project-level copies only after reviewing the upstream files and license. Recommended subset:
+Install project-level copies only after reviewing upstream files and license. Recommended subset:
 - using-agent-skills
 - spec-driven-development
 - planning-and-task-breakdown

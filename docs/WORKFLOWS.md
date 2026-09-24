@@ -1,57 +1,85 @@
-# BoA-IMS Workflow Design
+# BoA-IMS Workflow Design — v2.1
 
-Every workflow specifies state, actor, validations, ledger effect, failure path and audit evidence.
+Every workflow specifies state, actor, validations, physical ledger effect, commitment effect, failure path and audit evidence.
 
 ## 1. Item creation
-Request new item → search duplicates → specify standard description/UOM/control flags → review → approve → activate item code. No stock movement.
+Request new item → search duplicates → specify standard description/base UOM/control flags → review → approve → activate item code. No physical or commitment effect.
 
 ## 2. Opening balance
-Clean item master → physical verification → map warehouse/location/condition/batch/funding → management sign-off → import migration batch → post OPENING_BALANCE movement → lock batch.
+Clean item master → physical verification → map warehouse/location/condition/batch/funding → management sign-off → import migration batch → post one OPENING_BALANCE inventory transaction with balancing OPENING_BALANCE_CONTRA entries → reconcile → lock batch.
 
 ## 3. Goods receipt
-Delivery arrives → create draft receipt → capture source/procurement evidence → physical quantity check → move to RECEIVING_PENDING_INSPECTION → inspection → accepted/partial/rejected decision → accepted quantity to AVAILABLE → post → attach evidence.
+Delivery arrives → create draft receipt → capture source/procurement evidence → physical quantity check → post physical custody EXTERNAL → WAREHOUSE/PENDING_INSPECTION where procedure permits → inspection → accepted/partial/rejected decision → one inspection/reclassification transaction:
+- PENDING_INSPECTION decreases;
+- accepted quantity moves to USABLE/authorized condition;
+- rejected quantity moves to REJECTED_PENDING_RETURN.
 
-Failure paths: duplicate delivery reference, unauthorized warehouse, missing batch/expiry/serial, delivered < accepted, failed inspection.
+Rejected stock stays traceable until supplier return/resolution posts REJECTED_PENDING_RETURN → EXTERNAL.
 
-## 4. Requisition/approval/reservation
-Requester drafts → submit → approver reviews purpose/authority → inventory availability recheck → approve full/partial/reject → create reservation for approved quantity where policy requires.
+Failure paths: duplicate delivery reference, unauthorized warehouse, missing batch/expiry/serial, accepted > inspected/delivered, failed inspection.
 
-Reservation states: ACTIVE, PARTIALLY_FULFILLED, FULFILLED, RELEASED, EXPIRED, CANCELLED.
+## 4. Requisition/approval/commitment
+Requester drafts → submit → approver reviews purpose/authority → server recalculates eligible physical stock and existing commitments → approve full/partial/reject → create REQUISITION commitment for approved quantity where policy requires.
+
+No physical ledger movement occurs at reservation.
+
+Commitment states: ACTIVE, PARTIALLY_FULFILLED, FULFILLED, RELEASED, EXPIRED, CANCELLED.
 
 ## 5. Issue
-Open approved/reserved request → revalidate permission and stock → pick warehouse/location/batch/serial → FEFO default for expiry stock → recipient check → post once → RESERVED/AVAILABLE to DIRECTORATE_CUSTODY → acknowledgement.
+Open approved request/commitment → revalidate permission → lock relevant stock/commitment → validate remaining commitment quantity + actual eligible physical stock while treating the current commitment as secured rather than subtracting it again → pick warehouse/location/batch/serial → FEFO default → identify destination:
+- consumable/authorized use may go to EXTERNAL/CONSUMED counterparty;
+- durable item remaining Bureau property may go to INTERNAL_CUSTODY/asset boundary.
 
-## 6. Transfer
-Draft → approval when required → source picks → dispatch posts AVAILABLE(source) to IN_TRANSIT → destination receives → compare dispatch/receipt → matching quantity posts IN_TRANSIT to AVAILABLE(destination) → close when resolved.
+Post one atomic inventory transaction and consume corresponding commitment quantity.
 
-Discrepancy stays explicit; it must not disappear from the ledger.
+## 6. Transfer approval and commitment
+Draft transfer → review/approval → create TRANSFER commitment against source eligible physical stock if transfer is not immediately dispatched. This commitment competes with requisition commitments for available-to-promise.
 
-## 7. Return
-Reference original issue where possible → inspect returned item/batch/serial/funding → decide condition → post CUSTODY to AVAILABLE, QUARANTINE or DAMAGED → preserve original link.
+## 7. Transfer dispatch
+Lock source stock + transfer commitment → validate remaining transfer commitment + actual eligible source stock without subtracting the same transfer commitment twice → atomically:
+- consume transfer commitment;
+- post WAREHOUSE source → IN_TRANSIT physical entries;
+- mark transfer dispatched.
 
-## 8. Condition change
-Record evidence → authorize as required → move stock between condition accounts. Quantity under Bureau control is unchanged.
+## 8. Destination receipt
+Destination user records actual receipt → compare dispatched vs received and condition → post received quantity from IN_TRANSIT into destination WAREHOUSE condition(s).
 
-## 9. Expiry
-System flags near expiry → on expiry/verification move usable status to EXPIRED → block ordinary issue → route to approved disposal or other official process.
+Examples:
+- normal receipt: IN_TRANSIT/USABLE → WH-B/USABLE;
+- damaged in transit: IN_TRANSIT/USABLE → WH-B/DAMAGED.
 
-## 10. Physical count
-Authorize session → define scope/cutoff/team → generate blind count → count → submit → reveal book balance → calculate variance → recount above threshold → investigate → approve → post adjustment → close immutable session.
+Any unmatched dispatched quantity remains explicitly in transit/discrepancy until formally resolved.
 
-## 11. Adjustment
-Create request → current book position shown → proposed +/- difference → reason/evidence → independent review → approval → post movement → link to count/investigation when applicable.
+## 9. Return
+Reference original issue where possible → inspect returned item/batch/serial/funding → determine authorized destination → post INTERNAL_CUSTODY/other source → WAREHOUSE/USABLE, QUARANTINE, DAMAGED or other validated condition.
 
-## 12. Disposal
-Identify eligible DAMAGED/EXPIRED/OBSOLETE stock → disposal request → official review/committee → approval → DISPOSAL_PENDING → physical disposal evidence → DISPOSED.
+## 10. Condition change
+Record evidence → authorize as required → post one balanced reclassification transaction between conditions. Physical quantity under same custody remains unchanged.
 
-## 13. Reversal
-Select posted transaction → verify reversible state/dependencies → enter reason → elevated approval when required → post equal-and-opposite movement referencing original → create corrected transaction separately.
+## 11. Expiry
+System flags near expiry → authorized expiry confirmation/reclassification moves WAREHOUSE/USABLE to WAREHOUSE/EXPIRED → block ordinary issue → route to approved disposal/other process.
 
-## 14. Period close
-Review unposted receipts/issues, active transfers, unresolved discrepancies, pending adjustments/count variances → reconcile ledger → generate close reports → authorized close → lock period.
+## 12. Physical count
+Authorize session → define physical bucket scope/cutoff/team → generate blind count → count → submit → reveal book quantity → calculate variance → recount above threshold → investigate → approve → post distinct adjustment/correction transaction → close immutable count session.
 
-Reopen requires elevated permission, written reason, timestamp and audit event.
+## 13. Adjustment/correction
+Create request → current physical book position shown → proposed +/- difference → reason/evidence → independent review → approval → post transaction against an approved external/loss/surplus counterparty bucket. Do not use adjustment to represent condition change or transfer discrepancy.
+
+## 14. Disposal
+Identify eligible damaged/expired/obsolete stock → disposal request → official review/committee → optional DISPOSAL hold/commitment → approval → physical disposal evidence → atomic terminal transaction from current Bureau physical bucket to TERMINAL_DISPOSITION → release/fulfil hold.
+
+## 15. Reversal/correction
+Select original posted transaction → inspect downstream dependencies, current bucket quantities and period state.
+
+If safe and current rules permit: post equal-and-opposite reversal transaction referencing original.
+
+If unsafe due to downstream movements or closed period: post authorized compensating/current-period correction referencing original. Never edit/delete original entries.
+
+## 16. Period close
+Review unposted receipts/issues, active commitments, in-transit/disputed transfers, pending adjustments/count variances → reconcile authoritative entries to projections → generate close reports → authorized close → lock period.
+
+Later-discovered errors are normally corrected in the current open period. Reopen is exceptional and requires elevated permission, written reason and audit event.
 
 ## State-transition rule
 
-The server/database is the source of truth for state transitions. UI actions may request a transition but cannot authorize or directly alter inventory balances.
+The server/database is the source of truth for state transitions. UI actions may request a transition but cannot authorize or directly alter authoritative physical inventory, commitments, balance projections or audit history.
