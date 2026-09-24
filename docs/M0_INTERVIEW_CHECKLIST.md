@@ -92,7 +92,7 @@ Do not ask respondents to design the software. Ask them to show how the official
 3. Show property number/asset registration and custody handover forms.
 4. Who is accountable after issue?
 5. How are asset transfers/returns/disposals recorded?
-6. The Bureau's own FM Manual defines the fixed-asset register threshold as useful life longer than 1 year **and** value of Birr 2,000 or above — this is currently BoA-IMS's working baseline. Does a current Somali Region/BoFED manual or directive state a different figure that should supersede it, and is the test "and" (both conditions) or "or" (either condition)?
+6. The Bureau's own FM Manual defines the fixed-asset register threshold as useful life longer than 1 year **and** value of Birr 2,000 or above — this is currently BoA-IMS's working baseline. Does a current Somali Region/BoFED manual or directive state a different figure that should supersede it, and is the test "and" (both conditions) or "or" (either condition)? If a different figure applies, please show the current controlling manual/directive page.
 
 ## I. UOM and item coding
 
