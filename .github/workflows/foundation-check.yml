@@ -54,6 +54,7 @@ jobs:
             docs/SCREEN_INVENTORY.md
             docs/TRACEABILITY_MATRIX.md
             docs/ADR/0001-inventory-ledger-and-commitment-model.md
+            docs/ADR/0002-agent-autonomy-and-authority-precedence.md
           )
           for f in "${required[@]}"; do
             test -f "$f" || { echo "Missing required file: $f"; exit 1; }
@@ -69,14 +70,150 @@ jobs:
           grep -q "Reservation/commitment is not a physical inventory movement" CLAUDE.md
           grep -q "Direct-write prohibition" CLAUDE.md
 
-      - name: Verify Claude skill files have frontmatter
+      - name: Verify project and external skills are discoverable and well-formed
         shell: bash
         run: |
           set -euo pipefail
-          found=0
-          while IFS= read -r -d '' f; do
-            found=1
+
+          # Project skills: real (non-symlink) directories under .claude/skills.
+          required_boa_skills=(
+            boa-inventory-audit
+            boa-item-master-review
+            boa-ledger-reconciliation
+            boa-period-close
+            boa-physical-count-review
+            boa-procedure-mapping
+            boa-receipt-review
+            boa-requisition-review
+            boa-stock-adjustment-review
+            boa-stock-issue-review
+            boa-transfer-reconciliation
+            boa-transfer-review
+            boa-ui-review
+          )
+
+          # External skills: symlinks under .claude/skills to .agents/skills/<name>,
+          # installed via `npx skills add addyosmani/agent-skills --skill <name>`.
+          required_external_skills=(
+            api-and-interface-design
+            browser-testing-with-devtools
+            ci-cd-and-automation
+            code-review-and-quality
+            code-simplification
+            constraint-driven-development
+            context-engineering
+            debugging-and-error-recovery
+            deprecation-and-migration
+            documentation-and-adrs
+            doubt-driven-development
+            frontend-ui-engineering
+            git-workflow-and-versioning
+            idea-refine
+            incremental-implementation
+            interview-me
+            observability-and-instrumentation
+            performance-optimization
+            planning-and-task-breakdown
+            security-and-hardening
+            shipping-and-launch
+            source-driven-development
+            spec-driven-development
+            test-driven-development
+            using-agent-skills
+          )
+
+          repo_root="$(pwd -P)"
+          found_count=0
+          fail=0
+
+          check_skill_md() {
+            local f="$1"
+            local first
             first="$(head -n 1 "$f")"
-            [ "$first" = "---" ] || { echo "Missing YAML frontmatter: $f"; exit 1; }
-          done < <(find .claude/skills -name SKILL.md -print0)
-          [ "$found" -eq 1 ] || { echo "No project skills found"; exit 1; }
+            if [ "$first" != "---" ]; then
+              echo "Missing YAML frontmatter: $f"
+              fail=1
+            fi
+          }
+
+          for name in "${required_boa_skills[@]}"; do
+            dir=".claude/skills/$name"
+            if [ -L "$dir" ]; then
+              echo "Expected a real directory for project skill '$name', found a symlink"
+              fail=1
+              continue
+            fi
+            if [ ! -d "$dir" ]; then
+              echo "Missing required project skill directory: $dir"
+              fail=1
+              continue
+            fi
+            f="$dir/SKILL.md"
+            if [ ! -f "$f" ]; then
+              echo "Missing SKILL.md for project skill: $name"
+              fail=1
+              continue
+            fi
+            found_count=$((found_count + 1))
+            check_skill_md "$f"
+          done
+
+          # Resolve each external skill symlink via `readlink -f` (glibc's own ELOOP
+          # detection rules out a cycle; we never recurse with `find -L`, so no
+          # traversal can be unbounded either way), require the target stay inside the
+          # checkout, and require a SKILL.md with frontmatter at that target.
+          for name in "${required_external_skills[@]}"; do
+            link=".claude/skills/$name"
+            if [ ! -e "$link" ] && [ ! -L "$link" ]; then
+              echo "Missing required external skill: $name (no entry at $link)"
+              fail=1
+              continue
+            fi
+            if [ ! -L "$link" ]; then
+              echo "Expected a symlink for external skill '$name', found something else"
+              fail=1
+              continue
+            fi
+            target="$(readlink -f "$link" || true)"
+            if [ -z "$target" ] || [ ! -e "$target" ]; then
+              echo "Broken symlink for external skill '$name': $link -> $(readlink "$link")"
+              fail=1
+              continue
+            fi
+            case "$target" in
+              "$repo_root"/*) : ;;
+              *)
+                echo "Symlink for external skill '$name' escapes the repository: $target"
+                fail=1
+                continue
+                ;;
+            esac
+            f="$target/SKILL.md"
+            if [ ! -f "$f" ]; then
+              echo "Missing SKILL.md for external skill: $name (resolved to $target)"
+              fail=1
+              continue
+            fi
+            found_count=$((found_count + 1))
+            check_skill_md "$f"
+          done
+
+          expected_total=$(( ${#required_boa_skills[@]} + ${#required_external_skills[@]} ))
+          if [ "$found_count" -ne "$expected_total" ]; then
+            echo "Expected $expected_total discoverable skills (boa-* + external), found $found_count"
+            fail=1
+          fi
+
+          # Flag any broken symlink directly under .claude/skills, one level deep only.
+          while IFS= read -r -d '' entry; do
+            if [ ! -e "$entry" ]; then
+              echo "Broken symlink found under .claude/skills: $entry -> $(readlink "$entry")"
+              fail=1
+            fi
+          done < <(find .claude/skills -maxdepth 1 -type l -print0)
+
+          if [ "$fail" -ne 0 ]; then
+            exit 1
+          fi
+
+          echo "OK: ${#required_boa_skills[@]} project boa-* skills + ${#required_external_skills[@]} external skills = $found_count discoverable, all with valid frontmatter, no broken symlinks."
