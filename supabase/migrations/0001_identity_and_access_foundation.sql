@@ -14,6 +14,13 @@
 -- database and not reapplying it. Once this migration has been applied to any shared
 -- (staging/production) environment, never edit this file — ship a new, later-numbered
 -- migration that alters or reverses the affected objects instead (expand/contract).
+--
+-- Status as of the M1 REDTEAM correction pass: this is still the only file in
+-- supabase/migrations/ and has only ever been applied to ephemeral CI/local scratch
+-- databases (supabase/tests/run.sh), never to a real Supabase project — per CLAUDE.md's
+-- CI/CD policy, production deployment/database changes are a separate, explicit human
+-- gate this session never crossed. In-place edits to this file remain safe under the
+-- policy above until that changes.
 
 -- ── profiles ────────────────────────────────────────────────────────────────────────
 create table public.profiles (

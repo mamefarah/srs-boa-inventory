@@ -109,6 +109,16 @@ active-gated. Admin-facing write/manage policies are unaffected: they gate on th
 `('master.manage')`, deliberately not on the *target* user's active status, since an
 admin must still be able to manage/reactivate a deactivated user.
 
+**Convention for future writes (found in REDTEAM database-security review, no code
+consumer exists yet):** Postgres RLS filters which rows an `UPDATE` can see rather than
+raising an error, so a denied update (e.g. the caller was deactivated between page load
+and submit) silently affects zero rows instead of failing loudly — confirmed for
+`profiles_update_self` in `supabase/tests/rls.test.mjs`. Nothing in this slice performs a
+client-side `UPDATE` against `profiles` today (`frontend/src/lib/auth/session.ts` only
+reads it), so this has no current blast radius, but any future feature that does must
+check the affected row count (e.g. re-select or use `.select()` on the update) before
+reporting success to the user, rather than assuming a 2xx response means the row changed.
+
 ## Verification
 
 `supabase/tests/rls.test.mjs` proves: an unauthorized capability is denied (writing

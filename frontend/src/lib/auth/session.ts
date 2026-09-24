@@ -32,6 +32,13 @@ export async function getAuthSession(): Promise<AuthSession | null> {
     return null;
   }
 
+  // Read-only today. If a future feature adds a client-side `.update()` against
+  // `profiles`, it MUST check the returned row count (e.g. re-select or use `.select()`
+  // on the update) before reporting success: Postgres RLS filters which rows an UPDATE
+  // can see rather than raising an error, so a denied update (e.g. the caller was
+  // deactivated concurrently) silently affects zero rows instead of failing loudly. See
+  // docs/ADR/0003-capability-based-authorization-foundation.md, "Inactive-user
+  // fail-closed read policy".
   const [{ data: profile, error: profileError }, { data: capabilityRows, error: capError }, { data: warehouseRows, error: whError }] =
     await Promise.all([
       supabase.from("profiles").select("id, display_name, active").eq("id", userId).maybeSingle(),
