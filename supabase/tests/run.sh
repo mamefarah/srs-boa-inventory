@@ -28,16 +28,23 @@ echo "==> Creating scratch database $DB_NAME"
 "${AS_SUPERUSER[@]}" createdb "$DB_NAME"
 
 echo "==> Applying test-only auth stub"
-"${AS_SUPERUSER[@]}" psql -v ON_ERROR_STOP=1 -d "$DB_NAME" -f "$SCRIPT_DIR/support/auth_stub.sql"
+# Piped via stdin, not `-f <path>`: when AS_SUPERUSER wraps `sudo -u postgres`, the file
+# would otherwise need to be *readable by the postgres OS user*, including every parent
+# directory being executable by it — true in this sandbox (running as root with
+# permissive directory modes) but false on a CI runner, where the checkout lives under
+# another user's home directory (e.g. /home/runner/work/...) that `postgres` cannot
+# traverse. Piping keeps the file open under the invoking user's own permissions; sudo
+# only inherits the already-open file descriptor.
+"${AS_SUPERUSER[@]}" psql -v ON_ERROR_STOP=1 -d "$DB_NAME" < "$SCRIPT_DIR/support/auth_stub.sql"
 
 echo "==> Applying migrations"
 for f in "$REPO_ROOT"/supabase/migrations/*.sql; do
   echo "    - $(basename "$f")"
-  "${AS_SUPERUSER[@]}" psql -v ON_ERROR_STOP=1 -d "$DB_NAME" -f "$f"
+  "${AS_SUPERUSER[@]}" psql -v ON_ERROR_STOP=1 -d "$DB_NAME" < "$f"
 done
 
 echo "==> Applying test seed data"
-"${AS_SUPERUSER[@]}" psql -v ON_ERROR_STOP=1 -d "$DB_NAME" -f "$SCRIPT_DIR/support/seed.sql"
+"${AS_SUPERUSER[@]}" psql -v ON_ERROR_STOP=1 -d "$DB_NAME" < "$SCRIPT_DIR/support/seed.sql"
 
 echo "==> Running RLS/security tests"
 # Connect over TCP with password auth (rather than the unix-socket peer auth used above
