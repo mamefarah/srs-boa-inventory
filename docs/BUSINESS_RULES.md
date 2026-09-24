@@ -1,5 +1,7 @@
 # Business Rules
 
+> v2.2 control note: `docs/PRD.md`, `docs/M0_EVIDENCE_REGISTER.md` and `docs/M0_BLOCKER_MATRIX.md` are controlling where older rule wording conflicts.
+
 Stable rule IDs are referenced by requirements, tests and code review.
 
 ## INV-001
@@ -39,7 +41,7 @@ Expired, damaged, quarantined, obsolete, rejected and disposal-held stock is not
 Damage/expiry/quarantine/rejection are condition/control changes and do not automatically reduce physical quantity.
 
 ## INV-013
-Disposal is a separate approved transaction with evidence and terminal disposition.
+Disposal is a separate approved transaction with evidence and terminal exit. Deletion/write-off/loss is a **different** approved transaction class and must not be represented as ordinary disposal.
 
 ## INV-014
 Physical count book quantity is hidden during the first blind count.
@@ -108,7 +110,7 @@ Ethiopian Calendar/Fiscal Year is a reporting/display dimension, not the sole st
 Offline/draft capture cannot silently post critical stock movements without server confirmation.
 
 ## INV-036
-Durable-item warehouse issue is distinct from full fixed-asset lifecycle; internal custody/property handoff must be explicit where applicable.
+Durable-item warehouse issue is distinct from the full fixed-asset lifecycle; internal custody/property handoff must be explicit where Bureau ownership continues. Fixed-asset monetary classification must be effective-dated/configurable until the current regional implementing directive is verified.
 
 ## INV-037
 Reservation/commitment is not a physical inventory movement.
