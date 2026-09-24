@@ -83,9 +83,70 @@ describe("unauthenticated access is denied", () => {
 });
 
 describe("inactive user is denied", () => {
-  test("inactive user has no granted capabilities despite an assigned role", async () => {
+  // Comprehensive fail-closed boundary: an inactive user's JWT/session may still be
+  // valid, but profiles.active = false must deny direct database access across every
+  // table and RPC listed in the M1 REDTEAM correction pass, not just the
+  // functional/capability layer. See docs/ADR/0003, "Inactive-user fail-closed read
+  // policy" for which policies changed and why.
+
+  test("inactive user cannot read their own profile row", async () => {
     const { rows } = await asUser(USERS.inactive, (c) =>
-      c.query("select * from public.my_capabilities()"),
+      c.query("select id from public.profiles where id = $1", [USERS.inactive]),
+    );
+    assert.equal(rows.length, 0);
+  });
+
+  test("inactive user cannot update their own profile row (display_name)", async () => {
+    // RLS's USING clause filters which rows are visible to the UPDATE rather than
+    // raising an error (the column-level GRANT still exists) — a denied UPDATE affects
+    // zero rows rather than throwing. Verify both the zero-row result and, via a
+    // superuser readback bypassing RLS, that the value genuinely did not change.
+    const { rowCount, displayNameAfter } = await asUser(USERS.inactive, async (c) => {
+      const updateResult = await c.query(
+        "update public.profiles set display_name = 'hacked' where id = $1",
+        [USERS.inactive],
+      );
+      await c.query("reset role");
+      const readback = await c.query("select display_name from public.profiles where id = $1", [
+        USERS.inactive,
+      ]);
+      return { rowCount: updateResult.rowCount, displayNameAfter: readback.rows[0].display_name };
+    });
+    assert.equal(rowCount, 0);
+    assert.notEqual(displayNameAfter, "hacked");
+  });
+
+  test("inactive user cannot read capabilities", async () => {
+    const { rows } = await asUser(USERS.inactive, (c) =>
+      c.query("select key from public.capabilities"),
+    );
+    assert.equal(rows.length, 0);
+  });
+
+  test("inactive user cannot read roles", async () => {
+    const { rows } = await asUser(USERS.inactive, (c) => c.query("select key from public.roles"));
+    assert.equal(rows.length, 0);
+  });
+
+  test("inactive user cannot read role_capabilities", async () => {
+    const { rows } = await asUser(USERS.inactive, (c) =>
+      c.query("select role_id from public.role_capabilities"),
+    );
+    assert.equal(rows.length, 0);
+  });
+
+  test("inactive user cannot read their own user_roles row", async () => {
+    const { rows } = await asUser(USERS.inactive, (c) =>
+      c.query("select role_id from public.user_roles where user_id = $1", [USERS.inactive]),
+    );
+    assert.equal(rows.length, 0);
+  });
+
+  test("inactive user cannot read their own user_warehouse_access row", async () => {
+    const { rows } = await asUser(USERS.inactive, (c) =>
+      c.query("select warehouse_id from public.user_warehouse_access where user_id = $1", [
+        USERS.inactive,
+      ]),
     );
     assert.equal(rows.length, 0);
   });
@@ -97,6 +158,69 @@ describe("inactive user is denied", () => {
     assert.equal(rows.length, 0);
   });
 
+  test("inactive user cannot read audit_events", async () => {
+    const { rows } = await asUser(USERS.inactive, (c) =>
+      c.query("select id from public.audit_events"),
+    );
+    assert.equal(rows.length, 0);
+  });
+
+  test("inactive user cannot read a foundation_protected_demo row they created while active", async () => {
+    const { rows } = await asUser(USERS.inactive, async (c) => {
+      // Simulate a row this user created earlier while still active, inserted here as
+      // the superuser (bypasses RLS) purely as test setup, then switch back to the
+      // inactive user's own simulated session to attempt the read.
+      await c.query("reset role");
+      const insertResult = await c.query(
+        "insert into public.foundation_protected_demo (note, created_by) values ('created while active', $1) returning id",
+        [USERS.inactive],
+      );
+      await c.query("set local role authenticated");
+      await c.query("select set_config('request.jwt.claims', $1, true)", [
+        JSON.stringify({ sub: USERS.inactive }),
+      ]);
+      return c.query("select id from public.foundation_protected_demo where id = $1", [
+        insertResult.rows[0].id,
+      ]);
+    });
+    assert.equal(rows.length, 0);
+  });
+
+  test("inactive user has no granted capabilities despite an assigned role", async () => {
+    const { rows } = await asUser(USERS.inactive, (c) =>
+      c.query("select * from public.my_capabilities()"),
+    );
+    assert.equal(rows.length, 0);
+  });
+
+  test("inactive user has no warehouse ids despite an access grant", async () => {
+    const { rows } = await asUser(USERS.inactive, (c) =>
+      c.query("select * from public.my_warehouse_ids()"),
+    );
+    assert.equal(rows.length, 0);
+  });
+
+  test("inactive user's has_capability/has_warehouse_access/current_profile_active all report false, not an error", async () => {
+    const { hasCapability, hasWarehouseAccess, isActive } = await asUser(
+      USERS.inactive,
+      async (c) => {
+        const cap = await c.query("select public.has_capability('inventory.view') as v");
+        const wh = await c.query("select public.has_warehouse_access($1) as v", [
+          WAREHOUSES.one,
+        ]);
+        const active = await c.query("select public.current_profile_active() as v");
+        return {
+          hasCapability: cap.rows[0].v,
+          hasWarehouseAccess: wh.rows[0].v,
+          isActive: active.rows[0].v,
+        };
+      },
+    );
+    assert.equal(hasCapability, false);
+    assert.equal(hasWarehouseAccess, false);
+    assert.equal(isActive, false);
+  });
+
   test("inactive user cannot use the privileged-mutation RPC", async () => {
     await assert.rejects(
       () =>
@@ -105,6 +229,60 @@ describe("inactive user is denied", () => {
         ),
       /inactive or unknown user/i,
     );
+  });
+
+  test("inactive user cannot call set_user_active (lacks admin.manage_users)", async () => {
+    await assert.rejects(
+      () =>
+        asUser(USERS.inactive, (c) =>
+          c.query("select public.set_user_active($1, true)", [USERS.noAccess]),
+        ),
+      /insufficient privilege/i,
+    );
+  });
+});
+
+describe("admin can still manage a deactivated user (fail-closed reads do not break administration)", () => {
+  test("admin can still read a deactivated user's profile row", async () => {
+    const { rows } = await asUser(USERS.admin, (c) =>
+      c.query("select id, active from public.profiles where id = $1", [USERS.inactive]),
+    );
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].active, false);
+  });
+
+  test("admin can still read a deactivated user's role and warehouse-access rows", async () => {
+    const { roleRows, warehouseRows } = await asUser(USERS.admin, async (c) => {
+      const roles = await c.query("select role_id from public.user_roles where user_id = $1", [
+        USERS.inactive,
+      ]);
+      const warehouses = await c.query(
+        "select warehouse_id from public.user_warehouse_access where user_id = $1",
+        [USERS.inactive],
+      );
+      return { roleRows: roles.rows, warehouseRows: warehouses.rows };
+    });
+    assert.equal(roleRows.length, 1);
+    assert.equal(warehouseRows.length, 1);
+  });
+
+  test("after admin reactivates a deactivated user, that user's own profile read succeeds again", async () => {
+    const rows = await asUser(USERS.admin, async (c) => {
+      await c.query("select public.set_user_active($1, true)", [USERS.inactive]);
+      // Switch the simulated session to the just-reactivated user within the same
+      // transaction to prove the exact before/after boundary of the fail-closed policy.
+      await c.query("reset role");
+      await c.query("set local role authenticated");
+      await c.query("select set_config('request.jwt.claims', $1, true)", [
+        JSON.stringify({ sub: USERS.inactive }),
+      ]);
+      const result = await c.query("select active from public.profiles where id = $1", [
+        USERS.inactive,
+      ]);
+      return result.rows;
+    });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].active, true);
   });
 });
 

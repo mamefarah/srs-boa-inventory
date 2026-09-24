@@ -340,23 +340,41 @@ revoke all on all sequences in schema public from anon, authenticated;
 revoke all on all functions in schema public from public;
 
 -- profiles: read/update own row; admin.manage_users may read/manage all rows
+-- Inactive-user fail-closed: a deactivated user's own row-ownership (id = auth.uid())
+-- does not by itself grant read/update here — `active = true` is required in addition,
+-- same as every other self-access policy below. No exception is made for a deactivated
+-- user to read their own row: frontend/src/lib/auth/session.ts already treats "no
+-- profile row returned" and "profile row returned with active = false" identically
+-- (both collapse to a null session), so denying the row entirely changes nothing for the
+-- app's behavior while closing the direct-API-access gap. See
+-- docs/ADR/0003-capability-based-authorization-foundation.md, "Inactive-user fail-closed
+-- read policy" for the full rationale. An admin (whose own active status already gates
+-- has_capability()) can still read/manage any row, active or not — required to manage
+-- and reactivate deactivated users.
 grant select, update (display_name) on public.profiles to authenticated;
 
 create policy profiles_select_self_or_admin on public.profiles
   for select to authenticated
-  using (id = auth.uid() or public.has_capability('admin.manage_users'));
+  using ((id = auth.uid() and active = true) or public.has_capability('admin.manage_users'));
 
 create policy profiles_update_self on public.profiles
   for update to authenticated
-  using (id = auth.uid())
-  with check (id = auth.uid());
+  using (id = auth.uid() and active = true)
+  with check (id = auth.uid() and active = true);
 
 create policy profiles_admin_update_all on public.profiles
   for update to authenticated
   using (public.has_capability('admin.manage_users'))
   with check (public.has_capability('admin.manage_users'));
 
--- capabilities/roles/role_capabilities: readable reference data; admin-managed writes
+-- capabilities/roles/role_capabilities: readable reference data; admin-managed writes.
+-- Inactive-user fail-closed: reference-data reads require the caller to be an active
+-- profile (public.current_profile_active()), not just any authenticated role member.
+-- These were previously `using (true)` — readable by any authenticated session
+-- regardless of profiles.active — which is not a genuine requirement: nothing in this
+-- app reads capabilities/roles/role_capabilities before/without an active session (see
+-- ADR-0003 "Inactive-user fail-closed read policy"), so there is no exception to
+-- justify and the safer default applies.
 grant select on public.capabilities to authenticated;
 grant select on public.roles to authenticated;
 grant select on public.role_capabilities to authenticated;
@@ -365,11 +383,11 @@ grant insert, delete on public.role_capabilities to authenticated;
 
 create policy capabilities_select_all on public.capabilities
   for select to authenticated
-  using (true);
+  using (public.current_profile_active());
 
 create policy roles_select_all on public.roles
   for select to authenticated
-  using (true);
+  using (public.current_profile_active());
 
 create policy roles_admin_write on public.roles
   for all to authenticated
@@ -378,19 +396,29 @@ create policy roles_admin_write on public.roles
 
 create policy role_capabilities_select_all on public.role_capabilities
   for select to authenticated
-  using (true);
+  using (public.current_profile_active());
 
 create policy role_capabilities_admin_write on public.role_capabilities
   for all to authenticated
   using (public.has_capability('admin.manage_users'))
   with check (public.has_capability('admin.manage_users'));
 
--- user_roles: self-read; admin-managed
+-- user_roles: self-read; admin-managed.
+-- Inactive-user fail-closed: self-read requires current_profile_active(), not just row
+-- ownership, so a deactivated user cannot see which role(s) they were assigned even
+-- though has_capability()/my_capabilities() already treat those grants as functionally
+-- inert for them — this closes the direct-table-read gap to match that functional
+-- reality. Admin write/delete already implicitly requires the admin's own active status
+-- via has_capability() and is intentionally NOT gated on the *target* user's active
+-- status, since admins must manage a deactivated user's role assignments too.
 grant select, insert, delete on public.user_roles to authenticated;
 
 create policy user_roles_select_self_or_admin on public.user_roles
   for select to authenticated
-  using (user_id = auth.uid() or public.has_capability('admin.manage_users'));
+  using (
+    (user_id = auth.uid() and public.current_profile_active())
+    or public.has_capability('admin.manage_users')
+  );
 
 create policy user_roles_admin_write on public.user_roles
   for insert to authenticated
@@ -400,7 +428,10 @@ create policy user_roles_admin_delete on public.user_roles
   for delete to authenticated
   using (public.has_capability('admin.manage_users'));
 
--- warehouses: visible to users with explicit access, or master.manage/admin.manage_users
+-- warehouses: visible to users with explicit access, or master.manage/admin.manage_users.
+-- Already inactive-user fail-closed without further change: has_warehouse_access() and
+-- has_capability() both filter `p.active = true` internally (see their definitions
+-- above), so this policy needs no separate active check.
 grant select, insert, update, delete on public.warehouses to authenticated;
 
 create policy warehouses_select_scoped on public.warehouses
@@ -424,13 +455,15 @@ create policy warehouses_delete on public.warehouses
   for delete to authenticated
   using (public.has_capability('master.manage'));
 
--- user_warehouse_access: self-read; admin/master.manage-managed
+-- user_warehouse_access: self-read; admin/master.manage-managed.
+-- Inactive-user fail-closed: same reasoning as user_roles above — self-read requires
+-- current_profile_active() in addition to row ownership.
 grant select, insert, delete on public.user_warehouse_access to authenticated;
 
 create policy user_warehouse_access_select on public.user_warehouse_access
   for select to authenticated
   using (
-    user_id = auth.uid()
+    (user_id = auth.uid() and public.current_profile_active())
     or public.has_capability('master.manage')
     or public.has_capability('admin.manage_users')
   );
@@ -443,7 +476,9 @@ create policy user_warehouse_access_delete on public.user_warehouse_access
   for delete to authenticated
   using (public.has_capability('admin.manage_users'));
 
--- audit_events: read-only for admin/audit.read; no client INSERT/UPDATE/DELETE grant at all
+-- audit_events: read-only for admin/audit.read; no client INSERT/UPDATE/DELETE grant at all.
+-- Already inactive-user fail-closed without further change: has_capability() filters
+-- `p.active = true` internally, so this policy needs no separate active check.
 grant select on public.audit_events to authenticated;
 
 create policy audit_events_select on public.audit_events
@@ -451,12 +486,17 @@ create policy audit_events_select on public.audit_events
   using (public.has_capability('audit.read') or public.has_capability('admin.manage_users'));
 
 -- foundation_protected_demo: no direct client write grants; select limited to
--- creator/admin, purely so the fixture's own tests can observe what the RPC inserted
+-- creator/admin, purely so the fixture's own tests can observe what the RPC inserted.
+-- Inactive-user fail-closed: same reasoning as user_roles/user_warehouse_access above —
+-- a deactivated user cannot read rows they created while active.
 grant select on public.foundation_protected_demo to authenticated;
 
 create policy foundation_protected_demo_select on public.foundation_protected_demo
   for select to authenticated
-  using (created_by = auth.uid() or public.has_capability('admin.manage_users'));
+  using (
+    (created_by = auth.uid() and public.current_profile_active())
+    or public.has_capability('admin.manage_users')
+  );
 
 -- explicit function grants (deny-by-default revoked all above; grant back narrowly)
 -- Note: log_audit_event() is deliberately NOT granted to authenticated/anon. It takes an
@@ -464,6 +504,11 @@ create policy foundation_protected_demo_select on public.foundation_protected_de
 -- authenticated user forge audit_events rows attributed to another user. It is called
 -- only from inside other SECURITY DEFINER functions/triggers, which need no separate
 -- EXECUTE grant since they already run as the owning role.
+-- current_profile_active() is now also referenced directly inside RLS USING clauses
+-- (capabilities/roles/role_capabilities reference-data reads), so the `authenticated`
+-- role needs EXECUTE on it directly, not only the implicit access it already had as a
+-- nested call from within foundation_demo_create()'s SECURITY DEFINER body.
+grant execute on function public.current_profile_active() to authenticated;
 grant execute on function public.has_capability(text) to authenticated;
 grant execute on function public.has_warehouse_access(uuid) to authenticated;
 grant execute on function public.my_capabilities() to authenticated;

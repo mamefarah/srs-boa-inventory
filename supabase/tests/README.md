@@ -50,7 +50,15 @@ other. It proves:
 - unauthenticated (`anon`) access is denied, including calling `has_capability()` and the
   privileged-mutation RPC directly;
 - an inactive user's role/capability/warehouse grants are inert (`active = false` gates
-  every `has_capability`/`has_warehouse_access`/`my_capabilities`/`my_warehouse_ids` check);
+  every `has_capability`/`has_warehouse_access`/`my_capabilities`/`my_warehouse_ids` check),
+  AND an inactive user is also denied direct read access at the RLS layer itself — own
+  profile (read and update), `capabilities`, `roles`, `role_capabilities`, own
+  `user_roles`, own `user_warehouse_access`, `warehouses`, `audit_events`, and any
+  `foundation_protected_demo` row they created while still active — with `current_profile_active()`/
+  `has_capability()`/`has_warehouse_access()` all reporting `false` rather than erroring;
+  an admin can still read and reactivate a deactivated user, and that user's own reads
+  work again immediately afterward (see docs/ADR/0003, "Inactive-user fail-closed read
+  policy");
 - warehouse scope is enforced (a user sees only warehouses they have an explicit grant
   for, unless they hold `master.manage`/`admin.manage_users`);
 - an unauthorized capability is denied (writing `roles` without `admin.manage_users`);

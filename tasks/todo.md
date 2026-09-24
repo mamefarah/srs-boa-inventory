@@ -12,11 +12,13 @@
       foundation_demo_create, set_user_active, handle_new_auth_user trigger
 - [x] RLS policies: deny-by-default + explicit grants for every table above
 - [x] Local Postgres 16 test harness: auth stub schema (test-only), apply migration
-- [x] SQL/security tests proving: unauthenticated denied, inactive user denied, warehouse
-      scope enforced, unauthorized capability denied, direct protected-table mutation
-      denied, audit insert-only, permitted access succeeds, log_audit_event not directly
-      callable, role_capabilities self-escalation denied, set_user_active is the sole
-      active-flag mutation path (25 tests total)
+- [x] SQL/security tests proving: unauthenticated denied, inactive user denied at both the
+      functional (capability/warehouse) layer AND the RLS/direct-read layer across every
+      table and RPC, admin can still manage/reactivate a deactivated user, warehouse scope
+      enforced, unauthorized capability denied, direct protected-table mutation denied,
+      audit insert-only, permitted access succeeds, log_audit_event not directly callable,
+      role_capabilities self-escalation denied, set_user_active is the sole active-flag
+      mutation path (40 tests total)
 - [x] Frontend unit tests: capability helpers, Supabase client factories, redirect-safety
       helper, session validation (`getAuthSession`), proxy/middleware redirect behavior,
       no-secret-in-bundle (33 tests total)
@@ -30,6 +32,14 @@
       inventory-qa-engineer, release-reviewer), fix CRITICAL/HIGH/MEDIUM findings, retest
       — see PR description for the full findings/fixes list
 - [x] CI: `.github/workflows/foundation-check.yml` now runs the frontend checks and the
-      RLS/security suite on every PR (previously only guardrail checks ran)
-- [ ] Commit, push, open draft PR
+      RLS/security suite on every PR (previously only guardrail checks ran); `actions/
+      setup-node` pinned to a verified commit SHA (matching the `actions/checkout` pin
+      convention), verified against a live clone of the upstream repo
+- [x] Commit, push, open draft PR — PR #9:
+      https://github.com/mamefarah/srs-boa-inventory/pull/9 (draft, not merged, CI green)
+- [x] REDTEAM correction pass: inactive-user fail-closed RLS gap found and fixed (direct
+      table reads were possible for a deactivated-but-still-authenticated user on several
+      tables/reference data despite functional checks already being inert), CI
+      supply-chain SHA pin added, task state synced — see PR #9 for the full commit
+      history and findings
 - [ ] Final report

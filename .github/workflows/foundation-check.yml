@@ -27,12 +27,13 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
-      # NOTE: pinned by tag, not by commit SHA like actions/checkout above — this
-      # session's sandbox had no network access to look up and verify the current
-      # actions/setup-node release SHA, and a fabricated hash is worse than an
-      # unpinned tag. Align this to the same SHA-pinning convention as actions/checkout
-      # once that lookup can be done (see CLAUDE.md: never invent unverifiable facts).
-      - uses: actions/setup-node@v4
+      # Pinned by commit SHA, verified against a live clone of actions/setup-node
+      # (`git rev-parse v4^{commit}` against https://github.com/actions/setup-node) —
+      # v4 -> 49933ea5288caeca8642d1e84afbd3f7d6820020, "Bump @action/cache from 4.0.2 to
+      # 4.0.3 (#1262)", 2025-04-02. An earlier pass here used a tag reference because the
+      # sandbox at the time had no network path to verify the SHA and a fabricated hash
+      # would have been worse than an unpinned tag; this session did have that access.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
           cache: npm
@@ -61,8 +62,8 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
-      # See the note on the frontend-checks job above: tag-pinned, not SHA-pinned.
-      - uses: actions/setup-node@v4
+      # See the note on the frontend-checks job above for how this SHA was verified.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
           cache: npm

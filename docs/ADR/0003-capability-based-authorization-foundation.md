@@ -80,6 +80,35 @@ needs it, and M1's scope explicitly excludes designing for a Bureau authority st
 that HB-4 has not yet resolved. Revisit this before seeding any role that is meant to be
 warehouse-restricted.
 
+## Inactive-user fail-closed read policy (REDTEAM correction pass)
+
+An initial gap: `has_capability()`, `has_warehouse_access()`, `my_capabilities()` and
+`my_warehouse_ids()` all correctly filter `profiles.active = true` internally, so a
+deactivated user's *functional* capability/warehouse checks were always already inert.
+But several RLS policies gated only on row ownership (`id = auth.uid()`,
+`user_id = auth.uid()`, `created_by = auth.uid()`) without re-checking active status, and
+`capabilities`/`roles`/`role_capabilities` used a blanket `using (true)` for any
+authenticated session. A deactivated user whose JWT/session was still valid could
+therefore still directly `SELECT` their own `profiles`/`user_roles`/
+`user_warehouse_access`/`foundation_protected_demo` rows and the full
+`capabilities`/`roles`/`role_capabilities` reference tables via the API, even though none
+of that data was functionally usable to them.
+
+Resolution: every self-scoped read policy now additionally requires
+`public.current_profile_active()` (or, for `profiles` itself, `active = true` directly,
+since the row already carries that column); the three reference-table policies changed
+from `using (true)` to `using (public.current_profile_active())`. No exception was kept
+for a deactivated user reading their own `profiles` row: `frontend/src/lib/auth/session.ts`
+already collapses "no profile row" and "profile row with `active = false`" to the same
+null session, so there is no genuine product requirement for that read to succeed, and the
+safer default (deny) applies per this project's fail-closed authorization stance.
+`warehouses_select_scoped` and `audit_events_select` needed no change — they already
+compose only from `has_warehouse_access()`/`has_capability()`, both already
+active-gated. Admin-facing write/manage policies are unaffected: they gate on the
+*admin's own* active status via `has_capability('admin.manage_users')`/
+`('master.manage')`, deliberately not on the *target* user's active status, since an
+admin must still be able to manage/reactivate a deactivated user.
+
 ## Verification
 
 `supabase/tests/rls.test.mjs` proves: an unauthorized capability is denied (writing
