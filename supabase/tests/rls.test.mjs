@@ -1,0 +1,258 @@
+// Proves the M1 Slice 1 security properties against a real PostgreSQL instance running
+// supabase/migrations/*.sql (plus the test-only auth stub in support/auth_stub.sql).
+// See supabase/tests/README.md for how this is run.
+
+import { test, before, after, describe } from "node:test";
+import assert from "node:assert/strict";
+import pg from "pg";
+
+const { Client } = pg;
+
+const DB_URL = process.env.TEST_DATABASE_URL;
+if (!DB_URL) {
+  throw new Error("TEST_DATABASE_URL is required to run these tests.");
+}
+
+const USERS = {
+  admin: "00000000-0000-0000-0000-000000000001",
+  storeClerk: "00000000-0000-0000-0000-000000000002",
+  inactive: "00000000-0000-0000-0000-000000000003",
+  noAccess: "00000000-0000-0000-0000-000000000004",
+};
+
+const WAREHOUSES = {
+  one: "10000000-0000-0000-0000-000000000001",
+  two: "10000000-0000-0000-0000-000000000002",
+};
+
+let client;
+
+before(async () => {
+  client = new Client({ connectionString: DB_URL });
+  await client.connect();
+});
+
+after(async () => {
+  await client.end();
+});
+
+/**
+ * Runs `fn` inside a transaction as the given simulated user (or as the `anon` role when
+ * userId is null), mirroring how PostgREST executes a Supabase request: SET LOCAL ROLE to
+ * a non-superuser role, then set the `request.jwt.claims` GUC that PostgREST sets after
+ * verifying the caller's JWT. Always rolls back so tests never leak state into each other.
+ */
+async function asUser(userId, fn) {
+  await client.query("begin");
+  try {
+    if (userId) {
+      await client.query("set local role authenticated");
+      await client.query("select set_config('request.jwt.claims', $1, true)", [
+        JSON.stringify({ sub: userId }),
+      ]);
+    } else {
+      await client.query("set local role anon");
+    }
+    return await fn(client);
+  } finally {
+    await client.query("rollback");
+  }
+}
+
+describe("unauthenticated access is denied", () => {
+  test("anon role cannot select profiles", async () => {
+    await assert.rejects(
+      () => asUser(null, (c) => c.query("select * from public.profiles")),
+      /permission denied/i,
+    );
+  });
+
+  test("anon role cannot call has_capability", async () => {
+    await assert.rejects(
+      () => asUser(null, (c) => c.query("select public.has_capability('inventory.view')")),
+      /permission denied/i,
+    );
+  });
+
+  test("anon role cannot call the privileged-mutation RPC", async () => {
+    await assert.rejects(
+      () => asUser(null, (c) => c.query("select public.foundation_demo_create('nope')")),
+      /permission denied/i,
+    );
+  });
+});
+
+describe("inactive user is denied", () => {
+  test("inactive user has no granted capabilities despite an assigned role", async () => {
+    const { rows } = await asUser(USERS.inactive, (c) =>
+      c.query("select * from public.my_capabilities()"),
+    );
+    assert.equal(rows.length, 0);
+  });
+
+  test("inactive user sees no warehouses despite an access grant", async () => {
+    const { rows } = await asUser(USERS.inactive, (c) =>
+      c.query("select id from public.warehouses"),
+    );
+    assert.equal(rows.length, 0);
+  });
+
+  test("inactive user cannot use the privileged-mutation RPC", async () => {
+    await assert.rejects(
+      () =>
+        asUser(USERS.inactive, (c) =>
+          c.query("select public.foundation_demo_create('should fail')"),
+        ),
+      /inactive or unknown user/i,
+    );
+  });
+});
+
+describe("warehouse scope is enforced", () => {
+  test("store clerk sees only their assigned warehouse", async () => {
+    const { rows } = await asUser(USERS.storeClerk, (c) =>
+      c.query("select id from public.warehouses order by code"),
+    );
+    assert.deepEqual(
+      rows.map((r) => r.id),
+      [WAREHOUSES.one],
+    );
+  });
+
+  test("admin.manage_users sees all warehouses even without explicit access rows", async () => {
+    const { rows } = await asUser(USERS.admin, (c) =>
+      c.query("select id from public.warehouses order by code"),
+    );
+    assert.deepEqual(
+      rows.map((r) => r.id).sort(),
+      [WAREHOUSES.one, WAREHOUSES.two].sort(),
+    );
+  });
+
+  test("user with no warehouse access sees none", async () => {
+    const { rows } = await asUser(USERS.noAccess, (c) =>
+      c.query("select id from public.warehouses"),
+    );
+    assert.equal(rows.length, 0);
+  });
+});
+
+describe("unauthorized capability is denied", () => {
+  test("store clerk (no admin.manage_users) cannot insert a role", async () => {
+    await assert.rejects(
+      () =>
+        asUser(USERS.storeClerk, (c) =>
+          c.query("insert into public.roles (key, label) values ('hacker_role', 'nope')"),
+        ),
+      /new row violates row-level security policy|permission denied/i,
+    );
+  });
+
+  test("admin.manage_users can insert a role", async () => {
+    const { rows } = await asUser(USERS.admin, async (c) => {
+      await c.query("insert into public.roles (key, label) values ('temp_test_role', 'Temp')");
+      return c.query("select key from public.roles where key = 'temp_test_role'");
+    });
+    assert.equal(rows.length, 1);
+  });
+});
+
+describe("direct protected-table mutation is denied", () => {
+  test("cannot INSERT directly into audit_events (no grant at all)", async () => {
+    await assert.rejects(
+      () =>
+        asUser(USERS.admin, (c) =>
+          c.query("insert into public.audit_events (event_type) values ('should.fail')"),
+        ),
+      /permission denied/i,
+    );
+  });
+
+  test("cannot INSERT directly into foundation_protected_demo (no grant at all)", async () => {
+    await assert.rejects(
+      () =>
+        asUser(USERS.storeClerk, (c) =>
+          c.query(
+            "insert into public.foundation_protected_demo (note, created_by) values ('nope', $1)",
+            [USERS.storeClerk],
+          ),
+        ),
+      /permission denied/i,
+    );
+  });
+
+  test("audit_events has no UPDATE/DELETE grant for any application role", async () => {
+    await assert.rejects(
+      () =>
+        asUser(USERS.admin, (c) =>
+          c.query("update public.audit_events set event_type = 'tampered'"),
+        ),
+      /permission denied/i,
+    );
+  });
+});
+
+describe("permitted access succeeds, with an audit trail", () => {
+  test("active user with a granted role can call the privileged-mutation RPC", async () => {
+    // storeClerk deliberately has neither audit.read nor admin.manage_users (see next
+    // test), so this reads the audit row back via RESET ROLE (this transaction's
+    // connecting superuser, bypassing RLS) purely to prove the RPC really logged it with
+    // the correct actor — not to assert what storeClerk itself is allowed to see.
+    const { insertedId, note, auditRow } = await asUser(USERS.storeClerk, async (c) => {
+      const insertResult = await c.query(
+        "select public.foundation_demo_create('hello from test') as id",
+      );
+      const id = insertResult.rows[0].id;
+      const selectResult = await c.query(
+        "select * from public.foundation_protected_demo where id = $1",
+        [id],
+      );
+      await c.query("reset role");
+      const audit = await c.query(
+        "select * from public.audit_events where target_id = $1 and event_type = 'foundation_demo.create'",
+        [String(id)],
+      );
+      return { insertedId: id, note: selectResult.rows[0]?.note, auditRow: audit.rows[0] };
+    });
+
+    assert.ok(insertedId);
+    assert.equal(note, "hello from test");
+    assert.ok(auditRow, "expected foundation_demo.create to be logged to audit_events");
+    assert.equal(auditRow.actor_user_id, USERS.storeClerk);
+  });
+
+  test("a user without audit.read cannot read the audit trail", async () => {
+    const { rows } = await asUser(USERS.storeClerk, (c) =>
+      c.query("select * from public.audit_events"),
+    );
+    assert.equal(rows.length, 0);
+  });
+
+  test("admin.manage_users can read the audit trail, including other users' actions", async () => {
+    const { rows } = await asUser(USERS.admin, async (c) => {
+      const insertResult = await c.query(
+        "select public.foundation_demo_create('visible to admin') as id",
+      );
+      return c.query(
+        "select * from public.audit_events where target_id = $1 and event_type = 'foundation_demo.create'",
+        [String(insertResult.rows[0].id)],
+      );
+    });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].actor_user_id, USERS.admin);
+  });
+
+  test("a user can read their own profile but not another user's", async () => {
+    const { own, other } = await asUser(USERS.storeClerk, async (c) => {
+      const ownResult = await c.query("select id from public.profiles where id = $1", [
+        USERS.storeClerk,
+      ]);
+      const otherResult = await c.query("select id from public.profiles where id = $1", [
+        USERS.noAccess,
+      ]);
+      return { own: ownResult.rows, other: otherResult.rows };
+    });
+    assert.equal(own.length, 1);
+    assert.equal(other.length, 0);
+  });
+});

@@ -40,3 +40,16 @@ Use this file to connect business rules to implementation and tests. Every criti
 | INV-046 | Reports | TBD | Distinct inventory totals | TBD | Planned |
 
 Rules not listed above remain mandatory; expand the matrix as their implementation begins.
+
+## M1 Slice 1 note (foundation, not yet the inventory ledger itself)
+
+M1 Slice 1 (`supabase/migrations/0001_identity_and_access_foundation.sql`) implements and
+tests the *pattern* behind INV-030 (API/DB bypass blocked), INV-031 (direct
+ledger/projection/audit writes blocked) and INV-032 (append-only audit) — deny-by-default
+RLS, no client INSERT/UPDATE/DELETE grant on `audit_events`, and a single non-business
+fixture (`foundation_protected_demo` + `foundation_demo_create()`) proving the
+SECURITY DEFINER-RPC-is-the-only-mutation-path pattern — see
+`supabase/tests/README.md` for the automated proof. Status is left `Planned` above
+because the actual `inventory_transactions`/`inventory_entries`/balance-projection
+tables these rules describe do not exist yet (a later M1 slice, see `tasks/plan.md`);
+update this table when that slice lands.

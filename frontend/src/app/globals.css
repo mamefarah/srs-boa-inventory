@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+/*
+ * Semantic design tokens per docs/DESIGN_SYSTEM.md "Color semantics" and
+ * "Spacing/layout". Components must reference these tokens, not ad-hoc colors, and
+ * status must never be conveyed by hue alone (pair with text/icon/shape).
+ */
+@theme {
+  --color-surface: oklch(99% 0 0);
+  --color-surface-muted: oklch(96.5% 0.003 247);
+  --color-text-primary: oklch(20% 0.01 260);
+  --color-text-secondary: oklch(42% 0.01 260);
+  --color-border: oklch(88% 0.005 260);
+  --color-action-primary: oklch(46% 0.15 255);
+  --color-action-primary-hover: oklch(40% 0.15 255);
+  --color-success: oklch(55% 0.14 150);
+  --color-warning: oklch(70% 0.15 80);
+  --color-danger: oklch(52% 0.19 25);
+  --color-info: oklch(55% 0.1 235);
+}
+
+@media (prefers-color-scheme: dark) {
+  @theme {
+    --color-surface: oklch(18% 0.006 260);
+    --color-surface-muted: oklch(23% 0.008 260);
+    --color-text-primary: oklch(96% 0.003 260);
+    --color-text-secondary: oklch(78% 0.01 260);
+    --color-border: oklch(32% 0.01 260);
+  }
+}
+
+body {
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+  min-height: 100dvh;
+}
+
+/* Visible keyboard focus everywhere, per docs/DESIGN_SYSTEM.md "Interaction". */
+:focus-visible {
+  outline: 2px solid var(--color-action-primary);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

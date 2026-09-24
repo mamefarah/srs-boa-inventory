@@ -1,0 +1,12 @@
+{
+  "name": "boa-ims-db-tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test rls.test.mjs"
+  },
+  "dependencies": {
+    "pg": "8.23.0"
+  }
+}
