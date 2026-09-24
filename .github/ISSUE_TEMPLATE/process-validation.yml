@@ -1,0 +1,36 @@
+name: Official process validation
+description: Validate a government/Bureau procedure before implementing it.
+title: "[PROCESS] "
+labels: ["process-validation"]
+body:
+  - type: input
+    id: process
+    attributes:
+      label: Process
+      placeholder: Goods receipt / issue / transfer / count...
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Authoritative source evidence
+      description: Manual/directive/form/version and source location.
+    validations:
+      required: true
+  - type: textarea
+    id: actors
+    attributes:
+      label: Actors, approvals and signatories
+    validations:
+      required: true
+  - type: textarea
+    id: mapping
+    attributes:
+      label: Proposed BoA-IMS mapping
+      description: System states, inventory movement, evidence and report output.
+    validations:
+      required: true
+  - type: textarea
+    id: gaps
+    attributes:
+      label: Unresolved questions/conflicts

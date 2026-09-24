@@ -1,0 +1,60 @@
+name: Foundation checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  repository-guardrails:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Block tracked environment/credential files
+        shell: bash
+        run: |
+          set -euo pipefail
+          bad="$(git ls-files | grep -E '(^|/)(\.env($|\.)|.*\.(pem|key|p12|pfx|jks|keystore)$)' | grep -v -E '(^|/)\.env\.example$' || true)"
+          if [ -n "$bad" ]; then
+            echo "Blocked sensitive-style tracked files:"
+            echo "$bad"
+            exit 1
+          fi
+
+      - name: Verify required foundation documents
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            CLAUDE.md
+            docs/PRD.md
+            docs/OFFICIAL_PROCESS_MAPPING.md
+            docs/WORKFLOWS.md
+            docs/BUSINESS_RULES.md
+            docs/DATA_MODEL.md
+            docs/ROLES_PERMISSIONS.md
+            docs/SECURITY.md
+            docs/TEST_PLAN.md
+            docs/DESIGN_SYSTEM.md
+            docs/UX_PATTERNS.md
+            docs/SCREEN_INVENTORY.md
+          )
+          for f in "${required[@]}"; do
+            test -f "$f" || { echo "Missing required file: $f"; exit 1; }
+          done
+
+      - name: Verify Claude skill files have frontmatter
+        shell: bash
+        run: |
+          set -euo pipefail
+          found=0
+          while IFS= read -r -d '' f; do
+            found=1
+            first="$(head -n 1 "$f")"
+            [ "$first" = "---" ] || { echo "Missing YAML frontmatter: $f"; exit 1; }
+          done < <(find .claude/skills -name SKILL.md -print0)
+          [ "$found" -eq 1 ] || { echo "No project skills found"; exit 1; }
