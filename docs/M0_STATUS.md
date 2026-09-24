@@ -43,6 +43,8 @@ Foundation capabilities backed by SAFE DEFAULT behavior that needs no Bureau-spe
 
 HB-3 does **not** categorically block defining `inventory_entries`/`inventory_commitments`. What HB-3 does block, until the funding/project segregation policy is confirmed: whether funding/project is part of available-to-promise eligibility, whether a commitment must match its funding/project source, whether otherwise-identical stock may be substituted across funding/project sources, final balance-projection grouping/uniqueness semantics, and any restrictive DB constraint or posting validation keyed on funding/project. None of those is started now.
 
+Nullable on `funding_source_id`/`project_id` means "not applicable/not yet known," not "optional to record." Any workflow implemented before HB-3 resolves must still populate the column whenever the funding/project source is actually known at posting time — because posted ledger entries are immutable (INV-002), a source left unrecorded when it was known cannot be reliably added later.
+
 UI: only the structure-agnostic elements — navigation shell, item search/list, warehouse selector, page header, status badges, empty/loading states. Approval, inspection, disposal and fixed-asset-handover screens are explicitly **excluded**: their step count and structure (single approver vs. committee panel, one document vs. GRN+SRV as two) depend on HB-1, HB-2, HB-4 and HB-8 and are not yet known (`docs/M0_BLOCKER_MATRIX.md` §1, "Blocks workflow/UI design" column).
 
 This is a readiness observation only. **M1 is not authorized to start by this document.**

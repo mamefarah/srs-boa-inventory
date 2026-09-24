@@ -60,7 +60,7 @@ Record evidence → authorize as required → post one balanced reclassification
 System flags near expiry → authorized expiry confirmation/reclassification moves WAREHOUSE/USABLE to WAREHOUSE/EXPIRED → block ordinary issue → route to approved disposal/other process.
 
 ## 12. Physical count
-Authorize session → define physical bucket scope/cutoff/team → generate blind count → count → submit → reveal book quantity → calculate variance → recount above threshold → investigate → approve → post distinct adjustment/correction transaction → close immutable count session.
+Authorize session → define physical bucket scope/cutoff/team → generate blind count → count → submit → reveal book quantity → calculate variance → route to human review (recount only if/when a validated threshold requires it — see `docs/M0_BLOCKER_MATRIX.md` C-2/HB-5) → investigate → approve → post distinct adjustment/correction transaction → close immutable count session.
 
 ## 13. Adjustment/correction
 Create request → current physical book position shown → proposed +/- difference → reason/evidence → independent review → approval → post transaction against an approved external/loss/surplus counterparty bucket. Do not use adjustment to represent condition change or transfer discrepancy.
