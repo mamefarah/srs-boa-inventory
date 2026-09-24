@@ -1,6 +1,6 @@
-# BoA-IMS Workflow Design — v2.1
+# BoA-IMS Workflow Design — v2.2
 
-Every workflow specifies state, actor, validations, physical ledger effect, commitment effect, failure path and audit evidence.
+Every workflow specifies state, actor, validations, physical ledger effect, commitment effect, failure path and audit evidence. `PRD.md` v2.2 and the M0 controlled documents override any older workflow assumption.
 
 ## 1. Item creation
 Request new item → search duplicates → specify standard description/base UOM/control flags → review → approve → activate item code. No physical or commitment effect.
@@ -66,7 +66,10 @@ Authorize session → define physical bucket scope/cutoff/team → generate blin
 Create request → current physical book position shown → proposed +/- difference → reason/evidence → independent review → approval → post transaction against an approved external/loss/surplus counterparty bucket. Do not use adjustment to represent condition change or transfer discrepancy.
 
 ## 14. Disposal
-Identify eligible damaged/expired/obsolete stock → disposal request → official review/committee → optional DISPOSAL hold/commitment → approval → physical disposal evidence → atomic terminal transaction from current Bureau physical bucket to TERMINAL_DISPOSITION → release/fulfil hold.
+Identify eligible property → disposal request → valuation/review as required by verified policy → approval → physical disposal evidence → atomic terminal transaction from current Bureau-controlled bucket to TERMINAL_EXIT → release/fulfil any hold. Real committee composition, methods and thresholds remain gated by HB-1.
+
+## 14A. Deletion / write-off / loss
+Open deletion/write-off case → record reason (loss, theft, destruction, shortage or other approved basis) → investigation/evidence → approval under the verified authority → atomic terminal transaction to TERMINAL_EXIT using a **deletion/write-off transaction type distinct from disposal**. Never relabel a deletion/loss as ordinary disposal.
 
 ## 15. Reversal/correction
 Select original posted transaction → inspect downstream dependencies, current bucket quantities and period state.
