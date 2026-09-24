@@ -12,12 +12,14 @@ Do not implement. Decide whether evidence demonstrates readiness.
 - reviewed migration state;
 - lint/type/build tests;
 - DB/RLS/security tests;
-- inventory invariants;
+- direct-write prohibition tests;
+- physical-ledger and commitment invariants;
 - concurrency/idempotency evidence;
+- base-UOM handling;
 - responsive/mobile verification;
 - accessibility basics;
 - audit/report visibility;
-- reversal/failure behavior;
+- reversal/correction/failure behavior;
 - no secrets;
 - docs/ADR updated;
 - unresolved risks listed.
@@ -27,4 +29,4 @@ Output one of:
 - READY WITH DOCUMENTED FOLLOW-UPS
 - NOT READY
 
-A critical security, ledger or reconciliation finding always means NOT READY.
+Any unresolved CRITICAL or HIGH finding in security, authorization, ledger integrity, reconciliation, migration safety or data-loss risk means NOT READY.

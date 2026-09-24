@@ -10,9 +10,12 @@ Operate as an independent database/security reviewer.
 ## Threats to actively test
 - cross-warehouse access;
 - requester bypassing approval;
-- direct balance manipulation;
+- direct client INSERT/UPDATE/DELETE on inventory_transactions;
+- direct client mutation of inventory_entries/balance projections/audit logs;
 - double posting from retry;
-- overselling stock through concurrency;
+- same idempotency key reused with different payload;
+- overselling/overcommitting stock through concurrency;
+- requisition vs transfer commitment race;
 - privilege escalation through SECURITY DEFINER functions;
 - unauthorized period reopen/reversal/adjustment;
 - RLS gaps on joins/views/storage;
@@ -21,9 +24,10 @@ Operate as an independent database/security reviewer.
 
 ## Required evidence
 - explicit authorization rule;
-- DB constraint/RLS/RPC implementation;
-- negative test;
-- concurrency/idempotency test for stock posting;
+- DB constraint/grant/RLS/RPC implementation;
+- direct-write negative tests;
+- concurrency/idempotency tests for stock posting and commitments;
+- safe search_path/privilege design for SECURITY DEFINER functions;
 - migration rollback/forward-fix strategy;
 - no privileged secret in frontend.
 
