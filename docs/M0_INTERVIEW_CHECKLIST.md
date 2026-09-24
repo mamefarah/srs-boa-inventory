@@ -47,6 +47,15 @@ Do not ask respondents to design the software. Ask them to show how the official
 6. How is quantity damaged/missing in transit documented?
 7. Who resolves discrepancies?
 
+## D-bis. Return to store and supplier return of rejected goods
+
+1. Is returning previously issued stock to a warehouse currently practiced? Show the form.
+2. Who authorizes accepting a returned item back into store?
+3. What condition/inspection is applied to a returned item before it re-enters usable stock?
+4. Show the current form used to return rejected/failed-inspection goods to the supplier.
+5. Who authorizes and signs a supplier return?
+6. What happens if the supplier does not accept the return?
+
 ## E. Stock records
 
 1. Show stock card/bin card/stock register currently used.

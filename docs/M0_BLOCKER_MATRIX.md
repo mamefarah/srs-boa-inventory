@@ -1,0 +1,121 @@
+# M0 Blocker Matrix — Implementation-Readiness Boundary
+
+Status: ACTIVE — derived from `docs/OFFICIAL_PROCESS_MAPPING.md`, `docs/M0_EVIDENCE_REGISTER.md`, GitHub Issue #4, `docs/PRD.md`, `docs/BUSINESS_RULES.md` and ADR-0001/0002.
+
+Purpose: give a single decision-oriented view of what blocks what, so M1 scoping (when authorized) starts from a precise boundary instead of re-deriving it. This document does not authorize M1 and invents no government rule, form, signatory, threshold or approval authority.
+
+Legend for the "DB" / "Workflow-UI" / "Configurable" columns: **Y** = blocks now, **N** = does not block, **P** = partially blocks (generic shape safe, Bureau-specific detail pending).
+
+## 1. Process-by-process matrix
+
+| Process/domain | Evidence available | Controlling evidence still missing | Blocks DB design | Blocks workflow/UI design | Safely configurable later | Next evidence action | Responsible source/stakeholder |
+|---|---|---|---|---|---|---|---|
+| Goods receipt | DRDIP FM manual (GRN/Model 19); Procurement manual (SRV, inspection before SRV) — Class D | Current Bureau receipt form name/number; whether GRN and SRV are the same document; pre-inspection entry policy | N (EXTERNAL→PENDING_INSPECTION shape already safe, ADR-0001) | P mechanics; **Y for step count pending HB-8** (one receipt screen vs. GRN+SRV as two sequential documents) | Y (labels, role mapping) | Interview checklist §B1–B9; obtain current receipt form | Property Administration Head / Storekeeper |
+| Inspection / acceptance | DRDIP Procurement manual (quality/quantity/type check, cert before SRV) — Class D | Committee composition; applicability criteria, including any threshold if applicable; signatories | N | P mechanics; **Y for screen structure pending HB-4** (single-inspector field vs. multi-signatory committee panel with conditional branching) | Y (committee role assignment) | Interview §B5, B6, B9 | Property Administration Head / Internal Audit |
+| Stock card / bin card / register | DRDIP FM & Procurement manuals require cards + periodic reconciliation — Class D | Actual Bureau card/register in use; one-card-per (item/batch/funding/location) rule; paper-correction method | P (report grouping only; ledger already carries all dimensions) | Y (register layout) | Y | Interview §E1–E5; obtain sample card | Storekeeper / Property Administration |
+| Store requisition | DRDIP Procurement manual (Stores Requisition Note) — Class D | Who may request; authorization levels; partial-issue handling | N (commitment model already generic, ADR-0001 §3) | P (approval routing/roles) | Y | Interview §C1–C9 | Requesting directorates / Property Administration |
+| Store issue | DRDIP FM manual (issue vouchers); Procurement manual (Requisition Note + Issue Voucher) — Class D | Mandatory signatures; recipient acknowledgement; partial-fulfilment rule | N | P | Y | Interview §C4–C9 | Storekeeper |
+| Warehouse-to-warehouse transfer | None current-regional (OPEN) | Transfer document; **who authorizes dispatch and who resolves receipt discrepancy** | N (dispatch/receipt/IN_TRANSIT conservation already generic, PRD §13–14) | P | Y (mechanics); **N for authority identity** | Interview §D1–D7 — no document located, top acquisition priority | Warehouse managers / Property Administration Head |
+| Return to store | None current-regional (OPEN) | Authorized-destination rule; approval | N (generic "prior custody → WAREHOUSE with inspected condition" already safe) | P | Y (mechanics); **N for approval authority** | Interview checklist §D-bis (added) | Property Administration Head |
+| Supplier return / rejected delivery | Rejection captured in receipt evidence (Class D); return-to-supplier form not located (OPEN) | Actual return/notification form; who authorizes | N (REJECTED_PENDING_RETURN→EXTERNAL already safe, INV-010) | P | Y (mechanics); **N for authority** | Interview checklist §D-bis (added) | Property Administration Head |
+| Physical stock count | DRDIP periodic stock-taking vs bin card; FM manual annual fixed-asset verification — Class D | Frequency; team appointment authority; recount threshold, if any | N (blind count + approved-adjustment-only already safe, INV-014/015) | P (scheduling defaults; recount/variance decision deferred to human review until a threshold is validated) | Y | Interview §F1–F8 | Internal Audit / Property Administration Head |
+| Stock adjustment / variance | General count-vs-book concept only (OPEN) | **Approval authority/thresholds, if any** | N (adjustment-as-distinct-approved-transaction already safe, INV-015) | P | Y (mechanics); **N for authority/thresholds** | Interview §F7–F8, G5; obtain adjustment authorization form | Finance / Internal Audit / Property Administration Head |
+| Damage / quarantine / expiry / obsolete | None complete current-regional (OPEN); condition concept already generic (ADR-0001) | Condition-report form; identification procedure | N | P | Y | Interview §G1–G3 | Storekeeper / Property Administration |
+| Disposal | Federal reference only (Class E, not adopted); no current regional evidence (OPEN) | **Disposal committee composition and approval authority/thresholds, if any; final-disposal form** | N (TERMINAL_DISPOSITION bucket already generic) | **Y** — committee/authority routing and multi-signature capture are IA forks pending HB-1, not label detail | **N — must not invent** | Interview §G4–G6; Source Request #15 | Disposal Committee / BoFED / Property Administration Head (TBD) |
+| Fixed-asset handover / custody | DRDIP FM manual: fixed-asset registers, annual verification — Class D | **Stock-vs-fixed-asset classification criteria, including any value threshold if applicable**; Bureau handover form; accountable-officer rule | P (item-master control-flag data, not core ledger) | **Y** — HB-2 decides whether the item follows ordinary Issue or a separate asset-custody-handover flow (property number, custodian, annual verification); not a form-field difference | Y (per-item flag, once criteria known) | Interview §H1–H5 | Property Administration Head / Finance |
+| Period reconciliation / close | DRDIP FM manual has generic end-period accounting procedure; store-specific close rule not mapped (OPEN/PARTIAL) | **Who certifies/signs closing balances** | N (lock + exceptional reopen already safe, INV-019/020) | P | Y (mechanics); **N for certifying authority** | Interview §J1–J5 | Finance / Property Administration Head |
+| Funding/project restriction | DRDIP maintains project-specific records (Class D); Bureau-wide interchangeability policy unknown (OPEN) | Whether funding/project source is a legally restricted physical-stock dimension or reporting-only | **P** — `funding_source_id`/`project_id` on `inventory_entries`/`inventory_commitments` can be defined now as nullable, attribution-capable columns (`DATA_MODEL.md`), **but must still be populated whenever the source is actually known at posting time** — nullable means "not applicable/not yet known," not "optional to record," since posted entries are immutable (INV-002) and an unrecorded known source cannot be reliably added later; **blocked**: whether funding/project is part of ATP eligibility, whether commitments must match funding/project, whether stock may be substituted across funding/project sources, final balance-projection grouping/uniqueness semantics, and any restrictive DB constraint/posting validation keyed on funding/project | **P** — capturing a funding/project field on a form is fine now; **Y for whether selecting it restricts available-to-promise/issuable stock**, pending HB-3 | **N for the restriction semantics above; Y for the attribution columns/fields themselves** | Source Request #20; confirm with Finance/BoFED whether donor funds legally segregate stock | Finance / Donor liaison / BoFED |
+| Base UOM / package conversions | None authoritative (OPEN); safe default already defined (PRD §16, INV-022/023) | Approved item-specific conversion factors | N (base-UOM-only ledger with conversion table addable later) | P (whether UI allows alternate-unit entry) | Y (conversion factors, once approved) | Interview §I1–I5 | Storekeeper / item-master owner |
+
+## 2. Cross-cutting items
+
+| Item | Evidence available | Missing | Blocks DB | Blocks UI | Configurable | Next action | Responsible |
+|---|---|---|---|---|---|---|---|
+| Approval/signature authority matrix | Fragments per process (DRDIP) | Consolidated current Bureau signatory matrix by transaction type/value | N (`approval_authorities` is already generically scopeable by transaction type/warehouse/category/threshold, `DATA_MODEL.md`; only seed data is pending) | Y | Y (role-assignment data); **N for real identities/thresholds** | Interview §A1–A6; consolidate per-process answers | BoFED / Property Administration Head / HR |
+| Document numbering / copy-distribution | None (OPEN) | Bureau numbering scheme | N (system-generated idempotency key already independent of it, PRD §6.1) | P | Y | Source Request #19 | Property Administration / Registry |
+| Mandatory periodic reports | EFY reporting concept already generic (PRD §21) | Exact mandatory report content/format/recipients | N | N (downstream of ledger, M14) | Y | Interview §J1; Source Request #18 | Finance / Property Administration |
+| Evidence retention period | None (OPEN) | Minimum retention duration | N (append-only audit already defaults to indefinite retention) | N | Y | Interview §K; general source request | Internal Audit / BoFED |
+
+## 3. Classification
+
+HARD BLOCKER below means: *must be known before finalizing or implementing the specific policy-dependent behavior named* — it does not mean all software implementation is blocked. The corresponding foundation/mechanism for each item is separately available now under SAFE DEFAULT (S-1..S-8) or the M1-readiness list in `docs/M0_STATUS.md`.
+
+### HARD BLOCKER — must be known before finalizing/implementing the affected workflow or policy-dependent behavior (8)
+
+1. **HB-1** Disposal committee composition and approval authority/thresholds, if any (never invent — CLAUDE.md explicit).
+2. **HB-2** Stock-vs-fixed-asset classification criteria, including any value threshold if applicable (which items leave warehouse stock for fixed-asset custody).
+3. **HB-3** Funding/project segregation policy — reporting-only vs. restricted physical-stock dimension. Blocks: ATP eligibility inclusion, commitment-to-funding matching, cross-source stock substitutability, final balance-projection grouping/uniqueness semantics, and any restrictive DB constraint/posting validation keyed on funding/project. Does **not** block defining `inventory_entries`/`inventory_commitments` — their `funding_source_id`/`project_id` columns can exist now as nullable, attribution-capable fields (`DATA_MODEL.md`). Nullable is for "not applicable / not yet known," not "optional to record": any workflow that captures a known funding/project source at posting time must still populate the column even though it is not yet a restriction — because posted ledger entries are immutable (INV-002), a source left unrecorded when it was actually known cannot be reliably added later.
+4. **HB-4** Consolidated approval/signature authority matrix (real Bureau titles/authority levels and thresholds, if any, per transaction type).
+5. **HB-5** Stock-adjustment/variance approval authority/thresholds, if any.
+6. **HB-6** Warehouse-transfer dispatch authorization and receipt-discrepancy resolution authority.
+7. **HB-7** Period-close certifying authority (who signs/certifies closing balances).
+8. **HB-8** GRN (Model 19) vs. Stores Receipt Voucher (SRV) relationship — same document, sequential documents, or manual inconsistency (`OFFICIAL_PROCESS_MAPPING.md` §"terminology conflict").
+
+The current regional manuals/forms/authority confirmations requested in `M0_SOURCE_REQUEST.md` are the primary evidence expected to resolve these eight blockers; some (e.g. HB-3's funding-segregation policy) may require separate Finance/BoFED clarification beyond the manuals themselves.
+
+### CONFIGURABLE — can be implemented later as configuration (8)
+
+1. **C-1** Document numbering/copy-distribution format.
+2. **C-2** Physical-count frequency and recount variance threshold (policy-neutral default until set: no automated scheduling requirement until frequency is validated; no automatic variance acceptance; any variance remains pending human review/recount decision per validated procedure).
+3. **C-3** UOM package-conversion factors per item (base-UOM-only entry enforced until approved).
+4. **C-4** Mandatory periodic report content/format/recipients.
+5. **C-5** Evidence/document retention and archival policy (ledger stays immutable regardless).
+6. **C-6** Bin-card/stock-register report layout and dimension grouping.
+7. **C-7** Inspection-committee membership and applicability rules (shape of the process is unaffected).
+8. **C-8** Requisition/issue approval routing (role-assignment data, not schema).
+
+### SAFE DEFAULT — technically safe provisional behavior exists (8)
+
+1. **S-1** Receipt → PENDING_INSPECTION → USABLE/REJECTED_PENDING_RETURN state machine (INV-009/010).
+2. **S-2** Requisition/transfer commitment mechanics: create/consume/release, no physical movement at reservation (INV-006/037/038).
+3. **S-3** Transfer dispatch/receipt/IN_TRANSIT conservation with explicit discrepancy holding — mechanics only, not who approves (INV-005/017/018).
+4. **S-4** Condition reclassification orthogonal to custody: damage/quarantine/expiry/obsolete (INV-012/040).
+5. **S-5** Blind physical count with stock changed only by approved adjustment (INV-014/015).
+6. **S-6** Base-UOM-only posting; alternate-UOM posting prohibited until conversion is approved (INV-022/023).
+7. **S-7** Period lock with exceptional, audited reopen — mechanics only, not who certifies (INV-019/020).
+8. **S-8** Direct-write prohibition, append-only audit, atomic/idempotent posting (INV-007/008/031/032) — needs no Bureau-specific evidence at all.
+
+### PROJECT-SPECIFIC — DRDIP-II evidence exists, Bureau-wide adoption unconfirmed (6)
+
+1. **P-1** GRN (Model 19) / SRV receipt-and-inspection terminology and sequence.
+2. **P-2** Stores Requisition Note + Stores Issue Voucher naming/sequence.
+3. **P-3** Stores officer reporting line to the Property Administration head.
+4. **P-4** Periodic physical stock-taking reconciled to bin-card balances (the practice, not the frequency).
+5. **P-5** Fixed-asset annual physical-verification requirement.
+6. **P-6** DRDIP evidence demonstrates project/funding attribution and project-specific record-keeping; it does not establish whether otherwise identical physical stock must be legally segregated or is interchangeable — informs but does not resolve HB-3 Bureau-wide.
+
+## 4. Minimum fields to verify per missing Bureau form
+
+Beyond the standard metadata already required by `M0_SOURCE_REQUEST.md` (title, form/manual number, issuing authority, approval/effective date, revision, in-force status, language, superseded document), verify these minimum content fields from the real form before it is treated as controlling:
+
+| Form | Minimum content fields to verify |
+|---|---|
+| Goods receipt / stores receipt | Supplier/source, PO or contract reference, item lines (ordered/delivered/accepted/rejected qty + UOM), receiving officer, inspector, signature block, date |
+| Inspection & acceptance certificate | Reference to receipt document, inspected qty/quality/spec checked, committee members (if any), accept/reject decision per line, signatures, date |
+| Store requisition | Requesting directorate/officer, item lines + qty requested + UOM, purpose/justification, authorizer signature, date |
+| Store issue voucher | Reference to approved requisition, item lines + qty issued + UOM, issuing officer, recipient acknowledgement, date |
+| Stock/bin card | Item identity, one-card scope (item/batch/funding/location — which), running balance, reference-document column, correction method |
+| Stock register | Register scope (per warehouse/Bureau-wide), item identity, opening/movement/closing columns, custodian |
+| Warehouse transfer/dispatch/receipt | Source/destination warehouse, item lines + qty dispatched vs received, condition on receipt, dispatcher/receiver signatures, discrepancy field, date |
+| Return-to-store / supplier-return form | Reference to original issue/receipt, reason, item lines + qty, authorizing/receiving signature, date |
+| Physical inventory count sheet / variance report | Item identity, count scope/cutoff, blind-count column, book-vs-counted columns, variance, recount trigger, team signatures |
+| Adjustment authorization form | Reference to count/variance, proposed +/- qty, reason, independent reviewer, approver signature, value if priced |
+| Damaged/expired/obsolete report | Item identity, quantity, condition, evidence description, reporting officer, next-step recommendation |
+| Disposal request/committee/final-disposal forms | Item identity, quantity, condition, valuation (if any), committee composition, approval signatures, disposal method, evidence of completion |
+| Fixed-asset register / custody handover | Asset identity/property number, custodian, transfer/return/disposal history, signatures |
+
+## 5. Documentation review findings
+
+- Gap found: `M0_INTERVIEW_CHECKLIST.md` had no dedicated question set for **return to store** or **supplier return of rejected goods**, even though `OFFICIAL_PROCESS_MAPPING.md` tracks both as separate OPEN rows. Fixed in this change — see the checklist's new §D-bis.
+- `inventory-architect` review found an internal contradiction in the original draft of `M0_STATUS.md`: its "could start" list named the full `inventory_transactions`/`inventory_entries`/`inventory_commitments` ledger shape safe, while its "must remain blocked" list correctly held that HB-3 (funding/project segregation) blocks the stock-position key those same tables carry. First fix categorically excluded `inventory_entries`/`inventory_commitments` from the "could start" list; that exclusion is itself now superseded by the precision pass below, which found it overcorrected (see the last bullet in this section for the current, narrower treatment).
+- Other than the fix above, `M0_STATUS.md`, `M0_EVIDENCE_REGISTER.md` and `OFFICIAL_PROCESS_MAPPING.md`'s "still blocking" lists are consistent.
+- The overlap between `M0_SOURCE_REQUEST.md`, `M0_EVIDENCE_REGISTER.md` §"Evidence still required" and `M0_INTERVIEW_CHECKLIST.md` is intentional (document ask vs. evidence tracking vs. live interview script) and is not treated as duplication to remove.
+- No stale assumption found: all "TO BE VALIDATED" markers in `PRD.md`, `BUSINESS_RULES.md` and `OFFICIAL_PROCESS_MAPPING.md` remain currently accurate: none has since been resolved by evidence in the register.
+- `government-inventory-ux-designer` review found the original draft's "Blocks workflow/UI design" column understated a structural (not cosmetic) risk for Goods receipt, Inspection/acceptance, Disposal and Fixed-asset handover — committee/threshold/step-count questions are IA forks, not label detail — and that "the generic UI shell can start now" in `M0_STATUS.md` did not carve out approval/inspection/disposal screens. Both fixed. It also found real gaps in §4 (missing quantity on damage/disposal forms, missing item identity on the count sheet, missing UOM on requisition/issue, missing condition-on-receipt on transfer). Fixed.
+- Precision pass (requester-directed): HB-3 was overstated as categorically blocking `inventory_entries`/`inventory_commitments` definition; corrected so only the funding/project *restriction semantics* (ATP eligibility, commitment matching, substitutability, projection uniqueness, posting constraints) are blocked, while the nullable attribution columns themselves are not. Removed three unsupported assumptions that a numeric threshold exists (disposal, adjustment, fixed-asset classification) — reworded to "authority/thresholds, if any" or "criteria, including any value threshold if applicable". Removed an invented "zero-tolerance recount" safe default (C-2) in favor of a policy-neutral default: no automated scheduling until frequency is validated, no automatic variance acceptance, variance pending human review. Tightened P-6 so it no longer implies DRDIP evidence establishes Bureau-wide segregation. Clarified that "HARD BLOCKER" scopes the specific policy-dependent behavior, not all implementation. Softened the "all eight trace back to two manuals" claim to acknowledge some (HB-3) may need separate Finance/BoFED clarification.
+- `code-review-and-quality` self-review of the precision pass found: the Funding/project restriction row's "Blocks workflow/UI design" cell was left at a flat "Y" while its DB/Configurable cells had just been split into attribution-capture (safe) vs. restriction-enforcement (blocked) — fixed to the same split. Two other unsoftened threshold assumptions survived the pass (Inspection/acceptance's "applicability threshold"; HB-4's "titles/thresholds") — reworded to match the "if any" pattern used elsewhere. The Return-to-store and Supplier-return rows' "Next evidence action" cells pointed to "§4 below" (the minimum-fields table, not interview questions) for a question that was actually already added to `M0_INTERVIEW_CHECKLIST.md` §D-bis in an earlier round — corrected to cite that directly. All fixed.
+- `inventory-architect` re-review of the precision pass found two further issues, both fixed: (1) the "nullable columns are safe now" framing for HB-3 was correct on schema-migration mechanics but omitted the real risk — a workflow that captures a *known* funding/project source but leaves the nullable column empty creates data that, once posted, is immutable (INV-002) and cannot be reliably corrected if HB-3 later hardens into a restriction; added an explicit capture-discipline sentence to HB-3 (matrix §1 row, §3, and `M0_STATUS.md`'s "could start" section) making clear nullable means "not applicable/not yet known," not "optional to record." (2) `docs/WORKFLOWS.md` §12 still asserted a plain "recount above threshold" step, contradicting this pass's own removal of the invented recount-threshold default — reworded to route variance to human review with recount only if/when a validated threshold requires it.
+
+## 6. Relationship to M1
+
+This matrix does not authorize M1. It defines the boundary `docs/M0_STATUS.md` uses to say which foundation-only work is safe to scope without government-policy risk, and which remains blocked. See `docs/M0_STATUS.md` for that readiness statement.
