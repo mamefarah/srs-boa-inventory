@@ -4,16 +4,29 @@ This repository is for the Somali Regional State Bureau of Agriculture multi-war
 
 ## Authority order
 
-1. Verified current Somali Region/Bureau official procedure.
-2. This file (`CLAUDE.md`).
-3. `docs/PRD.md` / `docs/BUSINESS_RULES.md` / `docs/SECURITY.md` / accepted ADRs.
-4. Validated `docs/OFFICIAL_PROCESS_MAPPING.md` / M0 evidence register.
+1. Verified current Somali Region/Bureau official procedure and controlling source documents.
+2. Validated `docs/OFFICIAL_PROCESS_MAPPING.md` and validated M0 evidence.
+3. `CLAUDE.md` (this file).
+4. `docs/PRD.md` / `docs/BUSINESS_RULES.md` / `docs/SECURITY.md` / accepted ADRs.
 5. Project `.claude/skills/boa-*` skills and project specialist agents (`.claude/agents/*`).
 6. Generic third-party engineering skills (e.g. the installed `addyosmani/agent-skills` pack).
 
-Conflicts **among levels 1–5** (official procedure, project rules, ADRs, validated process mapping, BoA skills/agents) stop work and get reported — never invent an official government rule, form number, signatory, threshold or approval authority.
+Validated official-process mapping is evidence-backed interpretation of actual government procedure, so it outranks internal product/design documents (PRD, business rules, ADRs) whenever the two disagree.
 
-Conflicts **between a generic third-party skill (level 6) and any of levels 1–5** are resolved automatically: ignore the conflicting generic instruction, keep following the higher-authority rule, and record the override only when it is materially relevant to the change (e.g. in the PR description). Do not stop and ask merely because a generic skill's example, template or default conflicts with project authority — that is expected and is not a human-only blocker. See "CI/CD and Deployment Policy" below for the standing example of this (the `ci-cd-and-automation` skill's auto-merge/auto-deploy examples).
+Generic third-party engineering skills (level 6) are always subordinate to every level above, including project `boa-*` skills and specialist agents (level 5). A generic skill never overrides project authority — see "CI/CD and Deployment Policy" below for the standing example (the `ci-cd-and-automation` skill's auto-merge/auto-deploy examples).
+
+### Conflict resolution
+
+When lower-authority material conflicts with higher-authority material, follow the higher-authority source automatically and continue. Do not stop and ask merely because `CLAUDE.md`, the PRD, an ADR, a project skill or a generic skill disagree and precedence resolves it. Record a material override in the PR description when it is relevant to the change being made.
+
+Escalate to the user only when:
+- two verified official/current government sources conflict with each other;
+- the controlling official source is ambiguous;
+- resolving the conflict would require inventing a government rule, signatory, threshold, form or approval authority;
+- a validated official-process finding appears to require deviating from the ledger immutability, direct-write prohibition, or RLS/authorization invariants in this file, `docs/SECURITY.md` or accepted ADRs — those are structural safety mechanisms, not competing business-rule content, so precedence-based auto-resolution never applies to them;
+- another human-only blocker listed in the Autonomous Execution Policy applies.
+
+Never invent an official government rule, form number, signatory, threshold or approval authority under any circumstances.
 
 ## Non-negotiable inventory rules
 

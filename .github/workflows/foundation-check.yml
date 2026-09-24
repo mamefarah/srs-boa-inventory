@@ -54,6 +54,7 @@ jobs:
             docs/SCREEN_INVENTORY.md
             docs/TRACEABILITY_MATRIX.md
             docs/ADR/0001-inventory-ledger-and-commitment-model.md
+            docs/ADR/0002-agent-autonomy-and-authority-precedence.md
           )
           for f in "${required[@]}"; do
             test -f "$f" || { echo "Missing required file: $f"; exit 1; }
