@@ -26,7 +26,7 @@ No physical ledger movement occurs at reservation.
 Commitment states: ACTIVE, PARTIALLY_FULFILLED, FULFILLED, RELEASED, EXPIRED, CANCELLED.
 
 ## 5. Issue
-Open approved request/commitment → revalidate permission → lock relevant stock/commitment → re-evaluate available-to-promise → pick warehouse/location/batch/serial → FEFO default → identify destination:
+Open approved request/commitment → revalidate permission → lock relevant stock/commitment → validate remaining commitment quantity + actual eligible physical stock while treating the current commitment as secured rather than subtracting it again → pick warehouse/location/batch/serial → FEFO default → identify destination:
 - consumable/authorized use may go to EXTERNAL/CONSUMED counterparty;
 - durable item remaining Bureau property may go to INTERNAL_CUSTODY/asset boundary.
 
@@ -36,7 +36,7 @@ Post one atomic inventory transaction and consume corresponding commitment quant
 Draft transfer → review/approval → create TRANSFER commitment against source eligible physical stock if transfer is not immediately dispatched. This commitment competes with requisition commitments for available-to-promise.
 
 ## 7. Transfer dispatch
-Lock source stock + transfer commitment → validate source availability → atomically:
+Lock source stock + transfer commitment → validate remaining transfer commitment + actual eligible source stock without subtracting the same transfer commitment twice → atomically:
 - consume transfer commitment;
 - post WAREHOUSE source → IN_TRANSIT physical entries;
 - mark transfer dispatched.

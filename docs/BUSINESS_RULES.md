@@ -18,7 +18,7 @@ Every physical stock change must trace to an inventory transaction, business doc
 Internal warehouse transfers must conserve Bureau logistics inventory across source warehouse, in-transit and destination warehouse.
 
 ## INV-006
-Stock cannot be issued or committed beyond eligible available-to-promise quantity unless an explicit validated exception policy exists.
+A new commitment cannot exceed eligible available-to-promise quantity unless an explicit validated exception policy exists. Fulfilment of an existing commitment must not subtract that same commitment twice; it is limited by the commitment's remaining quantity and actual eligible physical stock.
 
 ## INV-007
 Critical posting operations must be atomic and concurrency-safe.

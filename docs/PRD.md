@@ -110,15 +110,22 @@ No physical ledger entry is posted until an actual issue/dispatch occurs.
 
 ### 5.4 Availability
 
-For ordinary issue:
+For creation of a **new** commitment:
 
 ```text
 Eligible on-hand physical stock
-- active commitments
+- active competing commitments
 = available to promise
 ```
 
 Eligible stock normally means WAREHOUSE custody + USABLE condition, subject to item/funding/batch policy.
+
+For fulfilment of an **existing** commitment, do not subtract that same commitment twice. The posting operation must validate:
+- remaining quantity on the commitment;
+- actual eligible physical stock still present;
+- competing commitments according to the locking/allocation policy.
+
+A committed issue/dispatch may fulfil up to its own remaining committed quantity when the underlying eligible physical stock still supports it.
 
 ## 6. Authoritative ledger
 
@@ -294,7 +301,8 @@ All critical posting operations:
 - claim/check the idempotency intent atomically;
 - verify reused idempotency key has the same request hash;
 - lock affected physical positions/commitments in consistent order;
-- recalculate eligible physical stock and active commitments;
+- recalculate eligible physical stock and competing commitments;
+- when fulfilling an existing commitment, exclude that same commitment from the competing-commitment subtraction so it is not counted twice;
 - validate quantity, condition, batch/expiry/funding rules;
 - write business state, inventory transaction and entries in one DB transaction;
 - write audit evidence;
@@ -377,8 +385,9 @@ Pilot one main warehouse and one secondary warehouse. Scale only after ledger re
 ## 26. Acceptance invariants
 
 - No application client can directly mutate authoritative ledger/audit/projection tables.
-- No negative available-to-promise.
+- No negative available-to-promise for creation of new commitments.
 - Active commitments cannot exceed eligible stock except through an explicitly approved exceptional policy.
+- Fulfilment of an existing commitment is validated against its remaining committed quantity and underlying physical stock, without subtracting the same commitment twice.
 - Internal transfer dispatch/receipt does not change logistics inventory total.
 - Condition change does not change physical quantity.
 - Duplicate retry with same idempotency intent posts once.

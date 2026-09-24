@@ -58,11 +58,15 @@
 With 20 available-to-promise, transfer request attempts to commit 30:
 - must fail or partially approve according to validated rules.
 
-### Issue
-80 committed, issue 50:
+### Issue against own commitment
+Physical eligible stock 100; commitment A = 80; therefore available-to-promise for new requests = 20.
+Issue 50 against commitment A must **succeed**:
+- the system must not compare 50 only to the 20 available-to-promise remaining for other/new commitments;
 - physical warehouse quantity decreases 50;
 - destination custody/consumption increases 50 as applicable;
-- commitment remaining = 30.
+- commitment A remaining = 30;
+- remaining eligible physical stock = 50;
+- available-to-promise for new commitments = 20 if no other changes occurred.
 
 ### Transfer
 WH-A usable 100; transfer commitment 40.
