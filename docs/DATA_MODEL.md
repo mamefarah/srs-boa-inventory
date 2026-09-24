@@ -1,6 +1,6 @@
-# Conceptual Data Model — v2.1
+# Conceptual Data Model — v2.2
 
-> Design only. Do not create production migrations from this file until Phase 0 validation and schema review are complete.
+> Design only. `PRD.md` v2.2, `M0_EVIDENCE_REGISTER.md` and `M0_BLOCKER_MATRIX.md` are controlling. Do not hard-code unresolved policy such as fixed-asset monetary thresholds, approval authorities, GRN/SRV mapping, project-stock restrictions or disposal/deletion thresholds.
 
 ## Identity and authorization
 
@@ -37,7 +37,7 @@ Conceptual values:
 - IN_TRANSIT
 - INTERNAL_CUSTODY
 - EXTERNAL
-- TERMINAL_DISPOSITION
+- TERMINAL_EXIT
 - OPENING_BALANCE_CONTRA
 
 A concrete implementation may use a `stock_buckets` table or validated typed columns. Warehouse/location is required for WAREHOUSE custody.
@@ -163,11 +163,13 @@ A transfer may create a TRANSFER commitment before dispatch. Dispatch consumes c
 - adjustments
 - adjustment_lines
 
-## Disposal
-- disposals
+## Disposal and deletion/write-off
+- disposal_cases
 - disposal_lines
+- deletion_writeoff_cases
+- deletion_writeoff_lines
 
-Disposal workflow may place a hold/commitment on stock before final terminal transaction.
+Disposal and deletion/write-off are distinct business processes. Both may ultimately post to a terminal exit bucket, but transaction type, evidence, approval route and reason must remain distinguishable. A disposal workflow may place a hold/commitment on stock before the final authorized exit.
 
 ## Period control
 - inventory_periods
