@@ -24,6 +24,7 @@ Do not ask respondents to design the software. Ask them to show how the official
 7. How are partial acceptance and rejection recorded?
 8. Who receives copies of the receipt document?
 9. Can Finance pay without the store receipt/acceptance evidence?
+10. DRDIP-II's own FM manual and internal-audit practice use only "Goods Received Note (Model 19)" with no separate "Stores Receipt Voucher," while its Procurement Manual describes an inspection/acceptance certificate followed by a separate SRV: for Bureau (non-DRDIP) stock, is the receipt document the same Model 19 form used for both financial confirmation and inspection sign-off, or are these genuinely two different, sequential documents?
 
 ## C. Requisition and issue
 
@@ -91,6 +92,7 @@ Do not ask respondents to design the software. Ask them to show how the official
 3. Show property number/asset registration and custody handover forms.
 4. Who is accountable after issue?
 5. How are asset transfers/returns/disposals recorded?
+6. DRDIP-II's own FM manual defines its project fixed-asset register threshold as useful life longer than 1 year **and** value of Birr 2,000 or above: does the Bureau apply this same figure to its own (non-DRDIP) stock, a different regional figure, or the federal property-administration criterion — and is the test "and" (both conditions) or "or" (either condition)?
 
 ## I. UOM and item coding
 
