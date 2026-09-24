@@ -1,89 +1,66 @@
-# Official Process Mapping — Phase 0
+# Official Process Mapping — Phase 0 v2.2
 
-> Status: **IN PROGRESS / TO BE VALIDATED**. Current regional/Bureau source documents are still required before Bureau-wide workflows become official.
-
-See `M0_EVIDENCE_REGISTER.md` for source classification.
+**Status:** PARTIALLY VERIFIED  
+**Primary authority:** Somali Regional State Revised Procurement and Public Property Administration Proclamation No. 196/2020.  
+See `M0_EVIDENCE_REGISTER.md` for source classification and `M0_BLOCKER_MATRIX.md` for unresolved policy details.
 
 ## Evidence hierarchy
 
-For every process capture:
-1. governing current Somali Region/Bureau manual/directive and version/date;
-2. official form/document name and number, if any;
-3. responsible officer/custodian;
-4. required approver/signatories;
-5. supporting evidence/copies;
-6. current practical workflow;
-7. BoA-IMS workflow/state;
-8. physical-ledger effect;
-9. commitment effect where applicable;
-10. audit evidence;
-11. report output;
-12. unresolved gap/conflict.
-
-Bureau operational evidence (Class BOE — documents demonstrably used by the Bureau in its own current operations, `M0_EVIDENCE_REGISTER.md` §"Evidence classes") is usable as the current BoA-IMS operational baseline for the content it documents, subject to automatic supersession if a verified higher-authority current Somali Region/BoFED controlling source (Class A) is later found and actually conflicts with it. It is recorded in the "Bureau operational evidence currently located" column below and does not by itself constitute Class A confirmation — that still requires a verified current Somali Region/BoFED manual, directive or form.
+1. Current Somali Regional State proclamation/regulation/directive.
+2. Current BoFED/BoA approved property/stock/finance manuals and official forms.
+3. Bureau operational evidence that does not conflict with controlling regional law.
+4. Historical regional manuals/forms as legacy/process evidence only.
+5. Federal material as reference only unless adopted/localized.
+6. General good practice only when explicitly labeled as a system control.
 
 ## Mapping register
 
-| Process | Regional/Bureau official process | Bureau operational evidence currently located | Responsible actor / approval | Proposed BoA-IMS effect | Status |
-|---|---|---|---|---|---|
-| Goods receipt | TO BE VALIDATED (Class A) | Bureau FM Manual (both BOE-001 and the updated BOE-004 version) and the 2025 Bureau Community Procurement Manual (BOE-006): storekeeper counts goods and completes Goods Received Note (Model 19); none of these three documents mentions a Stores Receipt Voucher. Bureau Procurement Manual (BOE-002) separately: inspection/acceptance certificate then Stores Receipt Voucher. The Bureau's own 2025 internal-audit evidence (BOE-005) checks "M/19" as a required document, confirming GRN/Model 19 is live current Bureau practice, not only manual text. | Storekeeper/stores officer per Bureau operational evidence; exact signatories TBD pending Class A confirmation. | EXTERNAL → WAREHOUSE/PENDING_INSPECTION, then inspection classification. | PARTIAL — BUREAU OPERATIONAL EVIDENCE |
-| Inspection / acceptance | TO BE VALIDATED (Class A) | Bureau Procurement Manual: goods checked against contract for quality, quantity and type; inspection/acceptance certificate prepared before SRV. | Inspection/acceptance authority exact composition TBD pending Class A confirmation. | PENDING_INSPECTION → USABLE and/or REJECTED_PENDING_RETURN/other condition. | PARTIAL — BUREAU OPERATIONAL EVIDENCE |
-| Stock card / bin card / register | TO BE VALIDATED (Class A) | Bureau FM & Procurement Manuals require stock cards. Bureau Procurement Manual requires inventory records and periodic physical quantity agreement with bin-card balances. | Stores officer/storekeeper per Bureau operational evidence; Bureau-wide record ownership TBD. | No separate stock effect; read model must reconcile to authoritative entries. | PARTIAL — BUREAU OPERATIONAL EVIDENCE |
-| Store requisition | TO BE VALIDATED (Class A) | Bureau Procurement Manual: issue is based on properly authorized Stores Requisition Note. | Requester/authorizer exact Bureau authority TBD pending Class A confirmation. | Approval may create REQUISITION commitment; no physical move at reservation. | PARTIAL — BUREAU OPERATIONAL EVIDENCE |
-| Store issue | TO BE VALIDATED (Class A) | Bureau FM Manual: materials issued using store issue vouchers. Bureau Procurement Manual: authorized Stores Requisition Note + Stores Issue Voucher. | Stores officer per Bureau operational evidence; exact issuing/receiving signatures TBD pending Class A confirmation. | WAREHOUSE physical stock → validated destination custody/consumption; consume own commitment without double subtraction. | PARTIAL — BUREAU OPERATIONAL EVIDENCE |
-| Warehouse-to-warehouse transfer | TO BE VALIDATED (Class A) | No sufficiently specific current Bureau/regional transfer form located yet. | TBD | Source commitment → dispatch WAREHOUSE → IN_TRANSIT → destination WAREHOUSE; discrepancy remains explicit. | OPEN |
-| Return to store | TO BE VALIDATED (Class A) | No controlling/current regional evidence located yet. | TBD | Prior custody/source → WAREHOUSE with inspected condition. | OPEN |
-| Supplier return / rejected delivery | TO BE VALIDATED (Class A) | Inspection/rejection evidence exists; exact return form/process not yet located. | TBD | WAREHOUSE/REJECTED_PENDING_RETURN → EXTERNAL. | OPEN |
-| Physical stock count | TO BE VALIDATED (Class A) | Bureau Procurement Manual requires periodic physical stock-taking to agree physical quantity with bin-card balance. Bureau FM Manual requires annual physical verification for fixed assets. | Count team/approval thresholds TBD pending Class A confirmation. | Count itself no stock effect; approved variance posts separate correction. | PARTIAL — BUREAU OPERATIONAL EVIDENCE |
-| Stock adjustment / variance | TO BE VALIDATED (Class A) | No exact current authorization form/threshold located. | TBD | Approved physical correction only; never condition change disguised as adjustment. | OPEN |
-| Damage / quarantine / expiry / obsolete | TO BE VALIDATED (Class A) | No complete current regional condition-management procedure located. | TBD | Balanced condition reclassification; physical quantity retained until approved terminal exit/loss. | OPEN |
-| Disposal | TO BE VALIDATED (Class A) | Current regional disposal procedure/form not located. Federal references exist but are not adopted automatically. | TBD | Bureau-controlled physical bucket → TERMINAL_DISPOSITION only after approved process. | OPEN |
-| Fixed-asset handover / custody | TO BE VALIDATED (Class A) for the handover form/accountable-officer rule; **classification threshold now has a Bureau operational baseline** — see below | Bureau FM Manual contains fixed-asset registers and annual verification; the updated FM Manual (BOE-004) states an explicit Bureau criterion — useful life >1 year and value ≥ Birr 2,000 — for what enters the fixed-asset register. This is now the BoA-IMS system baseline (`M0_BLOCKER_MATRIX.md` §3, "CURRENT BUREAU OPERATIONAL RULE"), subject to supersession by a Class A source that actually conflicts with it. Handover form and accountable-officer rule remain TBD. | Property administration/custodian TBD. | Warehouse inventory may hand off to INTERNAL_CUSTODY/asset register boundary. | PARTIAL — BUREAU OPERATIONAL EVIDENCE |
-| Period reconciliation / close | TO BE VALIDATED (Class A) | Bureau FM Manual contains accounting/end-period procedures, but store-specific close rule not yet mapped. | TBD | No physical quantity effect; locks reporting period after reconciliation. | OPEN |
-| Funding/project source (attribution vs. restriction) | TO BE VALIDATED (Class A) | Bureau FM/Procurement Manuals maintain funding/project-attributed records as a normal part of Bureau operations (Class BOE); whether identical stock can be interchanged across funding/project sources requires explicit Bureau/Finance rule. | TBD | Attribution/reporting-only, or a restricted physical-stock dimension, depending on validated policy. | OPEN |
-| Base UOM / package conversions | TO BE VALIDATED (Class A) | No authoritative Bureau conversion policy located. | TBD | Ledger/commitment quantities remain in base UOM; alternate units only under approved deterministic conversion. | OPEN |
+| Process | Evidence-supported administrative position | BoA-IMS effect | Status |
+|---|---|---|---|
+| Item/property classification | Proclamation 196/2020 distinguishes fixed assets and supplies; fixed-asset useful life exceeds one year while monetary value is delegated to directive | Versioned classification policy; never hard-code the current Birr threshold until directive confirmed | VERIFIED STRUCTURE / THRESHOLD OPEN |
+| Goods receipt | Bureau operational and legacy stock evidence support receipt control and Model 19/GRN; relationship to SRV remains unresolved | EXTERNAL → WAREHOUSE/PENDING_INSPECTION where procedure permits; capture source documents | PARTIAL — HB-8 |
+| Inspection/acceptance | Bureau operational evidence supports quality/quantity/type inspection before accepted stock becomes issuable | PENDING_INSPECTION → USABLE / REJECTED_PENDING_RETURN / other authorized condition | PARTIAL — signatories HB-4 |
+| Rejected delivery | Rejected goods must remain traceable and unavailable for normal issue | Preserve rejected quantity until supplier return/resolution | MECHANICS VERIFIED / FORM OPEN |
+| Stock/bin records | Regional law requires life-cycle property records; stock manuals support stock/bin cards | Read models must reproduce movement/balance evidence from immutable ledger | VERIFIED REQUIREMENT / LAYOUT OPEN |
+| Store requisition | Bureau operational evidence requires authorized requisition before issue | Approval may create optional commitment; no physical movement at requisition | PARTIAL — HB-4 |
+| Store issue | Bureau operational evidence supports issue voucher; regional law requires continued custody for property that remains government-owned | WAREHOUSE → EXTERNAL/CONSUMED or INTERNAL_CUSTODY depending item/use | VERIFIED STRUCTURE / SIGNATURES OPEN |
+| Fixed-asset custody | Proclamation 196/2020 requires custodian/location control; legacy regional guide provides UC/FAR/FATF-style forms | Maintain asset/custodian/location history after warehouse issue | VERIFIED STRUCTURE |
+| Custodian-to-custodian asset transfer | Regional custody concept requires traceable transfer; legacy fixed-asset guide provides transfer-form evidence | INTERNAL_CUSTODY → INTERNAL_CUSTODY with old/new custodian and location | VERIFIED STRUCTURE / CURRENT FORM TO CONFIRM |
+| Warehouse transfer | No current controlling transfer authority package located | WAREHOUSE → IN_TRANSIT → WAREHOUSE; discrepancies remain explicit | MECHANICS READY — HB-6 |
+| Return to store | Legacy regional fixed-asset guide supports return/reissue concepts | INTERNAL_CUSTODY/source → WAREHOUSE with inspection/condition capture | PARTIAL |
+| Condition change | Physical condition is distinct from quantity/custody | Balanced condition reclassification; no quantity disappearance | SYSTEM CONTROL |
+| Physical count | Proclamation 196/2020 requires inventory to be physically verified against records at least annually | Annual count cycle is mandatory; variance alone has no stock effect | VERIFIED |
+| Stock adjustment | Regional law requires accountability but current approval details remain missing | Separate immutable adjustment/correction transaction after investigation/approval | MECHANICS READY — HB-5 |
+| Disposal | Proclamation 196/2020 recognizes disposal and requires accountable property administration | Separate disposal case and terminal exit after approved process | LEGAL CONCEPT VERIFIED — HB-1 DETAILS |
+| Deletion/write-off/loss | Proclamation 196/2020 treats deletion/write-off separately from disposal | Separate deletion/loss case and posting reason; never reuse generic disposal | LEGAL DISTINCTION VERIFIED — HB-1/HB-5 DETAILS |
+| Period reconciliation/close | No current store-specific certifier/reopen rule confirmed | Technical lock/reconciliation with compensating correction model | MECHANICS READY — HB-7 |
+| Funding/project source | Regional proclamation recognizes priority of applicable international obligations; Bureau operational evidence captures funding/project | Capture attribution always when known; restrict substitutability only when controlling/project rule says so | PARTIAL — HB-3 |
+| UOM conversions | No approved regional/Bureau conversion schedule located | Ledger stays in base UOM; alternate-unit entry disabled until approved conversion | OPEN — CG-1 |
+| Electronic records | Federal current material recognizes electronic written form, but it is not controlling regional evidence | Support digital evidence plus print/hybrid mode | CONDITIONAL — CG-2 |
+| Hazardous/expired inputs | Specialized agriculture/environment/health rule not yet obtained | Quarantine and block issue; terminal disposition disabled pending rule | OPEN — CG-3 |
 
-## Current Bureau operational stores controls supported by located evidence
+## Current form evidence
 
-The Bureau operational evidence (Class BOE) currently located supports the following **Bureau-operational-level** controls (i.e. confirmed as the Bureau's own current practice for the operations these documents cover; not yet elevated to verified Class A regional-manual status):
+Current evidence supports or references these form concepts, but version/current-use status must be checked where noted:
 
-- stock movements are recorded/controlled through stock cards;
-- stores maintain records of goods received and issued;
-- stores are managed by a stores officer reporting to property administration in the Bureau Procurement Manual;
-- delivered goods are checked against contract quality, quantity and type;
-- inspection/acceptance precedes stores receipt in the Bureau Procurement Manual;
-- receipt evidence includes GRN/Model 19 in the Bureau FM Manual and SRV terminology in the Bureau Procurement Manual;
-- issue requires an authorized store requisition and store issue voucher;
-- periodic physical stock-taking reconciles physical quantities to bin-card balances;
-- fixed assets are subject to physical verification and a useful-life->1-year-AND-Birr-2,000 classification criterion in the Bureau FM Manual (now the BoA-IMS system baseline, subject to supersession — see `M0_BLOCKER_MATRIX.md` §3).
+- Model 19 / Goods Received Note — live Bureau operational evidence.
+- Stores Receipt Voucher — Bureau procurement manual evidence; relationship to Model 19 remains HB-8.
+- Stores Requisition Note / Model 20 terminology — operational/legacy evidence.
+- Stores Issue Voucher / Model 22 terminology — operational/legacy evidence.
+- Fixed Asset Count Sheet (FACS) — legacy regional guide.
+- User/Custodian Control Card (UC) — legacy regional guide.
+- Fixed Asset Register (FAR) — legacy regional guide.
+- Fixed Asset Transfer Form (FATF) — legacy regional guide.
+- Return/reissue fixed-asset forms and Gate Pass — legacy regional guide.
 
-### Important operational question to resolve: GRN/Model 19 vs. SRV
+Do not claim a legacy form is the current official Bureau form solely because it appears in an older manual.
 
-The Bureau FM Manual uses **Goods Received Note (Model 19)** while the Bureau Procurement Manual uses **Stores Receipt Voucher (SRV)** and also refers to inspection/acceptance before SRV issuance. Both are Class BOE — Bureau operational evidence — so this is not a conflict between documents of unclear standing; it is an open operational question about how two Bureau-documented steps relate.
+## Data/control consequences
 
-M0 must determine whether these are:
-- the same underlying government form under different terminology;
-- separate documents used at different steps;
-- alternative terminology for the same step; or
-- documents used for different functions.
-
-BoA-IMS must not merge these concepts until the actual forms/process owner confirms which.
-
-**2026-09-24 update:** two additional Bureau operational documents (updated FM Manual and 2025 Community Procurement Manual — `M0_EVIDENCE_REGISTER.md` BOE-004/BOE-006) were checked and, like the original FM Manual, reference GRN/Model 19 without mentioning "Stores Receipt Voucher"/"SRV." Multiple Bureau operational documents increase confidence that GRN/Model 19 is genuinely used in current Bureau operations, but this does not resolve its operational relationship to SRV: these documents belong to the same Bureau operational/document family, not independent sources, and an SRV mention being absent from a given document's scope does not establish that SRV is unused elsewhere. Same document, sequential documents, alternative terminology, and different-function all remain open. BoA-IMS still must not merge these concepts until the actual forms/process owner resolves it. Kept OPEN (HB-8).
-
-## Questions that still block final database/workflow design
-
-- What is the current Somali Region controlling stock/property manual?
-- Which receipt form is currently used by the Bureau and what is its official number/name?
-- Who signs inspection/acceptance and when?
-- Who authorizes a Stores Requisition Note?
-- Who signs the Stores Issue Voucher as issuer/receiver/approver?
-- Are transfer documents standardized regionally?
-- How are returned, rejected, damaged, expired and obsolete items documented?
-- What approval/value thresholds apply to adjustments and disposal?
-- What stock-count frequency, team composition and recount thresholds apply?
-- How are period-end stock balances formally certified?
-- Are project/funder stocks segregated for use or reporting only?
-- What base UOM/package conversion rules apply?
-- Which durable items move from warehouse inventory into fixed-asset/property custody?
-- What evidence retention period applies?
+- Maintain custody and condition as separate dimensions.
+- Maintain custodian and location history for controlled fixed assets.
+- Preserve date, description, quantity and cost evidence through the property life cycle.
+- Support annual physical verification.
+- Keep disposal separate from deletion/write-off.
+- Make policy thresholds effective-dated/configurable.
+- Keep GRN/SRV mapping configurable until HB-8 is resolved.
