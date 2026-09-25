@@ -73,7 +73,10 @@ BEGIN
 
   -- USAGE (not MEMBER): PostgreSQL 16 makes the role's creator a non-inheriting
   -- member; only logins that actually exercise boa_ims_app privileges are guarded here.
-  IF pg_has_role(current_user, 'boa_ims_app', 'USAGE') THEN
+  -- Superusers report USAGE on every role, so they are excluded explicitly (they are
+  -- never the application login; the API refuses to start as one).
+  IF pg_has_role(current_user, 'boa_ims_app', 'USAGE')
+     AND NOT (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) THEN
     IF v_actor IS NULL OR NOT public.boa_has_permission(v_perm) THEN
       RAISE EXCEPTION 'BOA_NOT_AUTHORISED: % required', v_perm USING ERRCODE = 'BA002';
     END IF;
