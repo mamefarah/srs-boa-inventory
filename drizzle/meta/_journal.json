@@ -15,6 +15,20 @@
       "when": 1790301278739,
       "tag": "0001_m1_security",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790302109044,
+      "tag": "0002_m1_constraint_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790302109867,
+      "tag": "0003_m1_access_hardening",
+      "breakpoints": true
     }
   ]
 }

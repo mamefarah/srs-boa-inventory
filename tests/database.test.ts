@@ -45,9 +45,9 @@ async function asAppUser<T>(userId: number | null, fn: (c: pg.PoolClient) => Pro
 }
 
 describe('clean migration', () => {
-  it('applied both migrations in order', async () => {
+  it('applied all migrations in order', async () => {
     const r = await admin.query('SELECT count(*)::int AS n FROM drizzle.__drizzle_migrations');
-    assert.equal(r.rows[0].n, 2);
+    assert.equal(r.rows[0].n, 4);
   });
 
   it('created the expected tables', async () => {
@@ -158,10 +158,30 @@ describe('direct-write prohibition — raw SQL as the application role', () => {
   it('cannot create objects in the public schema', async () => {
     await expectError(app, 'CREATE TABLE public.stock_balance (qty numeric)', /permission denied/);
   });
-  it('database CHECK rejects a self-granted role or warehouse even if the API were bypassed', async () => {
+  it('cannot write role or warehouse grants directly (only via audited admin functions)', async () => {
     const uid = fx.userIds['no-roles'];
-    await expectError(app, `INSERT INTO user_roles (user_id, role_id, granted_by_user_id) SELECT $1, id, $1 FROM roles WHERE code = 'SYSTEM_ADMIN'`, /user_roles_no_self_grant/, [uid]);
-    await expectError(app, 'INSERT INTO user_warehouse_access (user_id, warehouse_id, granted_by_user_id) VALUES ($1, $2, $1)', /user_warehouse_access_no_self_grant/, [uid, fx.warehouseA]);
+    await expectError(app, `INSERT INTO user_roles (user_id, role_id, granted_by_user_id) SELECT $1, id, NULL FROM roles WHERE code = 'SYSTEM_ADMIN'`, /permission denied/, [uid]);
+    await expectError(app, `INSERT INTO user_roles (user_id, role_id, granted_by_user_id) SELECT $1, id, 1 FROM roles WHERE code = 'WAREHOUSE_SCOPE_GLOBAL'`, /permission denied/, [uid]);
+    await expectError(app, 'INSERT INTO user_warehouse_access (user_id, warehouse_id) VALUES ($1, $2)', /permission denied/, [uid, fx.warehouseA]);
+    await expectError(app, 'DELETE FROM user_roles', /permission denied/);
+  });
+  it('cannot activate users directly (insert, update or upsert)', async () => {
+    await expectError(app, `INSERT INTO users (firebase_uid, email, is_active) VALUES ('rogue', 'rogue@example.invalid', true)`, /permission denied/);
+    await expectError(app, `UPDATE users SET is_active = true WHERE firebase_uid = 'inactive-op'`, /permission denied/);
+    await expectError(app, `INSERT INTO users (firebase_uid, email) VALUES ('inactive-op', 'inactive-op@example.invalid') ON CONFLICT (firebase_uid) DO UPDATE SET is_active = true`, /permission denied/);
+  });
+  it('admin functions refuse callers without the permission or without a user context', async () => {
+    await expectError(app, `SELECT boa_admin_set_user_role($1, 'SYSTEM_ADMIN', true, 'escalation attempt', NULL)`, /BOA_NOT_AUTHORISED/, [fx.userIds['no-roles']]);
+    await asAppUser(fx.userIds['operator-a'], async (c) => {
+      await assert.rejects(c.query(`SELECT boa_admin_set_user_role($1, 'SYSTEM_ADMIN', true, 'escalation attempt', NULL)`, [fx.userIds['target-2']]), /BOA_NOT_AUTHORISED/);
+    });
+    await asAppUser(fx.userIds['admin-1'], async (c) => {
+      await assert.rejects(c.query(`SELECT boa_admin_set_user_role($1, 'SYSTEM_AUDITOR', true, 'self escalation', NULL)`, [fx.userIds['admin-1']]), /BOA_SELF_ADMINISTRATION/);
+    });
+  });
+  it('the app login cannot connect to databases where boa_ims_app has no CONNECT (PUBLIC revoked)', async () => {
+    const r = await admin.query(`SELECT has_database_privilege('public', current_database(), 'CONNECT') AS pub`);
+    assert.equal(r.rows[0].pub, false);
   });
 });
 
@@ -245,6 +265,25 @@ describe('row-level security on ledger and audit (independent of API filters)', 
   });
 });
 
+describe('separation of duties (INV-029) — enforced for every writer', () => {
+  it('an administrator identity cannot also hold audit/stock/global-scope roles', async () => {
+    for (const role of ['SYSTEM_AUDITOR', 'WAREHOUSE_OPERATOR', 'WAREHOUSE_SCOPE_GLOBAL']) {
+      await expectError(admin, `INSERT INTO user_roles (user_id, role_id) SELECT $1, id FROM roles WHERE code = $2`, /BOA_SOD/, [fx.userIds['admin-1'], role]);
+    }
+  });
+  it('a data-reader identity cannot also become an administrator', async () => {
+    await expectError(admin, `INSERT INTO user_roles (user_id, role_id) SELECT $1, id FROM roles WHERE code = 'SYSTEM_ADMIN'`, /BOA_SOD/, [fx.userIds['auditor-global']]);
+  });
+});
+
+describe('API database login safety check', () => {
+  it('rejects the schema owner and accepts the least-privilege app login', async () => {
+    const { assertLeastPrivilegeConnection } = await import('../server/db/privilege-check.ts');
+    await assert.rejects(assertLeastPrivilegeConnection(admin), /Unsafe database login/);
+    await assert.doesNotReject(assertLeastPrivilegeConnection(app));
+  });
+});
+
 describe('policy gate (HB-2)', () => {
   it('zero ACTIVE unverified policies and no active fixed-asset threshold in the persistent schema', async () => {
     const r = await admin.query(`SELECT count(*)::int AS n FROM policy_versions WHERE status = 'ACTIVE' AND (evidence_status <> 'VERIFIED' OR policy_key = 'fixed_asset_monetary_threshold')`);
@@ -256,6 +295,24 @@ describe('policy gate (HB-2)', () => {
     await expectError(admin, `INSERT INTO policy_versions (policy_key, version, status, evidence_status, value, effective_from) VALUES ('fixed_asset_monetary_threshold', 2, 'ACTIVE', 'UNVERIFIED', '{"birr": 2000}', now())`, /policy_versions_active_requires_verified_evidence/);
     await expectError(admin, `UPDATE policy_versions SET status = 'ACTIVE' WHERE policy_key = 'fixed_asset_monetary_threshold'`, /policy_versions_active_requires_verified_evidence/);
   });
+  it('evidence must be non-blank and nothing returns to DRAFT (no silent rewrite after activation)', async () => {
+    const c = await admin.connect();
+    try {
+      await c.query('BEGIN');
+      await c.query(`INSERT INTO policy_versions (policy_key, version, status, value, effective_from) VALUES ('test_probe_policy', 1, 'DRAFT', '{"x": 1}', now())`);
+      await assert.rejects(c.query(`UPDATE policy_versions SET status = 'ACTIVE', evidence_status = 'VERIFIED', source_evidence_ref = '   ' WHERE policy_key = 'test_probe_policy'`), /policy_versions_active_requires_verified_evidence/);
+      await c.query('ROLLBACK');
+      await c.query('BEGIN');
+      await c.query(`INSERT INTO policy_versions (policy_key, version, status, evidence_status, source_evidence_ref, value, effective_from) VALUES ('test_probe_policy', 1, 'ACTIVE', 'VERIFIED', 'TEST-EVIDENCE-REF', '{"x": 1}', now())`);
+      await assert.rejects(c.query(`UPDATE policy_versions SET status = 'DRAFT' WHERE policy_key = 'test_probe_policy'`), /BOA_POLICY_IMMUTABLE/);
+      await c.query('ROLLBACK');
+    } finally {
+      c.release();
+    }
+    const left = await admin.query(`SELECT count(*)::int AS n FROM policy_versions WHERE policy_key = 'test_probe_policy'`);
+    assert.equal(left.rows[0].n, 0);
+  });
+
   it('a non-draft policy version cannot be rewritten or deleted', async () => {
     await expectError(admin, `UPDATE policy_versions SET value = '{"birr": 1000}' WHERE policy_key = 'fixed_asset_monetary_threshold'`, /BOA_POLICY_IMMUTABLE/);
     await expectError(admin, `DELETE FROM policy_versions WHERE policy_key = 'fixed_asset_monetary_threshold'`, /BOA_POLICY_IMMUTABLE/);

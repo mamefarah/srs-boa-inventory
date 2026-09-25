@@ -13,9 +13,12 @@ import { idempotencyRecords } from '../db/schema.ts';
  * INSERT ... ON CONFLICT DO NOTHING: a concurrent claimant blocks on the unique index
  * until the first transaction commits or aborts, so at most one transaction can ever
  * own a key. There is no SELECT-then-INSERT race.
+ *
+ * Must run inside withUserContext(): records are RLS-scoped to their actor, and keys
+ * must be client-generated random values (e.g. UUIDv4) of at least 16 characters.
  */
 
-export const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9_\-:.]{8,200}$/;
+export const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9_\-:.]{16,200}$/;
 
 /** Deterministic JSON: object keys sorted recursively; arrays keep order. */
 export function canonicalJson(value: unknown): string {
@@ -74,8 +77,8 @@ export async function claimIdempotencyKey(exec: Executor, input: ClaimInput): Pr
     .where(eq(idempotencyRecords.idempotencyKey, input.idempotencyKey))
     .for('share');
   if (!existing) {
-    // Only reachable if the conflicting row vanished (records are never deleted by the app).
-    throw new Error('Idempotency record disappeared during claim');
+    // Row-level security hides other actors' records: the key is owned by someone else.
+    return { outcome: 'CONFLICT', reason: 'ACTOR_MISMATCH' };
   }
   if (existing.actorUserId !== input.actorUserId) return { outcome: 'CONFLICT', reason: 'ACTOR_MISMATCH' };
   if (existing.operationType !== input.operationType) return { outcome: 'CONFLICT', reason: 'OPERATION_MISMATCH' };

@@ -5,6 +5,7 @@ import type { Permission } from '../authz/permissions.ts';
 import type { Db } from '../db/client.ts';
 import { permissions, rolePermissions, roles, userRoles, users, userWarehouseAccess } from '../db/schema.ts';
 import { HttpError } from '../http/errors.ts';
+import type { AuditThrottle } from '../http/throttle.ts';
 import type { Logger } from '../logger.ts';
 import type { TokenVerifier, VerifiedIdentity } from './token-verifier.ts';
 
@@ -95,7 +96,7 @@ export async function loadPrincipal(db: Db, firebaseUid: string) {
  * Full authentication: verified token → existing, ACTIVE application user.
  * Unknown profiles and inactive users are denied (403) and audited.
  */
-export function authenticate(verifier: TokenVerifier, db: Db, logger: Logger): RequestHandler[] {
+export function authenticate(verifier: TokenVerifier, db: Db, logger: Logger, throttle: AuditThrottle): RequestHandler[] {
   return [
     verifyIdentity(verifier, logger),
     async (_req, res, next) => {
@@ -103,7 +104,7 @@ export function authenticate(verifier: TokenVerifier, db: Db, logger: Logger): R
         const identity = res.locals.identity!;
         const { user, principal } = await loadPrincipal(db, identity.uid);
         if (!user || !principal) {
-          await safeAudit(db, logger, {
+          if (throttle.shouldRecord(`PROFILE_NOT_PROVISIONED:${identity.uid}`)) await safeAudit(db, logger, {
             action: 'AUTHN_DENIED',
             result: 'DENIED',
             entityType: 'session',
@@ -114,7 +115,7 @@ export function authenticate(verifier: TokenVerifier, db: Db, logger: Logger): R
           throw new HttpError(403, 'PROFILE_NOT_PROVISIONED', 'No application profile exists for this identity');
         }
         if (!user.isActive) {
-          await safeAudit(db, logger, {
+          if (throttle.shouldRecord(`ACCOUNT_INACTIVE:${identity.uid}`)) await safeAudit(db, logger, {
             action: 'AUTHN_DENIED',
             result: 'DENIED',
             entityType: 'session',

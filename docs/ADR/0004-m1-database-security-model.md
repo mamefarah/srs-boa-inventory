@@ -32,3 +32,25 @@ The staging implementation protected the ledger with row triggers and an ORM pro
 ## Verification
 
 `tests/database.test.ts` runs raw-SQL attacks as the owner and as the application role, tests RLS without API filters, tests constraints and tests the policy gate. `tests/idempotency.test.ts` covers 20-way concurrent claims. `scripts/check-migration-drift.ts` keeps `schema.ts` and the migrations aligned.
+
+## Addendum — REDTEAM hardening (2026-09-25, migrations 0002/0003)
+
+An independent specialist REDTEAM found 3 HIGH, 6 MEDIUM and 4 LOW issues in the first M1 cut. Changes:
+
+| Finding | Resolution |
+|---|---|
+| H1 One administrator could revoke or deactivate every other administrator | Admin-on-admin removal (revoking `SYSTEM_ADMIN`, deactivating an admin) is refused in the database (`BA006`). It needs an out-of-band, reviewed owner procedure until HB-4 defines dual control. A last-active-admin guard (`BA005`) is kept as defence in depth. |
+| H2 An admin could obtain read and global scope via a second admin account | A separation-of-duties constraint trigger on `user_roles` (`BA004`) forbids any identity from combining access-administration permissions with stock, ledger, audit or global-scope permissions, whoever the writer is. |
+| H3 The "no self-grant" database backstop was bypassable (NULL or forged `granted_by`) | The application role has no direct write on `user_roles`/`user_warehouse_access` and no `is_active` write on `users`. All changes go through `SECURITY DEFINER` functions (`boa_admin_set_user_*`) with a fixed `search_path`. They take the actor from the RLS context, re-check permission, self-administration, SoD and admin rules, and write the audit row themselves. |
+| M4 Policy versions could return to DRAFT; blank evidence passed | Strict lifecycle (nothing returns to DRAFT; SUPERSEDED is terminal); evidence reference must be non-blank |
+| M5 The app role could insert or upsert an active user | Column-level INSERT on identity columns only; `is_active` is never writable by the app role |
+| M6 Idempotency records were rewritable and readable across users | RLS per actor; `IN_PROGRESS → COMPLETED/FAILED` only, then frozen; no DELETE/TRUNCATE; minimum key length 16 |
+| M7 Audit flooding | Per-IP rate limit; repeated identical denials or sign-in syncs audited once per 10 minutes per identity |
+| M8 RLS silently disabled if the API connects as owner/superuser | The API refuses to start unless its login is a non-owner, non-superuser, non-BYPASSRLS member of `boa_ims_app` |
+| M9 Cross-database privilege exposure on a shared server | `CONNECT`/`TEMPORARY` revoked from PUBLIC; CONNECT granted to `boa_ims_app` only. **Production must run on its own PostgreSQL instance**, because the group role is cluster-wide. |
+| L10 Scoped auditors saw the whole user directory | Directory filtered to shared warehouses unless the reader has global scope or `MANAGE_USERS` |
+| L12 The test reset trusted any local address | Reset drops or resets only a database or role carrying the BoA test marker comment |
+
+Accepted and documented (not changed in M1):
+- **L11:** a transaction header is visible when any of its entries is visible. It exposes only document type/id today; to be revisited with multi-warehouse transfers (M7).
+- **L13:** RLS protects against application bugs, not against stolen application database credentials, because such a holder can set any `boa.user_id`. The application role can still insert free-form audit rows (security events). A dedicated audit writer function is planned with posting in M3; CSP/HSTS in M15. `verifyIdToken` does not check revocation; deactivation in PostgreSQL takes effect on the next request.

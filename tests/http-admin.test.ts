@@ -139,3 +139,43 @@ describe('authorised administration by another administrator', () => {
     assert.equal((await post(`/api/admin/users/abc/activation`, 'admin-2', { active: true, reason })).status, 400);
   });
 });
+
+describe('administrator takeover and separation-of-duties controls (REDTEAM H1–H3)', () => {
+  it('one administrator cannot revoke or deactivate another administrator', async () => {
+    const other = fx.userIds['admin-2'];
+    const revoke = await post(`/api/admin/users/${other}/roles/revoke`, 'admin-1', { roleCode: 'SYSTEM_ADMIN', reason });
+    assert.equal(revoke.status, 409);
+    assert.equal(revoke.body.error.code, 'ADMIN_CHANGE_REQUIRES_DUAL_CONTROL');
+    const deact = await post(`/api/admin/users/${other}/activation`, 'admin-1', { active: false, reason });
+    assert.equal(deact.status, 409);
+    const r = await admin.query(`SELECT u.is_active, EXISTS (SELECT 1 FROM user_roles ur JOIN roles ro ON ro.id = ur.role_id WHERE ur.user_id = u.id AND ro.code = 'SYSTEM_ADMIN') AS is_admin FROM users u WHERE u.id = $1`, [other]);
+    assert.deepEqual(r.rows[0], { is_active: true, is_admin: true });
+  });
+
+  it('an administrator identity cannot be given audit, stock or global-scope roles (via a second admin account)', async () => {
+    const puppet = fx.userIds['target-2'];
+    const g = await post(`/api/admin/users/${puppet}/roles`, 'admin-1', { roleCode: 'SYSTEM_ADMIN', reason });
+    assert.equal(g.status, 200);
+    for (const roleCode of ['SYSTEM_AUDITOR', 'WAREHOUSE_SCOPE_GLOBAL', 'WAREHOUSE_OPERATOR']) {
+      const r = await post(`/api/admin/users/${fx.userIds['admin-1']}/roles`, 'target-2', { roleCode, reason });
+      assert.equal(r.status, 409, roleCode);
+      assert.equal(r.body.error.code, 'SEPARATION_OF_DUTIES');
+    }
+    const audits = await request(app).get('/api/audits').set(bearer('admin-1'));
+    assert.equal(audits.status, 403);
+  });
+
+  it('admin changes are audited by the database function with the real actor', async () => {
+    const a = await admin.query(`SELECT actor_user_id, actor_firebase_uid FROM audit_events WHERE action = 'USER_ROLE_GRANTED' AND entity_id = $1 ORDER BY id DESC LIMIT 1`, [`${fx.userIds['target-2']}:SYSTEM_ADMIN`]);
+    assert.deepEqual(a.rows[0], { actor_user_id: fx.userIds['admin-1'], actor_firebase_uid: 'admin-1' });
+  });
+
+  it('a warehouse-scoped reader sees only users sharing their warehouses', async () => {
+    const r = await request(app).get('/api/admin/users').set(bearer('auditor-a'));
+    assert.equal(r.status, 200);
+    const emails = r.body.data.map((u: { email: string }) => u.email);
+    assert.ok(emails.includes('operator-a@example.invalid'));
+    assert.ok(!emails.includes('operator-b@example.invalid'));
+    assert.ok(!emails.includes('admin-1@example.invalid'));
+  });
+});

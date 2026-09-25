@@ -20,6 +20,7 @@ const envSchema = z.object({
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
   SERVE_WEB: z.enum(['true', 'false']).default('false'),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error', 'silent']).default('info'),
+  RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(10).max(100_000).default(300),
   BOA_TEST_AUTH: z.string().optional(),
 });
 
@@ -40,6 +41,7 @@ export interface AppConfig {
   trustProxyHops: number;
   serveWeb: boolean;
   logLevel: 'debug' | 'info' | 'warn' | 'error' | 'silent';
+  rateLimitPerMinute: number;
 }
 
 export class ConfigError extends Error {}
@@ -102,5 +104,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     trustProxyHops: e.TRUST_PROXY_HOPS,
     serveWeb: e.SERVE_WEB === 'true',
     logLevel: e.LOG_LEVEL,
+    rateLimitPerMinute: e.RATE_LIMIT_PER_MINUTE,
   };
 }

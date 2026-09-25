@@ -25,7 +25,7 @@ export const ALLOWED_ORIGIN = 'https://boa-ims.test.example';
 export function buildTestApp(pool: pg.Pool) {
   const db: Db = createDb(pool);
   const app = createApp({
-    config: { corsAllowedOrigins: [ALLOWED_ORIGIN], trustProxyHops: 0, serveWeb: false },
+    config: { corsAllowedOrigins: [ALLOWED_ORIGIN], trustProxyHops: 0, serveWeb: false, rateLimitPerMinute: 100_000 },
     db,
     verifier: createTestVerifier(),
     logger: createLogger('silent'),

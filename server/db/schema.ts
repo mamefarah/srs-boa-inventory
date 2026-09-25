@@ -274,7 +274,7 @@ export const policyVersions = pgTable(
     // An unverified policy can never be ACTIVE (PRD §2.2, HB-2).
     check(
       'policy_versions_active_requires_verified_evidence',
-      sql`${t.status} <> 'ACTIVE' OR (${t.evidenceStatus} = 'VERIFIED' AND ${t.sourceEvidenceRef} IS NOT NULL AND ${t.value} IS NOT NULL AND ${t.effectiveFrom} IS NOT NULL)`,
+      sql`${t.status} <> 'ACTIVE' OR (${t.evidenceStatus} = 'VERIFIED' AND length(btrim(coalesce(${t.sourceEvidenceRef}, ''))) > 0 AND ${t.value} IS NOT NULL AND ${t.effectiveFrom} IS NOT NULL)`,
     ),
     check(
       'policy_versions_effective_range_valid',
@@ -423,7 +423,7 @@ export const idempotencyRecords = pgTable(
   },
   (t) => [
     check('idempotency_records_status_valid', sql`${t.status} IN ('IN_PROGRESS', 'COMPLETED', 'FAILED')`),
-    check('idempotency_records_key_length', sql`length(${t.idempotencyKey}) BETWEEN 8 AND 200`),
+    check('idempotency_records_key_length', sql`length(${t.idempotencyKey}) BETWEEN 16 AND 200`),
     check('idempotency_records_hash_format', sql`${t.requestHash} ~ '^[0-9a-f]{64}$'`),
   ],
 );

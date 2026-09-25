@@ -8,6 +8,7 @@ import type { AppConfig } from './config.ts';
 import type { Db } from './db/client.ts';
 import { errorHandler, notFoundApi } from './http/errors.ts';
 import { corsAllowlist, requestId, securityHeaders } from './http/middleware.ts';
+import { AuditThrottle, rateLimit } from './http/throttle.ts';
 import type { Logger } from './logger.ts';
 import { adminRoutes } from './routes/admin.ts';
 import type { RouteDeps } from './routes/deps.ts';
@@ -16,7 +17,7 @@ import { masterRoutes } from './routes/master.ts';
 import { sessionRoutes } from './routes/session.ts';
 
 export interface AppDeps {
-  config: Pick<AppConfig, 'corsAllowedOrigins' | 'trustProxyHops' | 'serveWeb'>;
+  config: Pick<AppConfig, 'corsAllowedOrigins' | 'trustProxyHops' | 'serveWeb' | 'rateLimitPerMinute'>;
   db: Db;
   verifier: TokenVerifier;
   logger: Logger;
@@ -35,6 +36,7 @@ export function createApp({ config, db, verifier, logger }: AppDeps): Express {
   app.use(requestId);
   app.use(securityHeaders);
   app.use('/api', corsAllowlist(config.corsAllowedOrigins));
+  app.use('/api', rateLimit(config.rateLimitPerMinute));
   app.use('/api', express.json({ limit: '64kb', strict: true }));
 
   // Liveness: reveals nothing about environment or configuration.
@@ -51,7 +53,8 @@ export function createApp({ config, db, verifier, logger }: AppDeps): Express {
     }
   });
 
-  const deps: RouteDeps = { db, verifier, logger, authenticated: authenticate(verifier, db, logger) };
+  const auditThrottle = new AuditThrottle();
+  const deps: RouteDeps = { db, verifier, logger, auditThrottle, authenticated: authenticate(verifier, db, logger, auditThrottle) };
   app.use('/api', sessionRoutes(deps));
   app.use('/api', inventoryRoutes(deps));
   app.use('/api', masterRoutes(deps));

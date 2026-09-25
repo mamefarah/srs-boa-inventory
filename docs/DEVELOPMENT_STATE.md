@@ -18,6 +18,8 @@
 |---|---|
 | `drizzle/0000_m1_foundation.sql` | Generated from `server/db/schema.ts` (tables, constraints, indexes) |
 | `drizzle/0001_m1_security.sql` | Hand-written: `boa_ims_app` grants, append-only triggers, forced timestamps, RLS, policy gate, neutral roles/permissions, condition codes, HB-2 placeholder |
+| `drizzle/0002_m1_constraint_hardening.sql` | Generated: non-blank policy evidence; idempotency key length 16–200 |
+| `drizzle/0003_m1_access_hardening.sql` | Hand-written: audited SECURITY DEFINER admin functions, SoD trigger, admin-removal dual-control block, idempotency RLS and state machine, policy lifecycle, CONNECT revoked from PUBLIC |
 
 The migration baseline was re-created for the canonical repository. Any AI Studio development database built from the staging migrations must be **recreated**, not upgraded.
 
@@ -35,7 +37,7 @@ The migration baseline was re-created for the canonical repository. Any AI Studi
 |---|---|
 | Six moderate `npm audit` advisories (`uuid` via `firebase-admin` → `@google-cloud/storage`; code path unused; no non-breaking fix) | Re-check on each dependency update; M15 |
 | Tamper-evidence against privileged DBAs (audit hash chain / external log shipping) | M15 |
-| Rate limiting on the API (denial auditing could grow the audit table under abuse by an authenticated user) | M15 |
+| Rate limiting is per process (in-memory); a shared limiter or WAF is needed for multi-instance deployment | M15 |
 | Content-Security-Policy for the SPA | M15 |
 | Audit rows are inserted by the application role directly. A single SECURITY DEFINER audit writer would limit forgery by stolen app credentials | M3 (with posting functions) |
 | Ledger legs without a warehouse (IN_TRANSIT/EXTERNAL/contra) are visible only with global scope | M7 |
@@ -47,7 +49,9 @@ The migration baseline was re-created for the canonical repository. Any AI Studi
 
 HB-1 … HB-8 and CG-1 … CG-3, per `docs/M0_BLOCKER_MATRIX.md`. M1 seeds no real approval authority. The fixed-asset threshold exists only as a `DISABLED`/`UNVERIFIED` placeholder with no value.
 
-**NEEDS POLICY/PROCEDURE CONFIRMATION (HB-4):** a single technical administrator can activate a second identity they control and grant it read roles. Every step is audited with the acting administrator, but prevention needs a dual-control rule for sensitive role grants. That rule is part of the Bureau approval/segregation matrix and is not invented here.
+**NEEDS POLICY/PROCEDURE CONFIRMATION (HB-4):**
+- A single technical administrator can still activate a *second, non-admin* identity they control and grant it read roles. Every step is audited with the acting administrator, and the database prevents one identity from being both administrator and data reader. Prevention needs a dual-control rule for sensitive grants, which belongs to the Bureau approval/segregation matrix and is not invented here.
+- Removing or deactivating an administrator is blocked in the application (`ADMIN_CHANGE_REQUIRES_DUAL_CONTROL`). Until HB-4 defines who may approve it, it is a reviewed, owner-run database procedure with an audit row.
 
 ## Next milestone
 

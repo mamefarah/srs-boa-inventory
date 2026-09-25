@@ -41,6 +41,7 @@ export function assertSafeTestDatabase(env: NodeJS.ProcessEnv, opts: { forReset:
   if (!IDENT_RE.test(database)) fail('TEST_SQL_DB_NAME must be a lowercase identifier');
   if (!TEST_MARKER_RE.test(database)) fail('TEST_SQL_DB_NAME must contain a "test" name segment (e.g. boa_ims_test)');
   if (RESERVED.has(database)) fail('TEST_SQL_DB_NAME may not be a reserved database');
+  if (!IDENT_RE.test(maintenanceDatabase)) fail('TEST_SQL_MAINTENANCE_DB must be a lowercase identifier');
   if (database === maintenanceDatabase) fail('TEST_SQL_DB_NAME must differ from the maintenance database');
   if (env.SQL_DB_NAME && env.SQL_DB_NAME === database) fail('TEST_SQL_DB_NAME must differ from the operational SQL_DB_NAME');
   if (!IDENT_RE.test(appUser)) fail('TEST_SQL_APP_USER must be a lowercase identifier');

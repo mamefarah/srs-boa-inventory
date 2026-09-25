@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
 import { sql } from 'drizzle-orm';
 import type pg from 'pg';
-import { createDb, type Db } from '../server/db/client.ts';
+import { createDb, withUserContext, type Db } from '../server/db/client.ts';
 import { claimIdempotencyKey, completeIdempotencyKey, requestHash, type ClaimOutcome } from '../server/idempotency/idempotency.ts';
 import { adminPool, appPool, ensureFixtures, type Fixture } from './helpers.ts';
 
@@ -28,7 +28,7 @@ after(async () => {
 });
 
 const claim = (key: string, payload: unknown, actor: number, op = 'TEST_OPERATION', complete = true) =>
-  db.transaction(async (tx) => {
+  withUserContext(db, actor, async (tx) => {
     const out = await claimIdempotencyKey(tx, { idempotencyKey: key, operationType: op, actorUserId: actor, requestHash: requestHash(payload) });
     if (out.outcome === 'CLAIMED' && complete) {
       // Simulate work so competing claimants overlap with an open transaction.
@@ -87,13 +87,35 @@ describe('idempotency claims', () => {
     const key = `rollback-${randomUUID()}`;
     const actor = fx.userIds['operator-a'];
     await assert.rejects(
-      db.transaction(async (tx) => {
+      withUserContext(db, actor, async (tx) => {
         await claimIdempotencyKey(tx, { idempotencyKey: key, operationType: 'TEST_OPERATION', actorUserId: actor, requestHash: requestHash({ a: 1 }) });
         throw new Error('simulated posting failure');
       }),
       /simulated posting failure/,
     );
     assert.equal((await claim(key, { a: 1 }, actor)).outcome, 'CLAIMED');
+  });
+
+  it('records are private to their actor and follow the IN_PROGRESS -> COMPLETED|FAILED state machine', async () => {
+    const key = `private-${randomUUID()}`;
+    await claim(key, { a: 1 }, fx.userIds['operator-a']);
+    const seenByB = await withUserContext(db, fx.userIds['operator-b'], (tx) =>
+      tx.execute(sql`SELECT count(*)::int AS n FROM idempotency_records WHERE idempotency_key = ${key}`),
+    );
+    assert.equal((seenByB.rows[0] as { n: number }).n, 0);
+    const noContext = await pool.query('SELECT count(*)::int AS n FROM idempotency_records');
+    assert.equal(noContext.rows[0].n, 0);
+    // Completed records are frozen, even for the table owner.
+    await assert.rejects(admin.query("UPDATE idempotency_records SET status = 'FAILED' WHERE idempotency_key = $1", [key]), /BOA_IDEMPOTENCY_IMMUTABLE/);
+    await assert.rejects(admin.query('DELETE FROM idempotency_records WHERE idempotency_key = $1', [key]), /BOA_APPEND_ONLY/);
+    await assert.rejects(admin.query('TRUNCATE idempotency_records'), /BOA_APPEND_ONLY/);
+    // A claim for another actor's id cannot be inserted from this user's context.
+    await assert.rejects(
+      withUserContext(db, fx.userIds['operator-b'], (tx) =>
+        claimIdempotencyKey(tx, { idempotencyKey: `forged-${randomUUID()}`, operationType: 'X', actorUserId: fx.userIds['operator-a'], requestHash: requestHash({}) }),
+      ),
+      (err: Error & { cause?: Error }) => /row-level security/.test(err.cause?.message ?? err.message),
+    );
   });
 
   it('rejects malformed keys before touching the database', async () => {

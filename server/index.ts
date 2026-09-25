@@ -2,6 +2,7 @@ import { createApp } from './app.ts';
 import { createFirebaseVerifier } from './auth/token-verifier.ts';
 import { ConfigError, loadConfig, type AppConfig } from './config.ts';
 import { createDb, createPool } from './db/client.ts';
+import { assertLeastPrivilegeConnection } from './db/privilege-check.ts';
 import { createLogger } from './logger.ts';
 
 /**
@@ -26,6 +27,13 @@ if (config.nodeEnv === 'test') {
 const pool = createPool(config.db);
 pool.on('error', (err) => logger.error('db_pool_error', { error: err.message }));
 const db = createDb(pool);
+try {
+  await assertLeastPrivilegeConnection(pool);
+} catch (err) {
+  logger.error('refusing_to_start', { reason: err instanceof Error ? err.message : String(err) });
+  await pool.end();
+  process.exit(1);
+}
 const verifier = createFirebaseVerifier(config.firebaseProjectId!);
 const app = createApp({ config, db, verifier, logger });
 

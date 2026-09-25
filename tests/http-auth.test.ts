@@ -47,7 +47,7 @@ describe('authentication', () => {
 
   it('production app (Firebase verifier) rejects mock tokens with 401', async () => {
     const prodApp = createApp({
-      config: { corsAllowedOrigins: [], trustProxyHops: 0, serveWeb: false },
+      config: { corsAllowedOrigins: [], trustProxyHops: 0, serveWeb: false, rateLimitPerMinute: 100_000 },
       db: createDb(pool),
       verifier: createFirebaseVerifier('boa-ims-offline-test-project'),
       logger: createLogger('silent'),
@@ -168,5 +168,29 @@ describe('HTTP hardening', () => {
     assert.match(r.headers['x-request-id'], /^[0-9a-f-]{36}$/);
     assert.equal(r.headers['cache-control'], 'no-store');
     assert.equal(r.headers['x-powered-by'], undefined);
+  });
+});
+
+describe('abuse controls (REDTEAM M7)', () => {
+  it('repeated denials for one identity write a single audit row per window', async () => {
+    for (let i = 0; i < 10; i++) {
+      const r = await request(app).get('/api/me').set(bearer('flood-probe'));
+      assert.equal(r.status, 403);
+    }
+    const a = await admin.query(`SELECT count(*)::int AS n FROM audit_events WHERE actor_firebase_uid = 'flood-probe'`);
+    assert.equal(a.rows[0].n, 1);
+  });
+
+  it('rate limiting returns 429 beyond the per-minute limit', async () => {
+    const limited = createApp({
+      config: { corsAllowedOrigins: [], trustProxyHops: 0, serveWeb: false, rateLimitPerMinute: 10 },
+      db: createDb(pool),
+      verifier: createFirebaseVerifier('boa-ims-offline-test-project'),
+      logger: createLogger('silent'),
+    });
+    const statuses: number[] = [];
+    for (let i = 0; i < 12; i++) statuses.push((await request(limited).get('/api/health')).status);
+    assert.deepEqual(statuses.slice(0, 10), Array(10).fill(200));
+    assert.equal(statuses[10], 429);
   });
 });

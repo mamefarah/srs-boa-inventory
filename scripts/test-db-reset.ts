@@ -11,6 +11,12 @@ import { assertSafeTestDatabase } from './test-db-guard.ts';
 const cfg = assertSafeTestDatabase(process.env, { forReset: true });
 const ident = (s: string) => `"${s.replace(/"/g, '""')}"`;
 
+// Server-side markers: an existing database or role is only dropped/reset if it was
+// created by this script (COMMENT marker). This protects shared instances reached via
+// a local proxy/tunnel whose databases happen to match the test naming policy.
+export const TEST_DB_MARKER = 'boa-ims-disposable-test-database';
+export const TEST_ROLE_MARKER = 'boa-ims-disposable-test-role';
+
 async function main() {
   const maint = new pg.Client({
     host: cfg.host,
@@ -21,14 +27,22 @@ async function main() {
   });
   await maint.connect();
   try {
+    const existingDb = await maint.query("SELECT shobj_description(oid, 'pg_database') AS marker FROM pg_database WHERE datname = $1", [cfg.database]);
+    if (existingDb.rowCount && existingDb.rows[0].marker !== TEST_DB_MARKER) {
+      throw new Error(`Database ${cfg.database} exists but is not marked as a disposable BoA-IMS test database; refusing to drop it`);
+    }
     await maint.query('SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()', [cfg.database]);
     await maint.query(`DROP DATABASE IF EXISTS ${ident(cfg.database)}`);
     await maint.query(`CREATE DATABASE ${ident(cfg.database)}`);
+    await maint.query(`COMMENT ON DATABASE ${ident(cfg.database)} IS ${maint.escapeLiteral(TEST_DB_MARKER)}`);
 
     // Least-privilege login used by the application under test.
-    const existing = await maint.query('SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = $1', [cfg.appUser]);
+    const existing = await maint.query("SELECT rolsuper, rolbypassrls, shobj_description(oid, 'pg_authid') AS marker FROM pg_roles WHERE rolname = $1", [cfg.appUser]);
     if (existing.rowCount === 0) {
       await maint.query(`CREATE ROLE ${ident(cfg.appUser)} LOGIN PASSWORD ${maint.escapeLiteral(cfg.appPassword)} NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE`);
+      await maint.query(`COMMENT ON ROLE ${ident(cfg.appUser)} IS ${maint.escapeLiteral(TEST_ROLE_MARKER)}`);
+    } else if (existing.rows[0].marker !== TEST_ROLE_MARKER) {
+      throw new Error(`Role ${cfg.appUser} exists but is not marked as a disposable BoA-IMS test role; refusing to reset its password`);
     } else if (existing.rows[0].rolsuper || existing.rows[0].rolbypassrls) {
       throw new Error(`Test app role ${cfg.appUser} is SUPERUSER or BYPASSRLS; security tests would be meaningless`);
     } else {

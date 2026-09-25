@@ -28,7 +28,7 @@ export function serializePrincipal(p: Principal) {
  * activated by a different, authorised administrator.
  */
 export function sessionRoutes(deps: RouteDeps) {
-  const { db, verifier, logger, authenticated } = deps;
+  const { db, verifier, logger, authenticated, auditThrottle } = deps;
   const router = Router();
 
   router.post('/auth/sync', verifyIdentity(verifier, logger), async (_req, res, next) => {
@@ -42,20 +42,16 @@ export function sessionRoutes(deps: RouteDeps) {
       const result = await db.transaction(async (tx) => {
         let rows;
         try {
-          rows = await tx
-            .insert(users)
-            .values({ firebaseUid: identity.uid, email: identity.email!, displayName, isActive: false, lastSignInAt: sql`now()` })
-            .onConflictDoUpdate({
-              target: users.firebaseUid,
-              set: { email: identity.email!, displayName, lastSignInAt: sql`now()`, updatedAt: sql`now()` },
-            })
-            .returning({
-              id: users.id,
-              email: users.email,
-              displayName: users.displayName,
-              isActive: users.isActive,
-              created: sql<boolean>`(xmax = 0)`,
-            });
+          // Explicit column list: the application role may insert only identity columns
+          // (never is_active), and PostgreSQL checks column privileges even for DEFAULT.
+          const result = await tx.execute(sql`
+            INSERT INTO ${users} (firebase_uid, email, display_name, last_sign_in_at)
+            VALUES (${identity.uid}, ${identity.email}, ${displayName}, now())
+            ON CONFLICT (firebase_uid) DO UPDATE
+              SET email = excluded.email, display_name = excluded.display_name,
+                  last_sign_in_at = now(), updated_at = now()
+            RETURNING id, email, display_name AS "displayName", is_active AS "isActive", (xmax = 0) AS created`);
+          rows = result.rows as Array<{ id: number; email: string; displayName: string | null; isActive: boolean; created: boolean }>;
         } catch (err) {
           if ((err as { cause?: { code?: string }; code?: string }).cause?.code === '23505' || (err as { code?: string }).code === '23505') {
             throw new HttpError(409, 'EMAIL_IN_USE', 'This email address is already linked to another profile');
@@ -63,6 +59,7 @@ export function sessionRoutes(deps: RouteDeps) {
           throw err;
         }
         const row = rows[0];
+        if (!row.created && !auditThrottle.shouldRecord(`USER_SIGN_IN_SYNC:${identity.uid}`)) return row;
         await writeAudit(tx, {
           action: row.created ? 'USER_PROFILE_CREATED' : 'USER_SIGN_IN_SYNC',
           result: 'SUCCESS',
