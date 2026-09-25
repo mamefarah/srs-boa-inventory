@@ -1,0 +1,45 @@
+{
+  "name": "boa-ims",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev:server": "tsx watch server/index.ts",
+    "dev:web": "vite --config frontend/vite.config.ts",
+    "build": "npm run typecheck && vite build --config frontend/vite.config.ts",
+    "start": "NODE_ENV=production tsx server/index.ts",
+    "typecheck": "tsc -p tsconfig.server.json && tsc -p frontend/tsconfig.json",
+    "db:generate": "drizzle-kit generate --config drizzle.config.ts",
+    "db:check-drift": "tsx scripts/check-migration-drift.ts",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "test": "tsx scripts/test-db-reset.ts && node --import tsx --test --test-concurrency=1 'tests/**/*.test.ts'",
+    "secret-scan": "bash scripts/secret-scan.sh"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.3",
+    "express": "^5.2.1",
+    "firebase": "^12.19.0",
+    "firebase-admin": "^14.5.0",
+    "pg": "^8.23.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.2",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/supertest": "^7.2.1",
+    "@vitejs/plugin-react": "^6.1.1",
+    "drizzle-kit": "^0.31.11",
+    "supertest": "^7.3.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1"
+  }
+}
