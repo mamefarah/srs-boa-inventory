@@ -1,0 +1,51 @@
+/* Design tokens (docs/DESIGN_SYSTEM.md). Status is never conveyed by colour alone. */
+:root {
+  --surface: #ffffff;
+  --background: #f5f6f4;
+  --text: #1c2420;
+  --text-secondary: #4a554f;
+  --border: #cfd6d1;
+  --primary: #1f5f3f;
+  --primary-text: #ffffff;
+  --info: #1d4f7a;
+  --warning: #7a5200;
+  --danger: #8f1d1d;
+  --space: 4px;
+  --radius: 6px;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', 'Noto Sans Ethiopic', sans-serif;
+  color: var(--text);
+  background: var(--background);
+  line-height: 1.5;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+.shell { min-height: 100vh; display: flex; flex-direction: column; }
+.topbar { display: flex; justify-content: space-between; align-items: center; gap: calc(var(--space) * 3); padding: calc(var(--space) * 3) calc(var(--space) * 4); background: var(--primary); color: var(--primary-text); }
+.subtitle { display: block; font-size: 0.85rem; opacity: 0.9; }
+.content { padding: calc(var(--space) * 4); max-width: 1200px; width: 100%; margin: 0 auto; }
+.centered { display: flex; justify-content: center; padding-top: 20vh; }
+.btn { min-height: 44px; padding: 0 calc(var(--space) * 4); border-radius: var(--radius); border: 1px solid var(--border); font-size: 1rem; cursor: pointer; }
+.btn.primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+.btn.secondary { background: var(--surface); color: var(--text); }
+.btn:focus-visible, .tab:focus-visible { outline: 3px solid #f0b400; outline-offset: 2px; }
+.identity { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: calc(var(--space) * 3); margin-bottom: calc(var(--space) * 4); display: grid; gap: var(--space); }
+.tabs { display: flex; flex-wrap: wrap; gap: calc(var(--space) * 2); margin-bottom: calc(var(--space) * 4); }
+.tab { min-height: 44px; padding: 0 calc(var(--space) * 3); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); font-size: 1rem; cursor: pointer; }
+.tab.active { border: 2px solid var(--primary); font-weight: 700; text-decoration: underline; }
+.notice { display: flex; gap: calc(var(--space) * 2); padding: calc(var(--space) * 3); border-radius: var(--radius); border: 1px solid; border-left-width: 6px; background: var(--surface); margin-bottom: calc(var(--space) * 3); }
+.notice.info { border-color: var(--info); }
+.notice.warning { border-color: var(--warning); }
+.notice.danger { border-color: var(--danger); }
+.notice-title { display: block; }
+.badge { display: inline-block; padding: 0 calc(var(--space) * 2); border: 1px solid var(--text-secondary); border-radius: 999px; font-size: 0.85rem; font-weight: 600; letter-spacing: 0.02em; }
+.qty { font-variant-numeric: tabular-nums; font-weight: 600; }
+table.data { width: 100%; border-collapse: collapse; background: var(--surface); }
+table.data th, table.data td { text-align: left; padding: calc(var(--space) * 2) calc(var(--space) * 3); border-bottom: 1px solid var(--border); }
+@media (max-width: 720px) {
+  table.data thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  table.data, table.data tbody, table.data tr, table.data td { display: block; width: 100%; }
+  table.data tr { border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: calc(var(--space) * 3); padding: calc(var(--space) * 2); }
+  table.data td { border: none; padding: var(--space) 0; }
+  table.data td::before { content: attr(data-label) ': '; font-weight: 600; color: var(--text-secondary); }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }

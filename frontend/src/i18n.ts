@@ -1,0 +1,62 @@
+/**
+ * Minimal message catalogue. English is the reference language; Somali and Amharic
+ * catalogues can be added with the same keys (PRD §34). Components never hard-code
+ * user-facing text outside this file.
+ */
+const en = {
+  appName: 'BoA-IMS',
+  appSubtitle: 'Bureau of Agriculture — Inventory Control',
+  signIn: 'Sign in with Google',
+  signOut: 'Sign out',
+  loading: 'Loading…',
+  configMissing: 'The application is not configured for sign-in. Contact the system administrator.',
+  inactiveTitle: 'Account awaiting activation',
+  inactiveBody: 'Your sign-in was recorded. An authorised administrator must activate your account and assign access before you can use BoA-IMS.',
+  notProvisioned: 'No application profile exists for this sign-in.',
+  error: 'Something went wrong. Reference:',
+  retry: 'Retry',
+  tabStock: 'Stock on hand',
+  tabItems: 'Items',
+  tabWarehouses: 'Warehouses',
+  tabPolicies: 'Policy configuration',
+  tabAudit: 'Audit trail',
+  noAccess: 'Your account has no access to any screen yet.',
+  empty: 'No records to show.',
+  stockNote: 'Physical on-hand only, derived from the posted ledger. Committed and available-to-promise are not yet calculated (milestone M5).',
+  warehouse: 'Warehouse',
+  item: 'Item',
+  condition: 'Condition',
+  location: 'Location',
+  onHand: 'On hand',
+  code: 'Code',
+  name: 'Name',
+  uom: 'Base UOM',
+  control: 'Control type',
+  status: 'Status',
+  active: 'Active',
+  inactive: 'Inactive',
+  policy: 'Policy',
+  version: 'Version',
+  evidence: 'Evidence',
+  blocker: 'Blocker',
+  when: 'When',
+  action: 'Action',
+  result: 'Result',
+  entity: 'Record',
+  signedInAs: 'Signed in as',
+  roles: 'Roles',
+  scope: 'Warehouse scope',
+  scopeAll: 'All warehouses',
+  scopeNone: 'None assigned',
+} as const;
+
+export type MessageKey = keyof typeof en;
+const catalogue: Record<string, Record<MessageKey, string>> = { en };
+
+let lang = 'en';
+export function setLanguage(l: string) {
+  if (catalogue[l]) lang = l;
+}
+export function t(key: MessageKey): string {
+  return catalogue[lang]?.[key] ?? en[key];
+}
