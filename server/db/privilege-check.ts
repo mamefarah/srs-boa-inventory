@@ -8,7 +8,7 @@ import type pg from 'pg';
 export async function assertLeastPrivilegeConnection(pool: pg.Pool): Promise<void> {
   const { rows } = await pool.query(`
     SELECT r.rolsuper, r.rolbypassrls,
-           pg_has_role(current_user, 'boa_ims_app', 'MEMBER') AS is_app_member,
+           pg_has_role(current_user, 'boa_ims_app', 'USAGE') AS is_app_member,
            pg_has_role(current_user, c.relowner, 'MEMBER') AS owns_ledger
     FROM pg_roles r, pg_class c
     WHERE r.rolname = current_user AND c.oid = 'public.inventory_entries'::regclass`);
