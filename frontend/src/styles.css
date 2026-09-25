@@ -49,3 +49,15 @@ table.data th, table.data td { text-align: left; padding: calc(var(--space) * 2)
   table.data td::before { content: attr(data-label) ': '; font-weight: 600; color: var(--text-secondary); }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+.toolbar { display: flex; flex-wrap: wrap; gap: calc(var(--space) * 2); align-items: center; margin: calc(var(--space) * 3) 0; }
+.toolbar input, .toolbar select, .field input, .field select, .field textarea { min-height: 44px; font-size: 1rem; padding: 0 calc(var(--space) * 2); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.toolbar input { flex: 1 1 240px; }
+.field { display: grid; gap: var(--space); margin-bottom: calc(var(--space) * 3); }
+.field span { font-weight: 600; }
+.field textarea { min-height: 88px; padding: calc(var(--space) * 2); }
+.form { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: calc(var(--space) * 4); margin: calc(var(--space) * 4) 0; max-width: 720px; }
+.form fieldset { border: none; padding: 0; margin: 0; }
+.check { display: flex; gap: calc(var(--space) * 2); align-items: center; min-height: 44px; }
+.check input { width: 22px; height: 22px; }
+.hint { color: var(--text-secondary); }
+.linklike { background: none; border: none; padding: 0; min-height: 44px; font: inherit; font-weight: 600; color: var(--primary); text-decoration: underline; cursor: pointer; }
