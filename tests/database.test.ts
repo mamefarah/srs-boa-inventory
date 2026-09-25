@@ -77,12 +77,13 @@ describe('clean migration', () => {
 
   it('permission catalogue matches the server constants', async () => {
     const r = await admin.query('SELECT code FROM permissions ORDER BY code');
-    assert.deepEqual(r.rows.map((x) => x.code), Object.values(PERMISSIONS).sort());
+    // Sort in JS: database collation (C vs en_US) must not affect the comparison.
+    assert.deepEqual(r.rows.map((x) => x.code).sort(), Object.values(PERMISSIONS).sort());
   });
 
   it('seeds only neutral technical roles and grants WAREHOUSE_SCOPE_ALL to no role except WAREHOUSE_SCOPE_GLOBAL', async () => {
     const roles = await admin.query('SELECT code FROM roles ORDER BY code');
-    assert.deepEqual(roles.rows.map((x) => x.code), ['GENERIC_APPROVER', 'REQUESTER', 'SYSTEM_ADMIN', 'SYSTEM_AUDITOR', 'WAREHOUSE_OPERATOR', 'WAREHOUSE_SCOPE_GLOBAL']);
+    assert.deepEqual(roles.rows.map((x) => x.code).sort(), ['GENERIC_APPROVER', 'REQUESTER', 'SYSTEM_ADMIN', 'SYSTEM_AUDITOR', 'WAREHOUSE_OPERATOR', 'WAREHOUSE_SCOPE_GLOBAL']);
     const r = await admin.query(`SELECT r.code FROM role_permissions rp JOIN roles r ON r.id = rp.role_id JOIN permissions p ON p.id = rp.permission_id WHERE p.code = 'WAREHOUSE_SCOPE_ALL'`);
     assert.deepEqual(r.rows.map((x) => x.code), ['WAREHOUSE_SCOPE_GLOBAL']);
   });
