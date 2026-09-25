@@ -251,6 +251,9 @@ export const items = pgTable(
     // Controlled Bureau-wide code (INV-021): unique, immutable, never reused (items are never deleted).
     itemCode: text('item_code').notNull().unique(),
     name: text('name').notNull(),
+    // Duplicate-detection key computed by the database (NFKC, invisible characters removed,
+    // Unicode spaces/punctuation folded, lower-cased): see boa_item_name_key() in 0006.
+    nameKey: text('name_key').generatedAlwaysAs(sql`boa_item_name_key(name)`),
     description: text('description'),
     specification: text('specification'),
     categoryId: integer('category_id')
@@ -286,8 +289,11 @@ export const items = pgTable(
     check('items_shelf_life_positive', sql`${t.defaultShelfLifeDays} IS NULL OR ${t.defaultShelfLifeDays} > 0`),
     check('items_shelf_life_requires_expiry', sql`${t.defaultShelfLifeDays} IS NULL OR ${t.isExpiryTracked}`),
     check('items_useful_life_positive', sql`${t.usefulLifeMonths} IS NULL OR ${t.usefulLifeMonths} > 0`),
-    // Duplicate prevention: names are unique Bureau-wide ignoring case and repeated spaces.
-    uniqueIndex('items_normalized_name_unique').on(sql`lower(regexp_replace(btrim(${t.name}), '[[:space:]]+', ' ', 'g'))`),
+    // Duplicate prevention: names are unique Bureau-wide on the normalised key.
+    uniqueIndex('items_name_key_unique').on(t.nameKey),
+    // Homoglyph defence: a name may not mix Latin letters with Greek/Cyrillic letters.
+    check('items_name_single_script', sql`NOT (${t.name} ~ '[A-Za-z]' AND ${t.name} ~ '[\u0370-\u03FF\u0400-\u052F]')`),
+    check('items_name_key_not_blank', sql`length(${t.nameKey}) > 0`),
     // Target for the composite FK that forces ledger quantities into the item's base UOM.
     unique('items_id_base_uom').on(t.id, t.baseUomId),
     index('items_category_idx').on(t.categoryId),
@@ -466,6 +472,8 @@ export const inventoryEntries = pgTable(
       foreignColumns: [warehouseLocations.id, warehouseLocations.warehouseId],
     }).onDelete('restrict'),
     check('inventory_entries_quantity_nonzero', sql`${t.signedQuantity} <> 0`),
+    // PostgreSQL numeric accepts NaN and treats NaN = NaN; it would poison every SUM.
+    check('inventory_entries_quantity_finite', sql`${t.signedQuantity} <> 'NaN'::numeric`),
     check(
       'inventory_entries_custody_scope_valid',
       sql`${t.custodyScope} IN ('WAREHOUSE', 'IN_TRANSIT', 'INTERNAL_CUSTODY', 'EXTERNAL', 'TERMINAL_EXIT', 'OPENING_BALANCE_CONTRA')`,

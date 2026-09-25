@@ -7,7 +7,7 @@ import { withUserContext, type Tx } from '../db/client.ts';
 import { itemCategories, items, uoms } from '../db/schema.ts';
 import { mapDbError } from '../http/db-errors.ts';
 import { HttpError } from '../http/errors.ts';
-import { idParam, limitParam, offsetParam, reasonField } from '../http/validation.ts';
+import { idParam, limitParam, normalizedName, offsetParam, reasonField } from '../http/validation.ts';
 import type { RouteDeps } from './deps.ts';
 
 /**
@@ -36,7 +36,7 @@ const positiveInt = z.number().int().positive().max(2_147_483_647);
 const rowVersion = z.number().int().positive();
 
 const itemFields = {
-  name: text(200),
+  name: normalizedName(200),
   description: optionalText(2000),
   specification: optionalText(2000),
   categoryId: positiveInt,
@@ -110,7 +110,8 @@ async function similarItems(tx: Tx, name: string, excludeId?: number) {
   const r = await tx.execute(sql`
     SELECT id, item_code AS "itemCode", name, round(similarity(lower(name), lower(${name}))::numeric, 2)::float AS similarity
     FROM ${items}
-    WHERE similarity(lower(name), lower(${name})) >= 0.6 ${excludeId ? sql`AND id <> ${excludeId}` : sql``}
+    WHERE (similarity(lower(name), lower(${name})) >= 0.6 OR similarity(name_key, boa_item_name_key(${name})) >= 0.6)
+      ${excludeId ? sql`AND id <> ${excludeId}` : sql``}
     ORDER BY similarity(lower(name), lower(${name})) DESC
     LIMIT 5`);
   return r.rows as Array<{ id: number; itemCode: string; name: string; similarity: number }>;
@@ -170,7 +171,7 @@ export function itemRoutes({ db, logger, authenticated }: RouteDeps) {
         .innerJoin(uoms, eq(uoms.id, items.baseUomId))
         .where(eq(items.id, id));
       if (!row) throw new HttpError(404, 'NOT_FOUND', 'Item not found');
-      const usage = await db.execute(sql`SELECT boa_item_has_ledger_entries(${id}) AS used`);
+      const usage = await withUserContext(db, principalOf(res).userId, (tx) => tx.execute(sql`SELECT boa_item_has_ledger_entries(${id}) AS used`), { readOnly: true });
       res.json({ data: { ...row, baseUomLocked: (usage.rows[0] as { used: boolean }).used } });
     } catch (err) {
       next(err);
@@ -186,24 +187,15 @@ export function itemRoutes({ db, logger, authenticated }: RouteDeps) {
           const similar = await similarItems(tx, body.name);
           if (similar.length) return { duplicates: similar };
         }
-        const [row] = await tx
-          .insert(items)
-          .values({
-            itemCode: body.itemCode,
-            name: body.name,
-            description: body.description,
-            specification: body.specification,
-            categoryId: body.categoryId,
-            baseUomId: body.baseUomId,
-            assetControlType: body.assetControlType,
-            isBatchTracked: body.isBatchTracked,
-            isExpiryTracked: body.isExpiryTracked,
-            isSerialTracked: body.isSerialTracked,
-            isHazardous: body.isHazardous,
-            defaultShelfLifeDays: body.defaultShelfLifeDays,
-            usefulLifeMonths: body.usefulLifeMonths,
-          })
-          .returning({ id: items.id, itemCode: items.itemCode, rowVersion: items.rowVersion });
+        // Explicit column list: the application role may insert only business columns.
+        const inserted = await tx.execute(sql`
+          INSERT INTO ${items} (item_code, name, description, specification, category_id, base_uom_id, asset_control_type,
+            is_batch_tracked, is_expiry_tracked, is_serial_tracked, is_hazardous, default_shelf_life_days, useful_life_months)
+          VALUES (${body.itemCode}, ${body.name}, ${body.description ?? null}, ${body.specification ?? null}, ${body.categoryId},
+            ${body.baseUomId}, ${body.assetControlType}, ${body.isBatchTracked}, ${body.isExpiryTracked}, ${body.isSerialTracked},
+            ${body.isHazardous}, ${body.defaultShelfLifeDays}, ${body.usefulLifeMonths})
+          RETURNING id, item_code AS "itemCode", row_version AS "rowVersion"`);
+        const row = inserted.rows[0] as { id: number; itemCode: string; rowVersion: number };
         return { row };
       });
       if ('duplicates' in created) {
@@ -292,8 +284,12 @@ export function itemRoutes({ db, logger, authenticated }: RouteDeps) {
   router.post('/uoms', ...authenticated, canManageReference, async (req, res, next) => {
     try {
       const b = createUomBody.parse(req.body);
-      const [row] = await write(res, b.reason, (tx) =>
-        tx.insert(uoms).values({ code: b.code, name: b.name, description: b.description, decimalPlaces: b.decimalPlaces }).returning(),
+      const [row] = await write(res, b.reason, async (tx) =>
+        (
+          await tx.execute(sql`INSERT INTO ${uoms} (code, name, description, decimal_places)
+            VALUES (${b.code}, ${b.name}, ${b.description ?? null}, ${b.decimalPlaces})
+            RETURNING id, code, name, description, decimal_places AS "decimalPlaces", is_active AS "isActive", row_version AS "rowVersion"`)
+        ).rows,
       );
       res.status(201).json({ data: row });
     } catch (err) {
@@ -345,8 +341,12 @@ export function itemRoutes({ db, logger, authenticated }: RouteDeps) {
   router.post('/item-categories', ...authenticated, canManageReference, async (req, res, next) => {
     try {
       const b = createCategoryBody.parse(req.body);
-      const [row] = await write(res, b.reason, (tx) =>
-        tx.insert(itemCategories).values({ code: b.code, name: b.name, description: b.description, parentId: b.parentId }).returning(),
+      const [row] = await write(res, b.reason, async (tx) =>
+        (
+          await tx.execute(sql`INSERT INTO ${itemCategories} (code, name, description, parent_id)
+            VALUES (${b.code}, ${b.name}, ${b.description ?? null}, ${b.parentId})
+            RETURNING id, code, name, description, parent_id AS "parentId", is_active AS "isActive", row_version AS "rowVersion"`)
+        ).rows,
       );
       res.status(201).json({ data: row });
     } catch (err) {

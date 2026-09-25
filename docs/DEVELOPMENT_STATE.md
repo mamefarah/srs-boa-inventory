@@ -22,6 +22,8 @@
 | `drizzle/0002_m1_constraint_hardening.sql` | Generated: non-blank policy evidence; idempotency key length 16–200 |
 | `drizzle/0004_m2_item_master.sql` | Generated: item master fields, category hierarchy, UOM decimal places, conversions (gated), ledger quantity NUMERIC(20,6) with a no-rounding guard |
 | `drizzle/0005_m2_item_master_security.sql` | Hand-written: MASTER_DATA_STEWARD, write guard, code immutability/no delete, base-UOM lock, active references, master-data audit trigger, ledger precision and inactive-item guard, pg_trgm |
+| `drizzle/0006_m2_redteam_constraints.sql` | Generated + name-key function: NaN CHECK, Unicode-robust `name_key` uniqueness, single-script names |
+| `drizzle/0007_m2_redteam_hardening.sql` | Hand-written: ledger guard row locks, category hierarchy serialisation, column INSERT grants, visible-character reasons, in-use protection, conversion guard/audit |
 | `drizzle/0003_m1_access_hardening.sql` | Hand-written: audited SECURITY DEFINER admin functions, SoD trigger, admin-removal dual-control block, idempotency RLS and state machine, policy lifecycle, CONNECT revoked from PUBLIC |
 
 The migration baseline was re-created for the canonical repository. Any AI Studio development database built from the staging migrations must be **recreated**, not upgraded.
@@ -59,4 +61,4 @@ HB-1 … HB-8 and CG-1 … CG-3, per `docs/M0_BLOCKER_MATRIX.md`. M1 seeds no re
 
 ## Next milestone
 
-M3 Opening balance after M2 is approved and merged: posting through a reviewed SECURITY DEFINER function against OPENING_BALANCE_CONTRA, with approved count/source evidence, idempotency and duplicate-opening prevention.
+M3 Opening balance after M2 is approved and merged. Binding carry-overs from the M2 REDTEAM: quantities are validated before any NUMERIC(20,6) cast (ADR-0005 §6), and reversal/correction exemptions are item-scoped. M3 also needs: posting through a reviewed SECURITY DEFINER function against OPENING_BALANCE_CONTRA, with approved count/source evidence, idempotency and duplicate-opening prevention.

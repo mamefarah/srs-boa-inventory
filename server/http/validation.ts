@@ -23,5 +23,19 @@ export const offsetParam = z
   .optional()
   .transform((n) => n ?? 0);
 
-/** Reason text required for administrative changes (recorded in the audit trail). */
-export const reasonField = z.string().trim().min(5, 'reason must be at least 5 characters').max(500);
+/** Invisible/format characters (zero-width, bidi controls, soft hyphen, BOM). */
+export const INVISIBLE_RE = /[\p{Cf}\u034F\u115F\u1160\u17B4\u17B5]/gu;
+
+/** Reason text required for administrative changes: at least 5 visible characters. */
+export const reasonField = z
+  .string()
+  .trim()
+  .max(500)
+  .refine((v) => v.replace(INVISIBLE_RE, '').replace(/\s/gu, '').length >= 5, 'reason must contain at least 5 visible characters');
+
+/** Display name normalisation: NFKC, invisible characters removed, Unicode spaces folded. */
+export const normalizedName = (max: number) =>
+  z
+    .string()
+    .transform((v) => v.normalize('NFKC').replace(INVISIBLE_RE, '').replace(/\s+/gu, ' ').trim())
+    .pipe(z.string().min(1).max(max));

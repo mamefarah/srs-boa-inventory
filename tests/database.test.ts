@@ -47,7 +47,9 @@ async function asAppUser<T>(userId: number | null, fn: (c: pg.PoolClient) => Pro
 describe('clean migration', () => {
   it('applied all migrations in order', async () => {
     const r = await admin.query('SELECT count(*)::int AS n FROM drizzle.__drizzle_migrations');
-    assert.equal(r.rows[0].n, 6);
+    const { readFile } = await import('node:fs/promises');
+    const journal = JSON.parse(await readFile('drizzle/meta/_journal.json', 'utf8')) as { entries: unknown[] };
+    assert.equal(r.rows[0].n, journal.entries.length);
   });
 
   it('created the expected tables', async () => {

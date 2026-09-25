@@ -290,3 +290,134 @@ describe('categories', () => {
     assert.ok(list.data.some((i: { itemCode: string }) => i.itemCode === 'SD-TEF-01'));
   });
 });
+
+describe('REDTEAM M2 regressions', () => {
+  it('H1: NaN can never enter the ledger', async () => {
+    await inRollback(async (c) => {
+      await assert.rejects(
+        c.query(`INSERT INTO inventory_entries (transaction_id, line_no, item_id, signed_quantity, base_uom_id, custody_scope, warehouse_id, condition_code) VALUES ($1, 95, $2, 'NaN', $3, 'WAREHOUSE', $4, 'USABLE')`, [fx.txId, fx.itemId, fx.uomId, fx.warehouseA]),
+        /inventory_entries_quantity_finite|BOA_QUANTITY_PRECISION/,
+      );
+    });
+  });
+
+  it('H2: a decimal-places decrease cannot race with an in-flight posting', async () => {
+    const u = await post('/api/uoms', 'steward-1', { code: 'RACEU', name: 'Race unit', decimalPlaces: 2, reason });
+    const item = await post('/api/items', 'steward-1', { itemCode: 'RACE-ITEM', name: 'Race probe item', categoryId: catId, baseUomId: u.body.data.id, reason });
+    assert.equal(item.status, 201, JSON.stringify(item.body));
+    const poster = await admin.connect();
+    const steward = await pool.connect();
+    try {
+      await poster.query('BEGIN');
+      const tx = await poster.query(`INSERT INTO inventory_transactions (transaction_type, effective_at, posted_by_user_id, idempotency_key, request_hash) VALUES ('TEST', now(), $1, 'race-probe-0001', 'h') RETURNING id`, [fx.userIds['admin-1']]);
+      await poster.query(`INSERT INTO inventory_entries (transaction_id, line_no, item_id, signed_quantity, base_uom_id, custody_scope, warehouse_id, condition_code) VALUES ($1, 1, $2, 0.5, $3, 'WAREHOUSE', $4, 'USABLE')`, [tx.rows[0].id, item.body.data.id, u.body.data.id, fx.warehouseA]);
+      await steward.query('BEGIN');
+      await steward.query("SET LOCAL statement_timeout = '10s'");
+      await steward.query("SELECT set_config('boa.user_id', $1, true), set_config('boa.change_reason', $2, true)", [String(fx.userIds['steward-1']), reason]);
+      const decrease = steward.query('UPDATE uoms SET decimal_places = 0 WHERE id = $1', [u.body.data.id]);
+      await new Promise((r) => setTimeout(r, 200));
+      await poster.query('COMMIT'); // the posting wins the lock; the decrease must then see 0.5
+      await assert.rejects(decrease, /BOA_QUANTITY_PRECISION/);
+      await steward.query('ROLLBACK');
+    } finally {
+      poster.release();
+      steward.release();
+    }
+    const r = await admin.query('SELECT decimal_places FROM uoms WHERE id = $1', [u.body.data.id]);
+    assert.equal(r.rows[0].decimal_places, 2);
+  });
+
+  it('M1: concurrent re-parenting cannot create a category cycle', async () => {
+    const a = (await post('/api/item-categories', 'steward-1', { code: 'CYC-A', name: 'Cycle A', reason })).body.data;
+    const b = (await post('/api/item-categories', 'steward-1', { code: 'CYC-B', name: 'Cycle B', reason })).body.data;
+    const c1 = await pool.connect();
+    const c2 = await pool.connect();
+    const ctx = "SELECT set_config('boa.user_id', $1, true), set_config('boa.change_reason', $2, true)";
+    try {
+      for (const c of [c1, c2]) {
+        await c.query('BEGIN');
+        await c.query("SET LOCAL statement_timeout = '10s'");
+        await c.query(ctx, [String(fx.userIds['steward-1']), reason]);
+      }
+      await c1.query('UPDATE item_categories SET parent_id = $1 WHERE id = $2', [b.id, a.id]);
+      const second = c2.query('UPDATE item_categories SET parent_id = $1 WHERE id = $2', [a.id, b.id]);
+      await new Promise((r) => setTimeout(r, 200));
+      await c1.query('COMMIT');
+      await assert.rejects(second, /BOA_CATEGORY_HIERARCHY/);
+      await c2.query('ROLLBACK');
+    } finally {
+      c1.release();
+      c2.release();
+    }
+    const cyc = await admin.query(`SELECT count(*)::int AS n FROM item_categories c JOIN item_categories p ON p.id = c.parent_id WHERE p.parent_id IS NOT NULL`);
+    assert.equal(cyc.rows[0].n, 0);
+  });
+
+  it('M3: Unicode, spacing and punctuation variants of a name are duplicates; mixed scripts are rejected', async () => {
+    const base = await post('/api/items', 'steward-1', { itemCode: 'UNI-BASE', name: 'Sorghum Seed', categoryId: catId, baseUomId: uomKg, reason });
+    assert.equal(base.status, 201, JSON.stringify(base.body));
+    const variants = ['Sorghum Seed', 'Sorghum​Seed', 'Sor​ghum Se​ed', 'Sorghum Seed.', 'SORGHUM-SEED', 'Ｓorghum Seed'];
+    for (const [i, name] of variants.entries()) {
+      const r = await post('/api/items', 'steward-1', { itemCode: `UNI-V${i}`, name, categoryId: catId, baseUomId: uomKg, reason, confirmNotDuplicate: true });
+      assert.equal(r.status, 409, JSON.stringify(name));
+      assert.equal(r.body.error.code, 'DUPLICATE_ITEM_NAME', JSON.stringify(name));
+    }
+    const cyr = await post('/api/items', 'steward-1', { itemCode: 'UNI-CYR', name: 'Sоrghum Seed', categoryId: catId, baseUomId: uomKg, reason, confirmNotDuplicate: true });
+    assert.equal(cyr.status, 400);
+    assert.equal(cyr.body.error.code, 'CONSTRAINT_VIOLATION');
+    assert.doesNotMatch(cyr.body.error.message, /items_/);
+    // The database enforces the key for every writer, not only the API.
+    await assert.rejects(
+      admin.query(`INSERT INTO items (item_code, name, category_id, base_uom_id) VALUES ('UNI-RAW', $1, $2, $3)`, ['sorghum seed', catId, uomKg]),
+      /items_name_key_unique/,
+    );
+  });
+
+  it('L1/L2/L3: no client-chosen ids, invisible reasons rejected, usage probe needs READ_ITEMS', async () => {
+    const c = await pool.connect();
+    try {
+      await c.query('BEGIN');
+      await c.query("SELECT set_config('boa.user_id', $1, true), set_config('boa.change_reason', $2, true)", [String(fx.userIds['steward-1']), reason]);
+      await assert.rejects(
+        c.query(`INSERT INTO items (id, item_code, name, category_id, base_uom_id) OVERRIDING SYSTEM VALUE VALUES (999, 'OVR-1', 'Override probe', $1, $2)`, [catId, uomKg]),
+        /permission denied/,
+      );
+      await c.query('ROLLBACK');
+      await c.query('BEGIN');
+      await c.query("SELECT set_config('boa.user_id', $1, true), set_config('boa.change_reason', $2, true)", [String(fx.userIds['steward-1']), '​​​​​​']);
+      await assert.rejects(c.query(`INSERT INTO uoms (code, name) VALUES ('ZWREASON', 'Zero width reason')`), /BOA_REASON_REQUIRED/);
+      await c.query('ROLLBACK');
+    } finally {
+      c.release();
+    }
+    const api = await post('/api/uoms', 'steward-1', { code: 'ZWAPI', name: 'Zero width API', reason: '​​​​​​' });
+    assert.equal(api.status, 400);
+    await assert.rejects(pool.query('SELECT boa_item_has_ledger_entries($1)', [fx.itemId]), /BOA_NOT_AUTHORISED/);
+  });
+
+  it('L4: in-use reference data cannot be deactivated', async () => {
+    const kg = (await get('/api/uoms', 'steward-1')).body.data.find((u: { code: string }) => u.code === 'KG');
+    const r = await patch(`/api/uoms/${kg.id}`, 'steward-1', { isActive: false, rowVersion: kg.rowVersion, reason });
+    assert.equal(r.status, 409);
+    assert.equal(r.body.error.code, 'IN_USE');
+    const seeds = (await get('/api/item-categories', 'steward-1')).body.data.find((c: { code: string }) => c.code === 'SEEDS');
+    const s = await patch(`/api/item-categories/${seeds.id}`, 'steward-1', { isActive: false, rowVersion: seeds.rowVersion, reason });
+    assert.equal(s.status, 409);
+    assert.equal(s.body.error.code, 'IN_USE');
+  });
+
+  it('L6: conversions cannot target the base UOM and are frozen once active', async () => {
+    await assert.rejects(
+      admin.query(`INSERT INTO item_uom_conversions (item_id, uom_id, factor_to_base) VALUES ($1, $2, 1)`, [fx.itemId, fx.uomId]),
+      /BOA_CONVERSION_INVALID/,
+    );
+    await inRollback(async (c) => {
+      const conv = await c.query(
+        `INSERT INTO item_uom_conversions (item_id, uom_id, factor_to_base, status, evidence_status, approval_ref, source_evidence_ref, effective_from)
+         VALUES ($1, $2, 50, 'ACTIVE', 'VERIFIED', 'TEST-APPROVAL', 'TEST-EVIDENCE', now()) RETURNING id`,
+        [fx.itemId, uomKg],
+      );
+      await assert.rejects(c.query('UPDATE item_uom_conversions SET factor_to_base = 25 WHERE id = $1', [conv.rows[0].id]), /BOA_CONVERSION_IMMUTABLE/);
+    });
+  });
+});

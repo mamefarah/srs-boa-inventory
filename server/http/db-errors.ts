@@ -13,9 +13,21 @@ function pgError(err: unknown): PgErrorLike {
 /** Unique-constraint names → stable client error codes. */
 const UNIQUE_CODES: Record<string, [string, string]> = {
   items_item_code_unique: ['DUPLICATE_ITEM_CODE', 'An item with this code already exists'],
-  items_normalized_name_unique: ['DUPLICATE_ITEM_NAME', 'An item with this name already exists'],
+  items_name_key_unique: ['DUPLICATE_ITEM_NAME', 'An item with this name already exists (ignoring case, spacing and punctuation)'],
   uoms_code_unique: ['DUPLICATE_UOM_CODE', 'A unit of measure with this code already exists'],
   item_categories_code_unique: ['DUPLICATE_CATEGORY_CODE', 'A category with this code already exists'],
+};
+
+/** Check-constraint names → client messages (constraint names are never echoed). */
+const CHECK_MESSAGES: Record<string, string> = {
+  items_expiry_requires_batch: 'Expiry tracking requires batch/lot tracking',
+  items_shelf_life_requires_expiry: 'A default shelf life requires expiry tracking',
+  items_name_single_script: 'Item names may not mix Latin letters with Greek or Cyrillic letters',
+  items_name_key_not_blank: 'Item name must contain letters or digits',
+  items_item_code_format: 'Item code format is invalid',
+  uoms_code_format: 'Unit code format is invalid',
+  item_categories_code_format: 'Category code format is invalid',
+  uoms_decimal_places_range: 'Decimal places must be between 0 and 6',
 };
 
 /**
@@ -47,7 +59,9 @@ export function mapDbError(err: unknown): unknown {
     case 'BA010':
       return new HttpError(409, 'BASE_UOM_LOCKED', 'The base unit of measure cannot change once ledger entries exist');
     case 'BA011':
-      return new HttpError(409, 'INACTIVE_REFERENCE', 'The referenced category or unit of measure is not active');
+      return new HttpError(409, 'INACTIVE_REFERENCE', 'A referenced record is not active or not valid for this use');
+    case 'BA013':
+      return new HttpError(409, 'IN_USE', 'The record is still used by active items or subcategories');
     case 'BA012':
       return new HttpError(409, 'CATEGORY_HIERARCHY', 'Subcategories must sit under an active top-level category');
     case '23505': {
@@ -55,7 +69,7 @@ export function mapDbError(err: unknown): unknown {
       return known ? new HttpError(409, known[0], known[1]) : new HttpError(409, 'DUPLICATE', 'A record with these values already exists');
     }
     case '23514':
-      return new HttpError(400, 'CONSTRAINT_VIOLATION', `Value violates rule ${e.constraint ?? 'unknown'}`);
+      return new HttpError(400, 'CONSTRAINT_VIOLATION', (e.constraint && CHECK_MESSAGES[e.constraint]) || 'A value violates a data rule');
     case '23503':
       return new HttpError(400, 'INVALID_REFERENCE', 'A referenced record does not exist');
     default:

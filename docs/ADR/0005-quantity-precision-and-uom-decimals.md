@@ -29,6 +29,8 @@ Exact, but it accepts any number of decimals, so a quantity such as 0.3333333 kg
 4. **Changing `decimal_places`.** Increasing it is always allowed. Decreasing it is refused if existing ledger quantities in that UOM would violate the new precision.
 5. **Conversions.** `item_uom_conversions` exists but no conversion can become active without verified evidence and an approval reference. Mixed-UOM posting stays blocked (CG-1). Any rounding rule for conversions will come from the approved conversion policy.
 
+6. **Coercion caveat (M2 REDTEAM M2).** Assigning a value to a `NUMERIC(20,6)` column rounds it to 6 decimals *before* any trigger runs. Posting functions (M3+) must therefore accept quantities as unconstrained `numeric` or text, reject non-finite values and anything beyond the UOM's scale, and only then cast. The ledger trigger is a second line of defence, not the only one. `NaN` is rejected by a CHECK constraint.
+
 ## Consequences
 
 - Posting functions (M3+) inherit exact arithmetic and a database-enforced precision check.
