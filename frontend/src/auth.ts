@@ -4,7 +4,7 @@ import {
   browserSessionPersistence,
   GoogleAuthProvider,
   initializeAuth,
-  onIdTokenChanged,
+  onAuthStateChanged,
   signInWithPopup,
   signOut,
   type Auth,
@@ -41,7 +41,8 @@ export function watchUser(cb: (u: User | null) => void): () => void {
     cb(null);
     return () => undefined;
   }
-  return onIdTokenChanged(getFirebaseAuth(), cb);
+  // Sign-in/sign-out transitions only; hourly token refreshes do not re-sync the profile.
+  return onAuthStateChanged(getFirebaseAuth(), cb);
 }
 
 export async function signInWithGoogle(): Promise<void> {

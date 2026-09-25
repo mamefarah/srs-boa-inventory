@@ -1,0 +1,54 @@
+# Development State (technical, non-controlled)
+
+> Working notes for engineers and agents. This file never outranks the controlled documents listed in `docs/CONTROLLED_DOCUMENTS.md`.
+
+**Updated:** 2026-09-25
+
+## Milestone status
+
+| Milestone | Status | Branch |
+|---|---|---|
+| M0 Procedure/legal validation | PARTIALLY VERIFIED (controlled docs v2.2) | merged |
+| **M1 Foundation/security** | **Implemented; in review (PR open, not merged)** | `claude/m1-consolidation-security-n9puag` |
+| M2 Item master/UOM | Not started. Blocked on M1 merge | `claude/m2-item-uom` (future) |
+
+## Migrations
+
+| File | Content |
+|---|---|
+| `drizzle/0000_m1_foundation.sql` | Generated from `server/db/schema.ts` (tables, constraints, indexes) |
+| `drizzle/0001_m1_security.sql` | Hand-written: `boa_ims_app` grants, append-only triggers, forced timestamps, RLS, policy gate, neutral roles/permissions, condition codes, HB-2 placeholder |
+
+The migration baseline was re-created for the canonical repository. Any AI Studio development database built from the staging migrations must be **recreated**, not upgraded.
+
+## How M1 is verified
+
+- `npm run typecheck`: server, scripts, tests and web client (strict TS).
+- `npm run db:check-drift`: the schema is fully captured by the committed migrations.
+- `npm test`: drops and recreates the guarded test database, migrates from zero, then runs unit, database, idempotency and HTTP suites as a non-superuser application role.
+- `npm run secret-scan`, `npm audit --audit-level=high`, `vite build`.
+- CI job `application-checks` runs all of the above on ephemeral PostgreSQL 16.
+
+## Known technical debt (tracked; not M1 blockers)
+
+| Item | Target |
+|---|---|
+| Six moderate `npm audit` advisories (`uuid` via `firebase-admin` → `@google-cloud/storage`; code path unused; no non-breaking fix) | Re-check on each dependency update; M15 |
+| Tamper-evidence against privileged DBAs (audit hash chain / external log shipping) | M15 |
+| Rate limiting on the API (denial auditing could grow the audit table under abuse by an authenticated user) | M15 |
+| Content-Security-Policy for the SPA | M15 |
+| Audit rows are inserted by the application role directly. A single SECURITY DEFINER audit writer would limit forgery by stolen app credentials | M3 (with posting functions) |
+| Ledger legs without a warehouse (IN_TRANSIT/EXTERNAL/contra) are visible only with global scope | M7 |
+| Quantity precision/scale decision (currently unconstrained `numeric`) | M2, before schema changes |
+| Attachment storage ADR | Before M4 |
+| Hosting/deployment ADR, backup/restore test | Before M16 |
+
+## Open policy blockers (unchanged by M1)
+
+HB-1 … HB-8 and CG-1 … CG-3, per `docs/M0_BLOCKER_MATRIX.md`. M1 seeds no real approval authority. The fixed-asset threshold exists only as a `DISABLED`/`UNVERIFIED` placeholder with no value.
+
+**NEEDS POLICY/PROCEDURE CONFIRMATION (HB-4):** a single technical administrator can activate a second identity they control and grant it read roles. Every step is audited with the acting administrator, but prevention needs a dual-control rule for sensitive role grants. That rule is part of the Bureau approval/segregation matrix and is not invented here.
+
+## Next milestone
+
+M2 Item master/UOM, on a new branch from updated `main` after M1 is approved and merged. First task: record the quantity precision decision (ADR) before changing any quantity column.

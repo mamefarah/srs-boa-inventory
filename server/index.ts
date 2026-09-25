@@ -1,6 +1,6 @@
 import { createApp } from './app.ts';
 import { createFirebaseVerifier } from './auth/token-verifier.ts';
-import { loadConfig } from './config.ts';
+import { ConfigError, loadConfig, type AppConfig } from './config.ts';
 import { createDb, createPool } from './db/client.ts';
 import { createLogger } from './logger.ts';
 
@@ -8,7 +8,14 @@ import { createLogger } from './logger.ts';
  * Production/development entrypoint. It ALWAYS uses the Firebase token verifier;
  * the test verifier is not imported here and therefore cannot be reached.
  */
-const config = loadConfig();
+let config: AppConfig;
+try {
+  config = loadConfig();
+} catch (err) {
+  // Configuration errors name the offending variables but never echo their values.
+  process.stderr.write(`startup refused: ${err instanceof ConfigError ? err.message : 'invalid configuration'}\n`);
+  process.exit(1);
+}
 const logger = createLogger(config.logLevel);
 
 if (config.nodeEnv === 'test') {
