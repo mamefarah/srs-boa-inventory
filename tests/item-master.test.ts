@@ -314,10 +314,11 @@ describe('REDTEAM M2 regressions', () => {
       await steward.query('BEGIN');
       await steward.query("SET LOCAL statement_timeout = '10s'");
       await steward.query("SELECT set_config('boa.user_id', $1, true), set_config('boa.change_reason', $2, true)", [String(fx.userIds['steward-1']), reason]);
-      const decrease = steward.query('UPDATE uoms SET decimal_places = 0 WHERE id = $1', [u.body.data.id]);
+      // Capture the outcome immediately so the rejection is never 'unhandled' while we commit.
+      const decrease = steward.query('UPDATE uoms SET decimal_places = 0 WHERE id = $1', [u.body.data.id]).then(() => null, (e: Error) => e);
       await new Promise((r) => setTimeout(r, 200));
       await poster.query('COMMIT'); // the posting wins the lock; the decrease must then see 0.5
-      await assert.rejects(decrease, /BOA_QUANTITY_PRECISION/);
+      assert.match(String((await decrease)?.message), /BOA_QUANTITY_PRECISION/);
       await steward.query('ROLLBACK');
     } finally {
       poster.release();
@@ -340,10 +341,10 @@ describe('REDTEAM M2 regressions', () => {
         await c.query(ctx, [String(fx.userIds['steward-1']), reason]);
       }
       await c1.query('UPDATE item_categories SET parent_id = $1 WHERE id = $2', [b.id, a.id]);
-      const second = c2.query('UPDATE item_categories SET parent_id = $1 WHERE id = $2', [a.id, b.id]);
+      const second = c2.query('UPDATE item_categories SET parent_id = $1 WHERE id = $2', [a.id, b.id]).then(() => null, (e: Error) => e);
       await new Promise((r) => setTimeout(r, 200));
       await c1.query('COMMIT');
-      await assert.rejects(second, /BOA_CATEGORY_HIERARCHY/);
+      assert.match(String((await second)?.message), /BOA_CATEGORY_HIERARCHY/);
       await c2.query('ROLLBACK');
     } finally {
       c1.release();
