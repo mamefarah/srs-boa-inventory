@@ -235,6 +235,9 @@ describe('item API: update, concurrency, lifecycle', () => {
     assert.equal(after.specification, 'Hybrid, 50 kg bag');
     assert.equal(after.usefulLifeMonths, 24);
     assert.equal((await patch(`/api/items/${item.id}`, 'steward-1', { itemCode: 'NEW-CODE', rowVersion: after.rowVersion, reason })).status, 400);
+    const empty = await patch(`/api/items/${item.id}`, 'steward-1', { rowVersion: after.rowVersion, reason });
+    assert.equal(empty.status, 400);
+    assert.equal(empty.body.error.code, 'NO_CHANGES');
   });
 
   it('the base UOM of an item with ledger history cannot change (and the API says so)', async () => {

@@ -227,7 +227,8 @@ export function itemRoutes({ db, logger, authenticated }: RouteDeps) {
     try {
       const { id } = z.object({ id: idParam }).parse(req.params);
       const body = updateItemBody.parse(req.body);
-      const { rowVersion: expected, reason, confirmNotDuplicate, ...changes } = body as z.infer<typeof updateItemBody> & Record<string, unknown>;
+      const { rowVersion: expected, reason, confirmNotDuplicate, ...rest } = body as z.infer<typeof updateItemBody> & Record<string, unknown>;
+      const changes = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined));
       if (Object.keys(changes).length === 0) throw new HttpError(400, 'NO_CHANGES', 'No fields to update');
       const result = await write(res, reason, async (tx) => {
         if (typeof changes.name === 'string' && !confirmNotDuplicate) {
