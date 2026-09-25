@@ -77,7 +77,8 @@ export function inventoryRoutes({ db, logger, authenticated }: RouteDeps) {
               baseUomCode: uoms.code,
               warehouseLocationId: inventoryEntries.warehouseLocationId,
               conditionCode: inventoryEntries.conditionCode,
-              onHandQuantity: sql<string>`${total}::text`,
+              // Exact value in minimal form (trim_scale drops only trailing zeros; never rounds).
+              onHandQuantity: sql<string>`trim_scale(${total})::text`,
             })
             .from(inventoryEntries)
             .innerJoin(items, eq(items.id, inventoryEntries.itemId))
@@ -144,7 +145,7 @@ export function inventoryRoutes({ db, logger, authenticated }: RouteDeps) {
               effectiveAt: inventoryTransactions.effectiveAt,
               postedAt: inventoryTransactions.postedAt,
               itemId: inventoryEntries.itemId,
-              signedQuantity: inventoryEntries.signedQuantity,
+              signedQuantity: sql<string>`trim_scale(${inventoryEntries.signedQuantity})::text`,
               baseUomId: inventoryEntries.baseUomId,
               custodyScope: inventoryEntries.custodyScope,
               warehouseId: inventoryEntries.warehouseId,

@@ -13,6 +13,7 @@ import type { Logger } from './logger.ts';
 import { adminRoutes } from './routes/admin.ts';
 import type { RouteDeps } from './routes/deps.ts';
 import { inventoryRoutes } from './routes/inventory.ts';
+import { itemRoutes } from './routes/items.ts';
 import { masterRoutes } from './routes/master.ts';
 import { sessionRoutes } from './routes/session.ts';
 
@@ -58,6 +59,7 @@ export function createApp({ config, db, verifier, logger }: AppDeps): Express {
   app.use('/api', sessionRoutes(deps));
   app.use('/api', inventoryRoutes(deps));
   app.use('/api', masterRoutes(deps));
+  app.use('/api', itemRoutes(deps));
   app.use('/api/admin', adminRoutes(deps));
   app.use('/api', notFoundApi);
 

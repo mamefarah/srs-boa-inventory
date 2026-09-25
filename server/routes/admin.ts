@@ -6,6 +6,7 @@ import { principalOf, requirePermission } from '../authz/authorize.ts';
 import { PERMISSIONS } from '../authz/permissions.ts';
 import { withUserContext, type Db } from '../db/client.ts';
 import { roles, userRoles, users, userWarehouseAccess } from '../db/schema.ts';
+import { mapDbError } from '../http/db-errors.ts';
 import { HttpError } from '../http/errors.ts';
 import { idParam, reasonField } from '../http/validation.ts';
 import type { Logger } from '../logger.ts';
@@ -35,26 +36,6 @@ async function forbidSelf(db: Db, logger: Logger, res: Response, targetUserId: n
   }
 }
 
-/** Maps the custom SQLSTATEs raised by the administration functions to HTTP errors. */
-function mapAdminDbError(err: unknown): unknown {
-  const code = (err as { cause?: { code?: string }; code?: string }).cause?.code ?? (err as { code?: string }).code;
-  switch (code) {
-    case 'BA001':
-      return new HttpError(403, 'SELF_ADMINISTRATION_FORBIDDEN', 'You cannot change your own access or activation');
-    case 'BA002':
-      return new HttpError(403, 'PERMISSION_DENIED', 'Not authorised for this administration action');
-    case 'BA003':
-      return new HttpError(404, 'NOT_FOUND', 'User, role or warehouse not found');
-    case 'BA004':
-      return new HttpError(409, 'SEPARATION_OF_DUTIES', 'Access administration cannot be combined with stock, ledger, audit or global-scope access');
-    case 'BA006':
-      return new HttpError(409, 'ADMIN_CHANGE_REQUIRES_DUAL_CONTROL', 'Removing or deactivating an administrator requires the out-of-band dual-control procedure');
-    case 'BA005':
-      return new HttpError(409, 'LAST_ADMINISTRATOR', 'At least one active administrator must remain');
-    default:
-      return err;
-  }
-}
 
 /**
  * Access administration. Role→permission mappings and the permission catalogue are
@@ -114,7 +95,7 @@ export function adminRoutes({ db, logger, authenticated }: RouteDeps) {
       const out = await withUserContext(db, actor.userId, (tx) => tx.execute(query));
       return (out.rows[0] as { changed: boolean }).changed;
     } catch (err) {
-      throw mapAdminDbError(err);
+      throw mapDbError(err);
     }
   };
 
