@@ -80,9 +80,12 @@ const en = {
   decimalPlaces: 'Decimal places allowed',
   newUom: 'New unit of measure',
   newCategory: 'New category',
+  editUom: 'Edit unit of measure',
+  editCategory: 'Edit category',
   parentCategory: 'Parent category (optional)',
   none: 'None',
   noStockEffect: 'Item master changes never change stock.',
+  referenceLoadError: 'Units and categories could not be loaded. Saving is disabled until this is resolved.',
 } as const;
 
 export type MessageKey = keyof typeof en;

@@ -36,12 +36,21 @@ const PAGE = 25;
 function useReference() {
   const [uoms, setUoms] = useState<Uom[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<ApiError | null>(null);
   const reload = useCallback(() => {
-    void api<{ data: Uom[] }>('/uoms').then((r) => setUoms(r.data)).catch(() => undefined);
-    void api<{ data: Category[] }>('/item-categories').then((r) => setCategories(r.data)).catch(() => undefined);
+    setLoading(true);
+    Promise.all([api<{ data: Uom[] }>('/uoms'), api<{ data: Category[] }>('/item-categories')])
+      .then(([u, c]) => {
+        setUoms(u.data);
+        setCategories(c.data);
+        setError(null);
+      })
+      .catch((e) => setError(e as ApiError))
+      .finally(() => setLoading(false));
   }, []);
   useEffect(reload, [reload]);
-  return { uoms, categories, reload };
+  return { uoms, categories, loading, error, reload };
 }
 
 function ErrorBox({ error }: { error: ApiError | null }) {
@@ -111,6 +120,8 @@ export function ItemsView({ canManage }: { canManage: boolean }) {
         canManage={canManage}
         uoms={ref.uoms}
         categories={ref.categories}
+        referenceUnavailable={Boolean(ref.error)}
+        onRetryReference={ref.reload}
         onDone={() => {
           setEditing(null);
           load();
@@ -121,6 +132,19 @@ export function ItemsView({ canManage }: { canManage: boolean }) {
 
   return (
     <section>
+      {ref.error && (
+        <div className="notice danger" role="alert">
+          <span aria-hidden="true">⛔</span>
+          <div>
+            {t('referenceLoadError')}
+            <div>
+              <button type="button" className="btn secondary" onClick={ref.reload}>
+                {t('retry')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="toolbar">
         <input aria-label={t('search')} placeholder={t('search')} value={q} onChange={(e) => { setOffset(0); setQ(e.target.value); }} />
         <select aria-label={t('status')} value={active} onChange={(e) => { setOffset(0); setActive(e.target.value as typeof active); }}>
@@ -138,7 +162,7 @@ export function ItemsView({ canManage }: { canManage: boolean }) {
           ))}
         </select>
         {canManage && (
-          <button type="button" className="btn primary" onClick={() => setEditing('new')}>
+          <button type="button" className="btn primary" disabled={ref.loading || Boolean(ref.error)} onClick={() => setEditing('new')}>
             {t('newItem')}
           </button>
         )}
@@ -232,7 +256,23 @@ function toForm(i: Item | null): FormState {
   };
 }
 
-function ItemForm({ item, canManage, uoms, categories, onDone }: { item: Item | null; canManage: boolean; uoms: Uom[]; categories: Category[]; onDone: () => void }) {
+function ItemForm({
+  item,
+  canManage,
+  uoms,
+  categories,
+  referenceUnavailable,
+  onRetryReference,
+  onDone,
+}: {
+  item: Item | null;
+  canManage: boolean;
+  uoms: Uom[];
+  categories: Category[];
+  referenceUnavailable: boolean;
+  onRetryReference: () => void;
+  onDone: () => void;
+}) {
   // Entered values are preserved across validation errors (UX rule).
   const [f, setF] = useState<FormState>(() => toForm(item));
   const [error, setError] = useState<ApiError | null>(null);
@@ -243,6 +283,7 @@ function ItemForm({ item, canManage, uoms, categories, onDone }: { item: Item | 
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (referenceUnavailable) return;
     setBusy(true);
     setError(null);
     const common = {
@@ -299,6 +340,19 @@ function ItemForm({ item, canManage, uoms, categories, onDone }: { item: Item | 
         {item && <span className="badge">{item.isActive ? t('active') : t('inactive')}</span>}
       </h2>
       <p className="hint">{t('noStockEffect')}</p>
+      {referenceUnavailable && (
+        <div className="notice danger" role="alert">
+          <span aria-hidden="true">⛔</span>
+          <div>
+            {t('referenceLoadError')}
+            <div>
+              <button type="button" className="btn secondary" onClick={onRetryReference}>
+                {t('retry')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <ErrorBox error={error} />
       {candidates.length > 0 && (
         <div className="notice warning" role="status">
@@ -383,7 +437,7 @@ function ItemForm({ item, canManage, uoms, categories, onDone }: { item: Item | 
       </fieldset>
       <div className="toolbar">
         {canManage && (
-          <button type="submit" className="btn primary" disabled={busy}>
+          <button type="submit" className="btn primary" disabled={busy || referenceUnavailable}>
             {t('save')}
           </button>
         )}
@@ -400,38 +454,288 @@ function ItemForm({ item, canManage, uoms, categories, onDone }: { item: Item | 
   );
 }
 
-export function ReferenceView({ canManage }: { canManage: boolean }) {
-  const ref = useReference();
+function UomForm({
+  uom,
+  canManage,
+  referenceUnavailable,
+  onRetryReference,
+  onDone,
+}: {
+  uom: Uom | null;
+  canManage: boolean;
+  referenceUnavailable: boolean;
+  onRetryReference: () => void;
+  onDone: () => void;
+}) {
+  const [code, setCode] = useState(uom?.code ?? '');
+  const [name, setName] = useState(uom?.name ?? '');
+  const [decimalPlaces, setDecimalPlaces] = useState(uom ? String(uom.decimalPlaces) : '0');
+  const [reason, setReason] = useState('');
   const [error, setError] = useState<ApiError | null>(null);
-  const [uom, setUom] = useState({ code: '', name: '', decimalPlaces: '0', reason: '' });
-  const [cat, setCat] = useState({ code: '', name: '', parentId: '', reason: '' });
+  const [busy, setBusy] = useState(false);
+  const readOnly = !canManage;
 
-  const addUom = async (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (referenceUnavailable) return;
+    setBusy(true);
+    setError(null);
     try {
-      await api('/uoms', { method: 'POST', body: { code: uom.code, name: uom.name, decimalPlaces: Number(uom.decimalPlaces), reason: uom.reason } });
-      setUom({ code: '', name: '', decimalPlaces: '0', reason: '' });
-      setError(null);
-      ref.reload();
+      if (uom) {
+        await api(`/uoms/${uom.id}`, { method: 'PATCH', body: { name, decimalPlaces: Number(decimalPlaces), rowVersion: uom.rowVersion, reason } });
+      } else {
+        await api('/uoms', { method: 'POST', body: { code, name, decimalPlaces: Number(decimalPlaces), reason } });
+      }
+      onDone();
     } catch (err) {
       setError(err as ApiError);
+    } finally {
+      setBusy(false);
     }
   };
-  const addCategory = async (e: FormEvent) => {
-    e.preventDefault();
+
+  const toggleActive = async () => {
+    if (!uom) return;
+    setBusy(true);
+    setError(null);
     try {
-      await api('/item-categories', { method: 'POST', body: { code: cat.code, name: cat.name, parentId: cat.parentId ? Number(cat.parentId) : null, reason: cat.reason } });
-      setCat({ code: '', name: '', parentId: '', reason: '' });
-      setError(null);
-      ref.reload();
+      await api(`/uoms/${uom.id}`, { method: 'PATCH', body: { isActive: !uom.isActive, rowVersion: uom.rowVersion, reason } });
+      onDone();
     } catch (err) {
       setError(err as ApiError);
+    } finally {
+      setBusy(false);
     }
   };
 
   return (
-    <section>
+    <form className="form" onSubmit={(e) => void submit(e)}>
+      <h2>
+        {uom ? `${t('editUom')}: ${uom.code}` : t('newUom')}{' '}
+        {uom && <span className="badge">{uom.isActive ? t('active') : t('inactive')}</span>}
+      </h2>
+      {referenceUnavailable && (
+        <div className="notice danger" role="alert">
+          <span aria-hidden="true">⛔</span>
+          <div>
+            {t('referenceLoadError')}
+            <div>
+              <button type="button" className="btn secondary" onClick={onRetryReference}>
+                {t('retry')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <ErrorBox error={error} />
+      <fieldset disabled={readOnly || busy}>
+        <Field label="code">
+          <input required value={code} disabled={Boolean(uom)} onChange={(e) => setCode(e.target.value)} />
+        </Field>
+        <Field label="name">
+          <input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label="decimalPlaces">
+          <input type="number" min={0} max={6} value={decimalPlaces} onChange={(e) => setDecimalPlaces(e.target.value)} />
+        </Field>
+        {canManage && (
+          <Field label="reason">
+            <input required minLength={5} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} />
+          </Field>
+        )}
+      </fieldset>
+      <div className="toolbar">
+        {canManage && (
+          <button type="submit" className="btn primary" disabled={busy || referenceUnavailable}>
+            {t('save')}
+          </button>
+        )}
+        {canManage && uom && (
+          <button type="button" className="btn secondary" disabled={busy || reason.trim().length < 5} onClick={() => void toggleActive()}>
+            {uom.isActive ? t('deactivate') : t('activate')}
+          </button>
+        )}
+        <button type="button" className="btn secondary" onClick={onDone}>
+          {t('cancel')}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function CategoryForm({
+  category,
+  categories,
+  canManage,
+  referenceUnavailable,
+  onRetryReference,
+  onDone,
+}: {
+  category: Category | null;
+  categories: Category[];
+  canManage: boolean;
+  referenceUnavailable: boolean;
+  onRetryReference: () => void;
+  onDone: () => void;
+}) {
+  const [code, setCode] = useState(category?.code ?? '');
+  const [name, setName] = useState(category?.name ?? '');
+  const [parentId, setParentId] = useState(category?.parentId ? String(category.parentId) : '');
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState<ApiError | null>(null);
+  const [busy, setBusy] = useState(false);
+  const readOnly = !canManage;
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (referenceUnavailable) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (category) {
+        await api(`/item-categories/${category.id}`, {
+          method: 'PATCH',
+          body: { name, parentId: parentId ? Number(parentId) : null, rowVersion: category.rowVersion, reason },
+        });
+      } else {
+        await api('/item-categories', { method: 'POST', body: { code, name, parentId: parentId ? Number(parentId) : null, reason } });
+      }
+      onDone();
+    } catch (err) {
+      setError(err as ApiError);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleActive = async () => {
+    if (!category) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/item-categories/${category.id}`, { method: 'PATCH', body: { isActive: !category.isActive, rowVersion: category.rowVersion, reason } });
+      onDone();
+    } catch (err) {
+      setError(err as ApiError);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form className="form" onSubmit={(e) => void submit(e)}>
+      <h2>
+        {category ? `${t('editCategory')}: ${category.code}` : t('newCategory')}{' '}
+        {category && <span className="badge">{category.isActive ? t('active') : t('inactive')}</span>}
+      </h2>
+      {referenceUnavailable && (
+        <div className="notice danger" role="alert">
+          <span aria-hidden="true">⛔</span>
+          <div>
+            {t('referenceLoadError')}
+            <div>
+              <button type="button" className="btn secondary" onClick={onRetryReference}>
+                {t('retry')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      <ErrorBox error={error} />
+      <fieldset disabled={readOnly || busy}>
+        <Field label="code">
+          <input required value={code} disabled={Boolean(category)} onChange={(e) => setCode(e.target.value)} />
+        </Field>
+        <Field label="name">
+          <input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label="parentCategory">
+          <select value={parentId} onChange={(e) => setParentId(e.target.value)}>
+            <option value="">{t('none')}</option>
+            {categories
+              .filter((c) => !c.parentId && c.isActive && c.id !== category?.id)
+              .map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.code} · {c.name}
+                </option>
+              ))}
+          </select>
+        </Field>
+        {canManage && (
+          <Field label="reason">
+            <input required minLength={5} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} />
+          </Field>
+        )}
+      </fieldset>
+      <div className="toolbar">
+        {canManage && (
+          <button type="submit" className="btn primary" disabled={busy || referenceUnavailable}>
+            {t('save')}
+          </button>
+        )}
+        {canManage && category && (
+          <button type="button" className="btn secondary" disabled={busy || reason.trim().length < 5} onClick={() => void toggleActive()}>
+            {category.isActive ? t('deactivate') : t('activate')}
+          </button>
+        )}
+        <button type="button" className="btn secondary" onClick={onDone}>
+          {t('cancel')}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+export function ReferenceView({ canManage }: { canManage: boolean }) {
+  const ref = useReference();
+  const [editingUom, setEditingUom] = useState<Uom | 'new' | null>(null);
+  const [editingCategory, setEditingCategory] = useState<Category | 'new' | null>(null);
+
+  if (editingUom) {
+    return (
+      <UomForm
+        uom={editingUom === 'new' ? null : editingUom}
+        canManage={canManage}
+        referenceUnavailable={Boolean(ref.error)}
+        onRetryReference={ref.reload}
+        onDone={() => {
+          setEditingUom(null);
+          ref.reload();
+        }}
+      />
+    );
+  }
+  if (editingCategory) {
+    return (
+      <CategoryForm
+        category={editingCategory === 'new' ? null : editingCategory}
+        categories={ref.categories}
+        canManage={canManage}
+        referenceUnavailable={Boolean(ref.error)}
+        onRetryReference={ref.reload}
+        onDone={() => {
+          setEditingCategory(null);
+          ref.reload();
+        }}
+      />
+    );
+  }
+
+  return (
+    <section>
+      {ref.error && (
+        <div className="notice danger" role="alert">
+          <span aria-hidden="true">⛔</span>
+          <div>
+            {t('referenceLoadError')}
+            <div>
+              <button type="button" className="btn secondary" onClick={ref.reload}>
+                {t('retry')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <h2>{t('uom')}</h2>
       <table className="data">
         <thead>
@@ -445,7 +749,11 @@ export function ReferenceView({ canManage }: { canManage: boolean }) {
         <tbody>
           {ref.uoms.map((u) => (
             <tr key={u.id}>
-              <td data-label={t('code')}>{u.code}</td>
+              <td data-label={t('code')}>
+                <button type="button" className="linklike" onClick={() => setEditingUom(u)}>
+                  {u.code}
+                </button>
+              </td>
               <td data-label={t('name')}>{u.name}</td>
               <td data-label={t('decimalPlaces')}>{u.decimalPlaces}</td>
               <td data-label={t('status')}>
@@ -456,14 +764,11 @@ export function ReferenceView({ canManage }: { canManage: boolean }) {
         </tbody>
       </table>
       {canManage && (
-        <form className="form" onSubmit={(e) => void addUom(e)}>
-          <h3>{t('newUom')}</h3>
-          <Field label="code"><input required value={uom.code} onChange={(e) => setUom({ ...uom, code: e.target.value })} /></Field>
-          <Field label="name"><input required value={uom.name} onChange={(e) => setUom({ ...uom, name: e.target.value })} /></Field>
-          <Field label="decimalPlaces"><input type="number" min={0} max={6} value={uom.decimalPlaces} onChange={(e) => setUom({ ...uom, decimalPlaces: e.target.value })} /></Field>
-          <Field label="reason"><input required minLength={5} value={uom.reason} onChange={(e) => setUom({ ...uom, reason: e.target.value })} /></Field>
-          <button type="submit" className="btn primary">{t('save')}</button>
-        </form>
+        <div className="toolbar">
+          <button type="button" className="btn primary" disabled={ref.loading || Boolean(ref.error)} onClick={() => setEditingUom('new')}>
+            {t('newUom')}
+          </button>
+        </div>
       )}
       <h2>{t('category')}</h2>
       <table className="data">
@@ -478,7 +783,11 @@ export function ReferenceView({ canManage }: { canManage: boolean }) {
         <tbody>
           {ref.categories.map((c) => (
             <tr key={c.id}>
-              <td data-label={t('code')}>{c.code}</td>
+              <td data-label={t('code')}>
+                <button type="button" className="linklike" onClick={() => setEditingCategory(c)}>
+                  {c.code}
+                </button>
+              </td>
               <td data-label={t('name')}>{c.name}</td>
               <td data-label={t('parentCategory')}>{ref.categories.find((p) => p.id === c.parentId)?.code ?? t('none')}</td>
               <td data-label={t('status')}>
@@ -489,21 +798,11 @@ export function ReferenceView({ canManage }: { canManage: boolean }) {
         </tbody>
       </table>
       {canManage && (
-        <form className="form" onSubmit={(e) => void addCategory(e)}>
-          <h3>{t('newCategory')}</h3>
-          <Field label="code"><input required value={cat.code} onChange={(e) => setCat({ ...cat, code: e.target.value })} /></Field>
-          <Field label="name"><input required value={cat.name} onChange={(e) => setCat({ ...cat, name: e.target.value })} /></Field>
-          <Field label="parentCategory">
-            <select value={cat.parentId} onChange={(e) => setCat({ ...cat, parentId: e.target.value })}>
-              <option value="">{t('none')}</option>
-              {ref.categories.filter((c) => !c.parentId && c.isActive).map((c) => (
-                <option key={c.id} value={c.id}>{c.code} · {c.name}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="reason"><input required minLength={5} value={cat.reason} onChange={(e) => setCat({ ...cat, reason: e.target.value })} /></Field>
-          <button type="submit" className="btn primary">{t('save')}</button>
-        </form>
+        <div className="toolbar">
+          <button type="button" className="btn primary" disabled={ref.loading || Boolean(ref.error)} onClick={() => setEditingCategory('new')}>
+            {t('newCategory')}
+          </button>
+        </div>
       )}
     </section>
   );
