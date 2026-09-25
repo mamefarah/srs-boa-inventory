@@ -6,7 +6,7 @@ Security, authorization, RLS, concurrency, idempotency and negative tests are cr
 Collect authoritative procedures/forms, interview stakeholders, complete OFFICIAL_PROCESS_MAPPING, decide funding segregation, base-UOM/conversion policy and durable-property handoff.
 
 ## M1 — Foundation
-Next.js/PWA shell, Supabase local/dev setup, authentication, role/permission foundation, CI, baseline deny-by-default security tests and direct-write guardrails.
+React/Vite client shell, Express API, PostgreSQL migrations, Firebase identity, role/permission/warehouse-scope foundation, CI, baseline deny-by-default security tests and direct-write guardrails (ADR-0003/0004).
 
 ## M2 — Item & Warehouse Master
 Warehouses/locations, item categories, item master, authoritative base UOM, controlled conversions if validated, funding/project masters, duplicate prevention.

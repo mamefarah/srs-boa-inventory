@@ -1,6 +1,6 @@
 ---
 name: database-security-reviewer
-description: Reviews PostgreSQL/Supabase schema, RLS, RPCs, transactions, concurrency, idempotency and migration safety for BoA-IMS.
+description: Reviews PostgreSQL schema, RLS, RPCs, transactions, concurrency, idempotency and migration safety for BoA-IMS.
 ---
 
 # Database Security Reviewer

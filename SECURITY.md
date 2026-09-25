@@ -6,7 +6,8 @@ Do not report or paste credentials, database passwords, private keys, service-ro
 
 Treat these as high risk:
 - authentication and authorization;
-- Supabase RLS/grants/RPCs;
+- PostgreSQL grants, RLS, triggers and posting functions;
+- Firebase ID-token verification and identity binding;
 - inventory posting and balance projections;
 - idempotency/concurrency controls;
 - adjustment, reversal, disposal and period reopen;

@@ -10,10 +10,11 @@ Production must be separate from development.
 
 ## Recommended hosting direction
 
-- Next.js responsive PWA
-- Supabase/PostgreSQL backend
-- Managed web hosting such as Vercel or approved institutional equivalent
-- HTTPS only
+- React/Vite web client served same-origin by the Express API (ADR-0003)
+- Firebase Authentication (identity only) + PostgreSQL (e.g. Cloud SQL) as authoritative store
+- Managed container hosting (e.g. Cloud Run) or approved institutional equivalent — final choice by ADR before M16
+- HTTPS only; database over TLS or the Cloud SQL connector socket
+- Migrations applied only by `scripts/migrate.ts` with the migration-owner identity; production requires explicit approval and `CONFIRM_PRODUCTION_MIGRATION`
 
 Final vendor/region/hosting decisions remain subject to Bureau policy and data-governance review.
 

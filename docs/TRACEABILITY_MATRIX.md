@@ -4,13 +4,13 @@ Use this file to connect business rules to implementation and tests. Every criti
 
 | Rule | Workflow | Implementation | Automated Test | Manual/UAT Evidence | Status |
 |---|---|---|---|---|---|
-| INV-001 | All stock | TBD | Direct balance write blocked | TBD | Planned |
-| INV-002 | Posting | TBD | Posted ledger immutable | TBD | Planned |
+| INV-001 | All stock | No balance table/column; stock derived by `GET /api/stock` from entries | `tests/database.test.ts` no editable balance; app role cannot CREATE | TBD | M1 foundation |
+| INV-002 | Posting | Append-only triggers (UPDATE/DELETE/TRUNCATE) `drizzle/0001_m1_security.sql` | `tests/database.test.ts` append-only suite | TBD | M1 foundation |
 | INV-003 | Reversal/correction | TBD | Safe reversal vs compensation | TBD | Planned |
 | INV-005 | Transfer | TBD | Logistics conservation | TBD | Planned |
 | INV-006 | Commitment/issue | TBD | No overcommit/overissue | TBD | Planned |
 | INV-007 | Posting | TBD | Concurrency race | TBD | Planned |
-| INV-008 | Posting | TBD | Idempotency + request hash | TBD | Planned |
+| INV-008 | Posting | `server/idempotency/idempotency.ts` + unique key | `tests/idempotency.test.ts` (20-way concurrency, hash/actor mismatch) | TBD | M1 foundation (used by posting from M3) |
 | INV-009 | Receipt | TBD | Accepted only becomes usable | TBD | Planned |
 | INV-010 | Receipt | TBD | Rejected remains traceable | TBD | Planned |
 | INV-012 | Conditions | TBD | Condition conservation | TBD | Planned |
@@ -20,14 +20,14 @@ Use this file to connect business rules to implementation and tests. Every criti
 | INV-018 | Transfer discrepancy | TBD | No disappearing variance | TBD | Planned |
 | INV-019 | Period close | TBD | Closed-period block | TBD | Planned |
 | INV-020 | Period reopen | TBD | Reopen authority/audit | TBD | Planned |
-| INV-022 | UOM | TBD | Base-UOM enforcement | TBD | Planned |
+| INV-022 | UOM | Composite FK entries(item_id, base_uom_id) → items | `tests/database.test.ts` non-base UOM rejected | TBD | M1 foundation |
 | INV-023 | UOM conversion | TBD | Invalid conversion blocked | TBD | Planned |
 | INV-026 | FEFO | TBD | FEFO/override | TBD | Planned |
 | INV-027 | Funding | TBD | Funding segregation | TBD | Planned |
 | INV-028 | Opening | TBD | Approved migration batch | TBD | Planned |
-| INV-030 | Authorization | TBD | API/DB bypass blocked | TBD | Planned |
-| INV-031 | Ledger security | TBD | Direct ledger/projection/audit writes blocked | TBD | Planned |
-| INV-032 | Audit | TBD | Append-only audit | TBD | Planned |
+| INV-030 | Authorization | `server/authz/authorize.ts` + RLS policies | `tests/http-authz.test.ts`, RLS suite in `tests/database.test.ts` | TBD | M1 foundation |
+| INV-031 | Ledger security | `boa_ims_app` grants (no ledger writes) | `tests/database.test.ts` direct-write prohibition | TBD | M1 foundation |
+| INV-032 | Audit | `server/audit/audit.ts`; admin/authn/authz events | `tests/http-admin.test.ts`, `tests/http-auth.test.ts` | TBD | M1 foundation |
 | INV-037 | Commitment | TBD | Reservation no physical move | TBD | Planned |
 | INV-038 | Requisition/transfer | TBD | Commitment reduces ATP | TBD | Planned |
 | INV-039 | Transfer dispatch | TBD | Commitment + dispatch atomic | TBD | Planned |
@@ -40,3 +40,5 @@ Use this file to connect business rules to implementation and tests. Every criti
 | INV-046 | Reports | TBD | Distinct inventory totals | TBD | Planned |
 
 Rules not listed above remain mandatory; expand the matrix as their implementation begins.
+| INV-029 | Authorization | SYSTEM_ADMIN has no stock/ledger/audit/approval permissions | `tests/database.test.ts` role matrix | TBD | M1 foundation |
+| INV-033 | Time | All timestamps `timestamptz`; server-forced recording time | `tests/database.test.ts` | TBD | M1 foundation |

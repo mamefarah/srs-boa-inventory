@@ -25,15 +25,9 @@ jobs:
             exit 1
           fi
 
-      - name: Basic content secret scan
+      - name: Content secret scan
         shell: bash
-        run: |
-          set -euo pipefail
-          patterns='(-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----|sk-[A-Za-z0-9_-]{20,}|service_role[^A-Za-z0-9]{0,8}[=:][^[:space:]]{10,}|SUPABASE_SERVICE_ROLE_KEY[=:][^[:space:]]+)'
-          if git grep -I -n -E "$patterns" -- . ':!*.md' ':!.env.example'; then
-            echo "Potential secret material detected. Review and rotate if real."
-            exit 1
-          fi
+        run: bash scripts/secret-scan.sh
 
       - name: Verify required foundation documents
         shell: bash
@@ -217,3 +211,57 @@ jobs:
           fi
 
           echo "OK: ${#required_boa_skills[@]} project boa-* skills + ${#required_external_skills[@]} external skills = $found_count discoverable, all with valid frontmatter, no broken symlinks."
+
+  application-checks:
+    # Ephemeral PostgreSQL only. CI never receives production or shared database credentials.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: boa_ci_admin
+          POSTGRES_PASSWORD: ci-only-ephemeral
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U boa_ci_admin"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      BOA_TEST_AUTH: enabled
+      ALLOW_TEST_DATABASE_RESET: 'true'
+      TEST_SQL_HOST: 127.0.0.1
+      TEST_SQL_PORT: '5432'
+      TEST_SQL_DB_NAME: boa_ims_test
+      TEST_SQL_ADMIN_USER: boa_ci_admin
+      TEST_SQL_ADMIN_PASSWORD: ci-only-ephemeral
+      TEST_SQL_APP_USER: boa_ims_test_app
+      TEST_SQL_APP_PASSWORD: ci-only-ephemeral-app
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install (lockfile only)
+        run: npm ci
+
+      - name: Typecheck (server, scripts, tests, web)
+        run: npm run typecheck
+
+      - name: Migration drift check
+        run: npm run db:check-drift
+
+      - name: Clean migration from zero + full test suite
+        run: npm test
+
+      - name: Production web build
+        run: npx vite build --config frontend/vite.config.ts
+
+      - name: Dependency audit (high and above)
+        run: npm audit --audit-level=high
