@@ -24,9 +24,10 @@ Critical inventory effects must be produced only by approved transactional serve
 
 RLS/grants should make this prohibition true even if a malicious client calls the API directly.
 
-## Supabase/PostgreSQL direction
+## PostgreSQL direction (ADR-0004)
 
-- Row Level Security on business tables exposed through Supabase.
+- The API connects as a least-privilege login in the `boa_ims_app` group role; the schema owner is used only for migrations.
+- Row Level Security on ledger/audit tables keyed to a transaction-local user context (fail-closed without context).
 - SECURITY DEFINER RPCs only when necessary, narrowly scoped, explicit search_path and explicit grants.
 - Critical posting through transactional PostgreSQL functions/server services rather than multi-step client writes.
 - No service-role or privileged key in browser/mobile code.

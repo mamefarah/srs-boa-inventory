@@ -1,0 +1,4 @@
+ALTER TABLE "idempotency_records" DROP CONSTRAINT "idempotency_records_key_length";--> statement-breakpoint
+ALTER TABLE "policy_versions" DROP CONSTRAINT "policy_versions_active_requires_verified_evidence";--> statement-breakpoint
+ALTER TABLE "idempotency_records" ADD CONSTRAINT "idempotency_records_key_length" CHECK (length("idempotency_records"."idempotency_key") BETWEEN 16 AND 200);--> statement-breakpoint
+ALTER TABLE "policy_versions" ADD CONSTRAINT "policy_versions_active_requires_verified_evidence" CHECK ("policy_versions"."status" <> 'ACTIVE' OR ("policy_versions"."evidence_status" = 'VERIFIED' AND length(btrim(coalesce("policy_versions"."source_evidence_ref", ''))) > 0 AND "policy_versions"."value" IS NOT NULL AND "policy_versions"."effective_from" IS NOT NULL));
