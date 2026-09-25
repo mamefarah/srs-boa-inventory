@@ -29,6 +29,20 @@
       "when": 1790302109867,
       "tag": "0003_m1_access_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790302865974,
+      "tag": "0004_m2_item_master",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790302871830,
+      "tag": "0005_m2_item_master_security",
+      "breakpoints": true
     }
   ]
 }
