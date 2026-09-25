@@ -1,0 +1,27 @@
+import { z } from 'zod';
+
+/** Positive database integer id supplied as a string (query/path). */
+export const idParam = z
+  .string()
+  .regex(/^[1-9][0-9]{0,9}$/, 'must be a positive integer')
+  .transform(Number)
+  .refine((n) => n <= 2_147_483_647, 'out of range');
+
+export const limitParam = (max: number, fallback: number) =>
+  z
+    .string()
+    .regex(/^[1-9][0-9]{0,4}$/, 'must be a positive integer')
+    .transform(Number)
+    .refine((n) => n <= max, `must be <= ${max}`)
+    .optional()
+    .transform((n) => n ?? fallback);
+
+export const offsetParam = z
+  .string()
+  .regex(/^(0|[1-9][0-9]{0,6})$/, 'must be a non-negative integer')
+  .transform(Number)
+  .optional()
+  .transform((n) => n ?? 0);
+
+/** Reason text required for administrative changes (recorded in the audit trail). */
+export const reasonField = z.string().trim().min(5, 'reason must be at least 5 characters').max(500);
