@@ -1,54 +1,228 @@
-# Implementation Roadmap
+# Implementation Roadmap — v3.1
 
-Security, authorization, RLS, concurrency, idempotency and negative tests are cross-cutting requirements in every applicable milestone.
+Security, authorization, warehouse scope, RLS, concurrency, idempotency, hard-copy evidence linkage and negative tests are cross-cutting requirements in every applicable milestone.
 
-## M0 — Procedure Validation
-Collect authoritative procedures/forms, interview stakeholders, complete OFFICIAL_PROCESS_MAPPING, decide funding segregation, base-UOM/conversion policy and durable-property handoff.
+The roadmap is implemented one milestone at a time. A milestone is not started until the previous milestone is merged and the next branch is created from updated `main`.
 
-## M1 — Foundation
-React/Vite client shell, Express API, PostgreSQL migrations, Firebase identity, role/permission/warehouse-scope foundation, CI, baseline deny-by-default security tests and direct-write guardrails (ADR-0003/0004).
+## M0 — Procedure / Evidence Configuration — ONGOING IN PARALLEL
 
-## M2 — Item & Warehouse Master
-Warehouses/locations, item categories, item master, authoritative base UOM, controlled conversions if validated, funding/project masters, duplicate prevention.
+Continue:
+- regional directive/form acquisition;
+- BoA/BoFED operational confirmation;
+- project-specific financing/PIM/FM controls;
+- item-specific UOM/package evidence;
+- regional override configuration.
 
-## M3 — Opening Balance
-Migration-batch workflow, validated import, transaction/entries ledger foundation, reconciliation and locking.
+Under PRD v3.1, M0 is no longer a blanket development blocker when a current federal property/stock fallback exists.
 
-## M4 — Receipt & Inspection
-Physical pending-inspection custody, acceptance/rejection, rejected-pending-return handling, posting and evidence.
+Hard-copy signed government evidence remains official supporting documentation. BoA-IMS does not implement legal digital signatures.
 
-## M5 — Requisition & Approval
-Request, review, scoped approval, commitment engine and available-to-promise.
+## M1 — Foundation / Security — COMPLETE
 
-## M6 — Issue
-Commitment consumption, FEFO, issue posting, custody/consumption destination and acknowledgement.
+Implemented:
+- React/Vite client shell;
+- Express/TypeScript API;
+- PostgreSQL migrations;
+- Firebase identity;
+- RBAC/permissions;
+- warehouse scope;
+- RLS;
+- audit/idempotency foundation;
+- CI;
+- direct-write guardrails.
+
+## M2 — Item Master / UOM — COMPLETE
+
+Implemented:
+- warehouses/locations foundation;
+- item categories;
+- item master;
+- authoritative base UOM;
+- quantity precision;
+- duplicate controls;
+- controlled conversions;
+- funding/project masters.
+
+Alternate/package conversion requires approved item-specific evidence; no guessed factor.
+
+## M3 — Opening Balance — COMPLETE
+
+Implemented:
+- migration-batch workflow;
+- source/hard-copy sign-off reference;
+- maker-checker;
+- validated import;
+- immutable opening posting;
+- reconciliation;
+- shared posting lock order;
+- idempotency;
+- concurrency hardening.
+
+## M4 — Receipt + Inspection — NEXT
+
+Build:
+- reusable hard-copy document-reference model;
+- receipt/delivery header and lines;
+- Model 19/GRN default reference plus SRV/delivery/invoice/PO/inspection references;
+- physical arrival / pending-inspection custody;
+- inspection;
+- acceptance/rejection/quarantine/damage;
+- supplier-return traceability;
+- batch/expiry/serial capture where required;
+- atomic ledger posting and reconciliation.
+
+No legal digital-signature feature. Digital attachment upload is optional and does not block M4.
+
+## M5 — Requisition + Approval + Optional Commitment
+
+Build:
+- requisition;
+- hard-copy requisition/approval reference;
+- neutral technical approval workflow;
+- optional commitment engine;
+- available-to-promise;
+- release/cancel/partial fulfillment.
+
+Project restrictions are enforced only from controlling project evidence.
+
+## M6 — Issue + Custody Handoff
+
+Build:
+- issue-voucher/reference capture;
+- commitment fulfillment;
+- stock selection;
+- issue posting;
+- recipient acknowledgement data;
+- EXTERNAL vs INTERNAL_CUSTODY destination;
+- property/custodian/location handoff.
 
 ## M7 — Warehouse Transfer
-Transfer commitment, dispatch, in-transit, destination receipt, damaged-in-transit and discrepancy handling.
 
-## M8 — Returns & Conditions
-Return-to-source linkage, quarantine/damage/expiry/rejected condition changes.
+Build:
+- transfer request/commitment;
+- source dispatch;
+- `IN_TRANSIT`;
+- destination receipt;
+- damage/discrepancy preservation;
+- transfer/gate-pass/receipt hard-copy references.
+
+Use current federal property procedure as fallback where regional detail is unavailable.
+
+## M8 — Returns + Conditions
+
+Build:
+- return-to-source linkage;
+- return inspection;
+- quarantine/damage/expiry/unserviceable conditions;
+- balanced condition reclassification;
+- custody-safe partial return controls.
 
 ## M9 — Physical Count
-Blind count, cutoff, recount, variance workflow.
 
-## M10 — Adjustments & Reversals/Corrections
-Controlled quantity corrections, safe direct reversal rules and current-period compensating corrections.
+Build:
+- annual verification;
+- optional blind-count mode;
+- non-blind mode;
+- cutoff;
+- count/recount;
+- variance;
+- paper count-sheet reference;
+- no automatic stock change from variance.
 
-## M11 — Period Close
-Reconciliation checklist, close/lock and exceptional reopen.
+## M10 — Adjustment + Reversal / Correction
 
-## M12 — Batch/Expiry/Serial
-Specialized controls and near-expiry alerting.
+Build:
+- variance adjustment;
+- hard-copy investigation/approval reference;
+- direct reversal when safe;
+- compensating/current-period correction when reversal is unsafe;
+- correction path for M3/M4/M6 errors;
+- no historical UPDATE/DELETE.
 
-## M13 — Disposal
-Hold/authorization, evidence and terminal disposition.
+## M11 — Period Close / Reopen
 
-## M14 — Reports & Dashboard
-Operational/management reports, commitments, available-to-promise, warehouse/logistics/custody distinctions and exports.
+Build:
+- periods;
+- reconciliation checklist;
+- close/lock;
+- posting rejection into closed periods;
+- exceptional reopen;
+- paper authority/reference;
+- retrofit period checks into earlier posting functions.
 
-## M15 — Final Security Assurance & Pilot Hardening
-Independent threat-model review, RLS/grant review, negative tests, dependency/secret review, backup/restore and production-readiness assurance. This milestone verifies controls already built earlier; it does not introduce security for the first time.
+## M12 — Advanced Batch / Expiry / Serial
+
+Core dimensions already flow through earlier workflows. M12 adds:
+- advanced tracking/lifecycle views;
+- near-expiry alerts;
+- serial history;
+- FEFO decision support;
+- exception reports.
+
+## M13 — Disposal + Deletion / Write-off
+
+Build separate workflows:
+- disposal;
+- deletion/write-off/loss;
+- valuation/evidence;
+- hard-copy committee/approval refs;
+- terminal exit;
+- proceeds/accounting refs where applicable.
+
+Use current federal property/hazardous-property procedure as fallback where regional/sector detail is unavailable; preserve provenance and override.
+
+## M14 — Reports + Dashboard
+
+Build ledger-derived:
+- stock/on-hand;
+- in-transit;
+- internal custody;
+- stock card/bin card;
+- receipts/issues/transfers/returns;
+- commitment/ATP;
+- counts/adjustments;
+- expiry/condition;
+- disposal/deletion;
+- funding/project;
+- document/evidence;
+- audit and exception reporting.
+
+## M15 — Security Assurance + Pilot Hardening
+
+Perform:
+- independent threat/RLS/grant review;
+- privilege-escalation testing;
+- audit-writer hardening;
+- DBA tamper-evidence strategy;
+- CSP;
+- shared rate limiting/WAF strategy;
+- dependency/secret review;
+- performance/load testing;
+- backup/restore rehearsal;
+- browser/device verification.
+
+No unresolved CRITICAL/HIGH technical defect before PASS.
 
 ## M16 — Pilot Readiness
-Two-warehouse pilot, training, opening count, UAT, reconciliation, rollback/support plan.
+
+Prepare:
+- two-warehouse pilot;
+- final user/warehouse/role configuration;
+- hard-copy filing responsibilities;
+- UAT;
+- Android workflow verification;
+- training;
+- admin/warehouse guides;
+- deployment/migration/backup runbooks;
+- incident/support/rollback plan;
+- pilot readiness report.
+
+## Minimum operational pilot core
+
+Before substantial real-stock use, complete at least:
+
+M1 → M10 + basic reports/audit + backup/restore.
+
+M11 is strongly recommended before fiscal-period operational reliance.
+
+M12/M13 may be limited by pilot item categories, provided unsupported processes remain explicitly gated.
