@@ -1313,19 +1313,32 @@ BEGIN
   PERFORM 1 FROM public.condition_codes WHERE code='REJECTED_PENDING_RETURN' AND is_active FOR SHARE;
 
   FOR v_line IN
-    SELECT sl.id,sl.quantity,rl.*
-      FROM public.supplier_return_lines sl JOIN public.receipt_lines rl ON rl.id=sl.receipt_line_id
-     WHERE sl.supplier_return_id=p_return_id ORDER BY sl.line_no
+    SELECT
+      sl.receipt_line_id,
+      sl.quantity AS return_quantity,
+      rl.line_no AS receipt_line_no,
+      rl.item_id,
+      rl.rejected_quantity,
+      rl.warehouse_location_id,
+      rl.batch_ref,
+      rl.expiry_date,
+      rl.serial_ref,
+      rl.funding_source_id,
+      rl.project_id
+    FROM public.supplier_return_lines sl
+    JOIN public.receipt_lines rl ON rl.id=sl.receipt_line_id
+    WHERE sl.supplier_return_id=p_return_id
+    ORDER BY sl.line_no
   LOOP
     IF v_line.rejected_quantity <= 0 THEN
-      RAISE EXCEPTION 'BOA_SUPPLIER_RETURN_INVALID: receipt line % has no rejected quantity', v_line.line_no USING ERRCODE = 'BA022';
+      RAISE EXCEPTION 'BOA_SUPPLIER_RETURN_INVALID: receipt line % has no rejected quantity', v_line.receipt_line_no USING ERRCODE = 'BA022';
     END IF;
     SELECT coalesce(sum(sl2.quantity),0) INTO v_prior
       FROM public.supplier_return_lines sl2
       JOIN public.supplier_return_headers h2 ON h2.id=sl2.supplier_return_id
      WHERE sl2.receipt_line_id=v_line.receipt_line_id AND h2.status='POSTED' AND h2.id<>p_return_id;
-    IF v_line.quantity > v_line.rejected_quantity - v_prior THEN
-      RAISE EXCEPTION 'BOA_REJECTED_OVER_RETURN: requested return exceeds rejected quantity remaining for receipt line %', v_line.line_no
+    IF v_line.return_quantity > v_line.rejected_quantity - v_prior THEN
+      RAISE EXCEPTION 'BOA_REJECTED_OVER_RETURN: requested return exceeds rejected quantity remaining for receipt line %', v_line.receipt_line_no
         USING ERRCODE = 'BA023';
     END IF;
 
@@ -1341,8 +1354,8 @@ BEGIN
        AND e.serial_ref IS NOT DISTINCT FROM v_line.serial_ref
        AND e.funding_source_id IS NOT DISTINCT FROM v_line.funding_source_id
        AND e.project_id IS NOT DISTINCT FROM v_line.project_id;
-    IF v_available < v_line.quantity THEN
-      RAISE EXCEPTION 'BOA_REJECTED_OVER_RETURN: insufficient rejected stock currently held for receipt line %', v_line.line_no
+    IF v_available < v_line.return_quantity THEN
+      RAISE EXCEPTION 'BOA_REJECTED_OVER_RETURN: insufficient rejected stock currently held for receipt line %', v_line.receipt_line_no
         USING ERRCODE = 'BA023';
     END IF;
   END LOOP;
