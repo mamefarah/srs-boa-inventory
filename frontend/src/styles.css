@@ -72,3 +72,6 @@ table.data th, table.data td { text-align: left; padding: calc(var(--space) * 2)
 .badge.status-approved { border-width: 2px; }
 .badge.status-posted { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
 .badge.status-cancelled { text-decoration: line-through; }
+
+.badge.status-arrived { border-style: double; border-width: 3px; }
+.badge.status-inspected { border-width: 2px; background: var(--surface); }
