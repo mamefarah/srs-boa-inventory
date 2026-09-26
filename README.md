@@ -4,20 +4,24 @@ A centralized, auditable inventory-control system for the **Somali Regional Stat
 
 ## Status
 
-**M1 foundation/security consolidation (in review).** No inventory posting exists yet (`POST /api/post-transaction` returns 501). No production database or deployment is authorized. See `docs/DEVELOPMENT_STATE.md`.
+**M1 Foundation/Security, M2 Item Master/UOM and M3 Opening Balance are merged. M4 Receipt + Inspection is next.** Opening balance is the first implemented immutable stock-posting workflow. No production deployment is authorized. See `docs/DEVELOPMENT_STATE.md`.
 
 ## Core principles
 
 - One Bureau, multiple warehouses, one item master.
-- The inventory movement ledger is authoritative.
-- No direct editing of stock balances.
-- Posted transactions are immutable; corrections use reversals.
-- Internal transfers conserve total Bureau inventory.
-- Receiving uses inspection/acceptance before stock becomes available.
-- Approved requisitions reserve stock before issue.
-- Blind physical counts and controlled adjustments are required.
+- PostgreSQL is authoritative for inventory, workflow, policy configuration and audit.
+- Firebase Authentication is identity only.
+- The immutable inventory movement ledger is authoritative; no direct editable stock balance exists.
+- Posted transactions are immutable; corrections use reversal/compensating transactions.
+- Internal movements conserve quantity.
+- Custody/location and condition are separate dimensions.
+- Commitments are optional/configurable controls and never change physical on-hand.
+- At least annual physical verification is mandatory; blind count is an optional system control unless an applicable rule requires it.
 - Authorization is enforced server/database side, not by hidden UI.
-- Official Somali Region property/store procedures override generic assumptions.
+- Required official signed source documents remain in hard copy for government filing/audit; BoA-IMS records their references and electronic workflow/audit.
+- BoA-IMS does not implement or claim legal digital signatures.
+- Current Somali Regional/BoA rules take precedence. Where procedural detail is unavailable, current official federal property/stock procedure may be configured as a documented fallback with federal provenance and later regional override.
+- Project/donor restrictions and item-specific UOM conversions are never invented.
 
 ## Repository map
 
@@ -83,4 +87,6 @@ Use `npm run dev:server` or `npm run dev:web` to start only one side. `npm ci` i
 
 ## Development rule
 
-Controlled documents (`docs/CONTROLLED_DOCUMENTS.md`) govern. Work on one milestone branch at a time; merging to `main`, production deployment and production database changes are separate human gates (see `CLAUDE.md`).
+Controlled documents (`docs/CONTROLLED_DOCUMENTS.md`) govern. The v3.1 baseline preserves a hybrid evidence model: hard-copy official evidence + electronic inventory/workflow/audit. Work on one milestone branch at a time; merging to `main`, production deployment and production database changes are separate human gates (see `CLAUDE.md`).
+
+The next milestone after this governance synchronization is **M4 Receipt + Inspection** on a fresh branch from updated `main`.
