@@ -37,11 +37,17 @@
 ## Workflow acceptance scenarios
 
 ### Receipt
-100 delivered into pending inspection; 95 accepted, 5 rejected:
+Source-authorized quantity 100, physical delivery 100 into pending inspection; 95 accepted, 5 rejected:
+- delivery variance = matched;
 - pending inspection returns to 0;
 - WH usable +95;
 - rejected pending return +5;
-- available-to-promise increases only 95.
+- available-to-promise increases only 95 when M5 ATP exists.
+
+Delivery-variance variants:
+- source-authorized 100, delivered 97 → short 3; only 97 may enter physical custody;
+- source-authorized 100, delivered 103 → over-delivered 3; only the actual 103 enters pending inspection and inspection/authorization determines its disposition;
+- no source-authorized quantity → variance is not assessed; the system must not invent one.
 
 ### Supplier return
 5 rejected items physically returned:
@@ -130,6 +136,8 @@ Applicable workflows must test:
 - policy-source provenance for federal fallback configuration;
 - later regional override without rewriting posted historical evidence;
 - no guessed UOM conversion;
+- source-authorized/expected receipt quantity is optional, UOM-validated and documentary only;
+- cross-warehouse concurrent arrival of the same serial cannot create duplicate Bureau custody;
 - project-specific restriction only when controlling project evidence is configured.
 
 ## UI testing
