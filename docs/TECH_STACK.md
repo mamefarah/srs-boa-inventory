@@ -11,7 +11,7 @@ This document records direction, not frozen versions. Version-specific implement
 - Package manager: npm (`package-lock.json` only)
 - Tests: Node test runner + supertest against a freshly migrated PostgreSQL; Playwright for browser/E2E later
 - GitHub Actions CI with ephemeral PostgreSQL
-- Attachment storage and hosting: to be decided by ADR (before M4 and M16 respectively)
+- Optional attachment storage may be decided later if operationally required; it does not block M4 because signed hard-copy evidence remains externally filed and BoA-IMS captures first-class document references (ADR-0008). Hosting remains to be decided by ADR before M16.
 
 ## Architecture principle
 
@@ -24,6 +24,7 @@ Keep business truth in PostgreSQL. The client requests state transitions; it doe
 - offline synchronization architecture;
 - barcode/QR library;
 - formal valuation method;
+- optional attachment/object-storage implementation, if later required;
 - integration with asset/accounting/procurement systems.
 
 Record material decisions in ADRs.
