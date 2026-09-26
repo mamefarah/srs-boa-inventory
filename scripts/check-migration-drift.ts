@@ -24,10 +24,15 @@ try {
     cfg,
     `import { defineConfig } from 'drizzle-kit';\nexport default defineConfig({ schema: './server/db/schema.ts', out: ${JSON.stringify('./' + outRel)}, dialect: 'postgresql' });\n`,
   );
-  const output = execFileSync('npx', ['drizzle-kit', 'generate', '--config', cfg, '--name', 'drift_probe'], {
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  const drizzleCli = path.resolve('node_modules', 'drizzle-kit', 'bin.cjs');
+  const output = execFileSync(
+    process.execPath,
+    [drizzleCli, 'generate', '--config', cfg, '--name', 'drift_probe'],
+    {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
   const noChanges = /No schema changes/i.test(output);
   if (!noChanges || countSql() !== before) {
     process.stderr.write(output + '\n');

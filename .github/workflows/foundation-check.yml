@@ -18,16 +18,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bad="$(git ls-files | grep -E '(^|/)(\.env($|\.)|.*\.(pem|key|p12|pfx|jks|keystore)$)' | grep -v -E '(^|/)\.env\.example$' || true)"
+          bad="$(git ls-files | grep -E '(^|/)(\.env($|\.)|.*\.(pem|key|p12|pfx|jks|keystore)$)' | grep -v -E '(^|/)(\.env\.example|\.env\.development\.example|\.env\.local\.example)$' || true)"
           if [ -n "$bad" ]; then
             echo "Blocked sensitive-style tracked files:"
             echo "$bad"
             exit 1
           fi
 
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install (lockfile only)
+        run: npm ci
+
       - name: Content secret scan
-        shell: bash
-        run: bash scripts/secret-scan.sh
+        run: npm run secret-scan
 
       - name: Verify required foundation documents
         shell: bash

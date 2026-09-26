@@ -1,0 +1,45 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "BoA-IMS: Start Full System",
+      "type": "npm",
+      "script": "dev",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "BoA-IMS: Start API",
+      "type": "npm",
+      "script": "dev:server",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "BoA-IMS: Start Web",
+      "type": "npm",
+      "script": "dev:web",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "BoA-IMS: Typecheck",
+      "type": "npm",
+      "script": "typecheck",
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "BoA-IMS: Migration Drift Check",
+      "type": "npm",
+      "script": "db:check-drift",
+      "problemMatcher": []
+    },
+    {
+      "label": "BoA-IMS: Build",
+      "type": "npm",
+      "script": "build",
+      "group": "build",
+      "problemMatcher": ["$tsc"]
+    }
+  ]
+}

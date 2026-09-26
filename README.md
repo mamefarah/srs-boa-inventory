@@ -44,7 +44,7 @@ A centralized, auditable inventory-control system for the **Somali Regional Stat
 
 ## Developer setup
 
-Requirements: Node.js 22, npm, PostgreSQL 16 (local). npm is the only package manager.
+Requirements: Node.js 22 or newer, npm, and a local PostgreSQL 16 or newer server. PostgreSQL 18 is used by the current Windows development setup. npm is the only package manager.
 
 ```bash
 npm ci
@@ -57,13 +57,29 @@ npm run secret-scan
 
 `npm test` **drops and recreates** the database named by `TEST_SQL_DB_NAME`, applies all migrations from zero, then runs the suite. It refuses to run unless `NODE_ENV=test`, `ALLOW_TEST_DATABASE_RESET=true`, the database and app-user names contain a `test` segment, and the host is local (see `scripts/test-db-guard.ts`). Export the `TEST_*` variables listed in `.env.example`, for example `TEST_SQL_DB_NAME=boa_ims_test` and `TEST_SQL_APP_USER=boa_ims_test_app`. The admin user needs `CREATEDB` and `CREATEROLE` on the local test cluster.
 
-### Running locally
+### Local development
 
-1. Create a development database and apply migrations with the owner identity: `SQL_HOST=… SQL_DB_NAME=… MIGRATION_SQL_USER=… npm run db:migrate`.
-2. Create a login for the API and `GRANT boa_ims_app TO <login>;`.
-3. Start the API: `NODE_ENV=development FIREBASE_PROJECT_ID=… SQL_USER=<login> … npm run dev:server`.
-4. Start the client: `VITE_FIREBASE_*=… npm run dev:web` (proxies `/api` to port 3000).
-5. Sign in once, then bootstrap the first technical administrator with `scripts/bootstrap-admin.ts` (owner credentials, audited).
+#### First-time setup
+
+1. Run `npm ci`.
+2. Start a local PostgreSQL server and create `boa_ims_dev` plus the LOGIN role `boa_ims_dev_app`. The login must be `NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS`.
+3. Apply committed migrations with temporary migration-owner credentials by running `npm run db:migrate`, then `GRANT boa_ims_app TO boa_ims_dev_app`. Never put migration-owner credentials in the runtime environment file.
+4. Copy `.env.development.example` to `.env.development.local` and enter only the local application-role password and Firebase project ID.
+5. Copy `frontend/.env.local.example` to `frontend/.env.local` and enter the Firebase Web App public client configuration.
+6. In Firebase Authentication, enable Google sign-in and confirm `localhost` is an authorized domain.
+7. Run `npm run dev:check`, then `npm run dev`.
+8. Sign in once and use `scripts/bootstrap-admin.ts` with temporary migration-owner credentials to bootstrap the first technical `SYSTEM_ADMIN`.
+
+Both local environment files are gitignored. The API development command explicitly loads `.env.development.local`; production startup does not load it. The Vite client loads `frontend/.env.local`. Do not add a service-account JSON file or Firebase Admin private key.
+
+#### Daily startup
+
+1. Open `D:\srs-boa-inventory` in VS Code.
+2. Ensure the local PostgreSQL service is running.
+3. Run `npm run dev` or the VS Code task **BoA-IMS: Start Full System**.
+4. Open `http://localhost:5173`.
+
+Use `npm run dev:server` or `npm run dev:web` to start only one side. `npm ci` is normally needed only for first setup or after `package-lock.json` changes. Vite proxies `/api` to `http://localhost:3000`, so broad development CORS is unnecessary.
 
 ## Development rule
 

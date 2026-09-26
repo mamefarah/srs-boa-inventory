@@ -11,6 +11,8 @@ test-results/
 .env
 .env.*
 !.env.example
+!.env.development.example
+!frontend/.env.local.example
 *.pem
 *.key
 *.p12
@@ -25,7 +27,8 @@ supabase/.temp/
 # editors/OS
 .DS_Store
 Thumbs.db
-.vscode/
+.vscode/*
+!.vscode/tasks.json
 .idea/
 
 # misc

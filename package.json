@@ -7,8 +7,10 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev:server": "tsx watch server/index.ts",
+    "dev": "node --import tsx scripts/dev.ts",
+    "dev:server": "node --watch --env-file=.env.development.local --import tsx server/index.ts",
     "dev:web": "vite --config frontend/vite.config.ts",
+    "dev:check": "node --env-file=.env.development.local --import tsx scripts/dev-check.ts",
     "build": "npm run typecheck && vite build --config frontend/vite.config.ts",
     "start": "NODE_ENV=production tsx server/index.ts",
     "typecheck": "tsc -p tsconfig.server.json && tsc -p frontend/tsconfig.json",
@@ -16,7 +18,7 @@
     "db:check-drift": "tsx scripts/check-migration-drift.ts",
     "db:migrate": "tsx scripts/migrate.ts",
     "test": "tsx scripts/test-db-reset.ts && node --import tsx --test --test-concurrency=1 'tests/**/*.test.ts'",
-    "secret-scan": "bash scripts/secret-scan.sh"
+    "secret-scan": "tsx scripts/secret-scan.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.3",
