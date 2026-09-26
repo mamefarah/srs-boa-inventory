@@ -58,6 +58,12 @@ export const USERS = {
   approverB: { uid: 'ob-approver-b', roles: ['OPENING_BALANCE_APPROVER'], warehouses: ['TWH-B'], active: true },
   bothA: { uid: 'ob-both-a', roles: ['OPENING_BALANCE_PREPARER', 'OPENING_BALANCE_APPROVER'], warehouses: ['TWH-A'], active: true },
   preparerB: { uid: 'ob-preparer-b', roles: ['OPENING_BALANCE_PREPARER'], warehouses: ['TWH-B'], active: true },
+  // M4 receipt/inspection (technical roles; paper signatory authority is separate).
+  receiptOpA: { uid: 'receipt-op-a', roles: ['RECEIPT_OPERATOR'], warehouses: ['TWH-A'], active: true },
+  receiptOpB: { uid: 'receipt-op-b', roles: ['RECEIPT_OPERATOR'], warehouses: ['TWH-B'], active: true },
+  receiptInspectorA: { uid: 'receipt-inspector-a', roles: ['RECEIPT_INSPECTOR'], warehouses: ['TWH-A'], active: true },
+  receiptInspectorB: { uid: 'receipt-inspector-b', roles: ['RECEIPT_INSPECTOR'], warehouses: ['TWH-B'], active: true },
+  receiptBothA: { uid: 'receipt-both-a', roles: ['RECEIPT_OPERATOR', 'RECEIPT_INSPECTOR'], warehouses: ['TWH-A'], active: true },
 } as const;
 
 export interface Fixture {
