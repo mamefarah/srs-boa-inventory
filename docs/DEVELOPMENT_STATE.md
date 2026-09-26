@@ -2,8 +2,8 @@
 
 > Working notes for engineers and agents. This file never outranks the controlled documents listed in `docs/CONTROLLED_DOCUMENTS.md`.
 
-**Updated:** 2026-09-26  
-**Controlled baseline target:** PRD v3.1 after merge of the governance synchronization PR.
+**Updated:** 2026-09-27  
+**Controlled baseline:** PRD v3.1, adopted on `main` by PR #14.
 
 ## Milestone status
 
@@ -14,20 +14,18 @@
 | M2 Item master/UOM | MERGED (PR #11) | Complete |
 | M3 Opening balance | MERGED (PR #12) | Complete |
 | Local developer tooling | MERGED (PR #13) | Windows/local dev helpers present on main |
-| **M4 Receipt + inspection** | **NEXT — not started** | Build from updated main after governance PR merge |
+| **M4 Receipt + inspection** | **IMPLEMENTED / IN REVIEW (draft PR #15)** | `claude/m4-receipt-inspection`; automated checks/REDTEAM hardening in progress |
 | M5–M16 | Planned | One milestone branch at a time |
 
 ## Current main baseline
 
-Current `main` at the start of this governance patch:
+Current `main` baseline used for M4:
 
-`21a00d5f163b30ef952cd238c65b26f383ed00d7`
+`cae6fa648478681724cb51564f120e73ea6c387d`
 
-That merge commit includes:
-- PR #13 developer tooling on the first-parent line;
-- PR #12 M3 opening balance.
+This includes PR #14 (PRD v3.1 governance synchronization), M3 PR #12 and developer tooling PR #13.
 
-## Migrations through M3
+## Migrations through M4 branch
 
 | File | Content |
 |---|---|
@@ -43,6 +41,8 @@ That merge commit includes:
 | `drizzle/0009_m3_opening_balance_security.sql` | opening permissions/RLS/guards/transitions/posting/reconciliation |
 | `drizzle/0010_m3_redteam_checks.sql` | contributor register and finite unit-cost control |
 | `drizzle/0011_m3_redteam_hardening.sql` | maker-checker, lock order, tracking/funding/SoD/PUBLIC fixes |
+| `drizzle/0012_m4_receipts.sql` | receipt/document-reference/supplier-return schema |
+| `drizzle/0013_m4_receipt_security.sql` | M4 permissions/RLS/guards/audit/transitions/posting/reconciliation |
 
 The staging/AI-Studio migration history is not the canonical upgrade path; canonical migrations above govern.
 
@@ -153,22 +153,29 @@ Use `docs/M0_BLOCKER_MATRIX.md` v3.1:
 - HB-8 is resolved for software design through multiple document references;
 - CG-2 is resolved by project scope (no legal digital-signature feature).
 
-## Next milestone — M4
+## M4 branch status
 
-Create a fresh branch from updated `main`, e.g.:
+Draft PR #15 currently implements:
+1. reusable hard-copy document references;
+2. receipt/delivery header and lines;
+3. Model 19/GRN plus multiple supporting document references;
+4. optional source-authorized/expected quantity with derived short/over-delivery;
+5. pending-inspection physical custody;
+6. inspection into usable/rejected/damaged/quarantine;
+7. rejected supplier return;
+8. batch/expiry/serial validation;
+9. atomic/idempotent posting and reconciliation;
+10. RLS/grant/direct-write controls;
+11. responsive receipt/inspection UI.
 
-`claude/m4-receipt-inspection`
+REDTEAM fixes made during review include:
+- isolated DB-denial tests so an expected PostgreSQL error cannot mask a second assertion;
+- stable UOM precision test independent of earlier M2 fixture mutation;
+- SECURITY DEFINER document guard for safe parent row locking while independently enforcing actor/scope;
+- document-parent lookup changed to caller/RLS context to prevent hidden warehouse inference;
+- concurrent same-serial arrival across warehouses tested under the shared serial lock;
+- delivery short/over variance represented without inventing stock.
 
-M4 should start with:
-1. reusable hard-copy document-reference model;
-2. receipt/delivery header + lines;
-3. Model 19/GRN default reference plus independent SRV/delivery/invoice/PO/inspection references;
-4. pending-inspection custody;
-5. inspection/accept/reject/quarantine;
-6. supplier-return traceability;
-7. required batch/expiry/serial capture;
-8. atomic/idempotent ledger posting;
-9. audit/reconciliation;
-10. browser/API/database/REDTEAM acceptance.
+### Next milestone
 
-Do not start M5 until M4 is merged.
+Do **not** start M5 until PR #15 is reviewed and merged. After M4 merge, create a fresh M5 branch from updated `main`.
