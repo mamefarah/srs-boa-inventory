@@ -2,90 +2,173 @@
 
 > Working notes for engineers and agents. This file never outranks the controlled documents listed in `docs/CONTROLLED_DOCUMENTS.md`.
 
-**Updated:** 2026-09-26
+**Updated:** 2026-09-26  
+**Controlled baseline target:** PRD v3.1 after merge of the governance synchronization PR.
 
 ## Milestone status
 
-| Milestone | Status | Branch |
+| Milestone | Status | Notes |
 |---|---|---|
-| M0 Procedure/legal validation | PARTIALLY VERIFIED (controlled docs v2.2) | merged |
-| M1 Foundation/security | Merged (PR #10) | — |
-| M2 Item master/UOM | Merged (PR #11) | — |
-| **M3 Opening balance** | **Implemented; in review** | `claude/m1-consolidation-security-n9puag` (session-designated branch, reset from `main` after PR #11) |
-| M4 Receipt + inspection | Not started. Blocked on M3 merge | — |
+| M0 Procedure/evidence configuration | OPERATIONALLY BASELINED; regional evidence enrichment continues | Federal fallback/configuration model in PRD v3.1 |
+| M1 Foundation/security | MERGED (PR #10) | Complete |
+| M2 Item master/UOM | MERGED (PR #11) | Complete |
+| M3 Opening balance | MERGED (PR #12) | Complete |
+| Local developer tooling | MERGED (PR #13) | Windows/local dev helpers present on main |
+| **M4 Receipt + inspection** | **NEXT — not started** | Build from updated main after governance PR merge |
+| M5–M16 | Planned | One milestone branch at a time |
 
-## Migrations
+## Current main baseline
+
+Current `main` at the start of this governance patch:
+
+`21a00d5f163b30ef952cd238c65b26f383ed00d7`
+
+That merge commit includes:
+- PR #13 developer tooling on the first-parent line;
+- PR #12 M3 opening balance.
+
+## Migrations through M3
 
 | File | Content |
 |---|---|
-| `drizzle/0000_m1_foundation.sql` | Generated from `server/db/schema.ts` (tables, constraints, indexes) |
-| `drizzle/0001_m1_security.sql` | Hand-written: `boa_ims_app` grants, append-only triggers, forced timestamps, RLS, policy gate, neutral roles/permissions, condition codes, HB-2 placeholder |
-| `drizzle/0002_m1_constraint_hardening.sql` | Generated: non-blank policy evidence; idempotency key length 16–200 |
-| `drizzle/0004_m2_item_master.sql` | Generated: item master fields, category hierarchy, UOM decimal places, conversions (gated), ledger quantity NUMERIC(20,6) with a no-rounding guard |
-| `drizzle/0005_m2_item_master_security.sql` | Hand-written: MASTER_DATA_STEWARD, write guard, code immutability/no delete, base-UOM lock, active references, master-data audit trigger, ledger precision and inactive-item guard, pg_trgm |
-| `drizzle/0006_m2_redteam_constraints.sql` | Generated + name-key function: NaN CHECK, Unicode-robust `name_key` uniqueness, single-script names |
-| `drizzle/0007_m2_redteam_hardening.sql` | Hand-written: ledger guard row locks, category hierarchy serialisation, column INSERT grants, visible-character reasons, in-use protection, conversion guard/audit |
-| `drizzle/0003_m1_access_hardening.sql` | Hand-written: audited SECURITY DEFINER admin functions, SoD trigger, admin-removal dual-control block, idempotency RLS and state machine, policy lifecycle, CONNECT revoked from PUBLIC |
-| `drizzle/0008_m3_opening_balance.sql` | Generated: opening balance batches and lines (workflow and maker-checker CHECKs, unconstrained validated line quantity), ledger `expiry_date` |
-| `drizzle/0009_m3_opening_balance_security.sql` | Hand-written: opening-balance permissions/roles, column grants, RLS, guard and audit triggers, SECURITY DEFINER submit/return/approve/cancel/post and reconciliation (ADR-0007) |
-| `drizzle/0010_m3_redteam_checks.sql` | Generated: `opening_balance_contributors`; unit cost must be finite on batch lines and ledger entries |
-| `drizzle/0011_m3_redteam_hardening.sql` | Hand-written REDTEAM fixes: contributor-based maker-checker, posting lock order (serial → (warehouse, item) → master rows FOR SHARE → validate), ledger tracking guard (BA020), tracking flags locked once posted (BA019), separation of duties re-checked on `role_permissions`, helper EXECUTE revoked from PUBLIC |
+| `drizzle/0000_m1_foundation.sql` | M1 base tables, constraints and indexes |
+| `drizzle/0001_m1_security.sql` | app grants, append-only controls, RLS, neutral roles/permissions, condition codes |
+| `drizzle/0002_m1_constraint_hardening.sql` | policy/idempotency constraints |
+| `drizzle/0003_m1_access_hardening.sql` | audited admin functions, SoD, idempotency/policy lifecycle, PUBLIC hardening |
+| `drizzle/0004_m2_item_master.sql` | item/UOM/category extensions, conversions, ledger precision |
+| `drizzle/0005_m2_item_master_security.sql` | master-data write guards/audit/base-UOM/active-reference controls |
+| `drizzle/0006_m2_redteam_constraints.sql` | NaN/name-key/Unicode hardening |
+| `drizzle/0007_m2_redteam_hardening.sql` | concurrency/in-use/conversion hardening |
+| `drizzle/0008_m3_opening_balance.sql` | opening-balance batches/lines and ledger expiry date |
+| `drizzle/0009_m3_opening_balance_security.sql` | opening permissions/RLS/guards/transitions/posting/reconciliation |
+| `drizzle/0010_m3_redteam_checks.sql` | contributor register and finite unit-cost control |
+| `drizzle/0011_m3_redteam_hardening.sql` | maker-checker, lock order, tracking/funding/SoD/PUBLIC fixes |
 
-The migration baseline was re-created for the canonical repository. Any AI Studio development database built from the staging migrations must be **recreated**, not upgraded.
+The staging/AI-Studio migration history is not the canonical upgrade path; canonical migrations above govern.
 
-## How M1 is verified
+## Verification model
 
-- `npm run typecheck`: server, scripts, tests and web client (strict TS).
-- `npm run db:check-drift`: the schema is fully captured by the committed migrations.
-- `npm test`: drops and recreates the guarded test database, migrates from zero, then runs unit, database, idempotency and HTTP suites as a non-superuser application role.
-- `npm run secret-scan`, `npm audit --audit-level=high`, `vite build`.
-- CI job `application-checks` runs all of the above on ephemeral PostgreSQL 16.
+Standard milestone acceptance uses:
 
-## Known technical debt (tracked; not M1 blockers)
+- `npm run typecheck`;
+- `npm run db:check-drift`;
+- `npm test` against the guarded isolated test DB;
+- `npm run build`;
+- `npm run secret-scan`;
+- `git diff --check`;
+- database/RLS/direct-write negative tests;
+- concurrency/idempotency tests where applicable;
+- browser/manual workflow verification where applicable.
+
+CI runs the repository application checks against ephemeral PostgreSQL.
+
+## Binding M3 architecture for M4+
+
+### Posting path controls
+
+M3 establishes the first production-style stock posting pattern.
+
+Every later stock-posting function must preserve the binding lock order from ADR-0007:
+
+1. serial-item lock where relevant;
+2. per-(warehouse, item) advisory lock;
+3. referenced master rows `FOR SHARE`;
+4. validation;
+5. ledger posting.
+
+Quantity input must be validated before constrained `NUMERIC(20,6)` casting (ADR-0005).
+
+Use shared low-level primitives, but keep each business workflow explicit rather than creating one over-general posting engine.
+
+### Opening balance
+
+`boa_ob_post` is the only M3 opening-balance ledger writer.
+
+The M3 REDTEAM fixes include:
+- contributor-based maker-checker;
+- master-data locking;
+- cross-warehouse serial concurrency;
+- finite unit-cost control;
+- project/funding consistency;
+- separation-of-duties recheck;
+- helper EXECUTE hardening.
+
+Accepted residual risks remain documented in ADR-0007.
+
+## v3.1 governance decisions affecting M4+
+
+### Hard-copy/electronic evidence
+
+- Required signed government source documents remain hard copy for official filing/audit.
+- BoA-IMS records full document references and electronic workflow/audit.
+- System actor and paper signatory are separate.
+- No legal digital-signature feature.
+- Optional scanned attachments do not block M4.
+
+### Federal fallback
+
+Where current regional procedural detail is unavailable:
+- use current official federal property/stock procedure as a documented configurable fallback;
+- retain federal provenance;
+- allow later regional override;
+- never rewrite posted history because policy later changes.
+
+Current examples:
+- Directive 1095/2025 fixed-asset fallback;
+- current federal property/stock procedure for transfer/adjustment/disposal detail;
+- 2026 federal hazardous-property guidance where no more specific sector/regional rule exists.
+
+### Remaining non-generalizable controls
+
+- project/donor stock restrictions require controlling project evidence;
+- UOM/package conversions require approved item-specific evidence.
+
+## Known technical debt / future hardening
 
 | Item | Target |
 |---|---|
-| Six moderate `npm audit` advisories (`uuid` via `firebase-admin` → `@google-cloud/storage`; code path unused; no non-breaking fix) | Re-check on each dependency update; M15 |
-| Tamper-evidence against privileged DBAs (audit hash chain / external log shipping) | M15 |
-| Rate limiting is per process (in-memory); a shared limiter or WAF is needed for multi-instance deployment | M15 |
-| Content-Security-Policy for the SPA | M15 |
-| Audit rows are inserted by the application role directly. A single SECURITY DEFINER audit writer would limit forgery by stolen app credentials. M3 opening-balance events are written by SECURITY DEFINER triggers, but the M1 `INSERT` grant on `audit_events` remains | M4 (revoke once all writers are triggers/functions) |
-| Ledger legs without a warehouse (IN_TRANSIT/EXTERNAL/contra) are visible only with global scope | M7 |
-| Item aliases/alternate names for search (UX_PATTERNS §4) | M2 follow-up / M4 |
-| Browser verification of the item master UI against a real Firebase project | Before pilot (M16), earlier when a dev Firebase project exists |
-| Attachment storage ADR | Before M4 |
-| Hosting/deployment ADR, backup/restore test | Before M16 |
+| Moderate transitive dependency advisories | Re-check regularly; M15 |
+| Privileged-DBA tamper evidence / external audit-log protection | M15 |
+| In-memory rate limiting for multi-instance production | M15 |
+| SPA Content-Security-Policy | M15 |
+| Generic M1 app-role audit insertion capability; migrate toward narrow controlled writers as workflows land | M4+ / M15 |
+| Non-warehouse ledger-leg visibility for IN_TRANSIT/EXTERNAL/contra | M7 |
+| Item aliases/alternate names | future master-data follow-up |
+| M3 browser/mobile verification is not documented as completed in PR #12 | before pilot / re-verify during later end-to-end testing |
+| Optional attachment storage architecture | only when attachment feature is actually required |
+| Hosting/deployment ADR + backup/restore rehearsal | before M16 |
+| Period checks must be retrofitted into earlier posting functions | M11 |
+| Operational correction path for erroneous posted opening/receipts/issues | M10 |
 
-## Open policy blockers (unchanged by M1)
+## Policy/configuration state
 
-HB-1 … HB-8 and CG-1 … CG-3, per `docs/M0_BLOCKER_MATRIX.md`. M1 seeds no real approval authority. The fixed-asset threshold exists only as a `DISABLED`/`UNVERIFIED` placeholder with no value.
+Do not use the old statement “HB-1 through HB-8 and CG-1 through CG-3 are all hard blockers.”
 
-**NEEDS POLICY/PROCEDURE CONFIRMATION (HB-4):**
-- A single technical administrator can still activate a *second, non-admin* identity they control and grant it read roles. Every step is audited with the acting administrator, and the database prevents one identity from being both administrator and data reader. Prevention needs a dual-control rule for sensitive grants, which belongs to the Bureau approval/segregation matrix and is not invented here.
-- Removing or deactivating an administrator is blocked in the application (`ADMIN_CHANGE_REQUIRES_DUAL_CONTROL`). Until HB-4 defines who may approve it, it is a reviewed, owner-run database procedure with an audit row.
+Use `docs/M0_BLOCKER_MATRIX.md` v3.1:
 
-## M3 notes
+- federal fallback available for several procedural gaps;
+- HB-3 remains project-specific;
+- CG-1 remains item-specific;
+- HB-4/HB-7 are configuration gaps, not development blockers;
+- HB-8 is resolved for software design through multiple document references;
+- CG-2 is resolved by project scope (no legal digital-signature feature).
 
-- Posting path: `boa_ob_post` is the only function that writes opening balances to the ledger. It takes locks in this order, each in ascending item order:
-  1. serial locks (`boa_serial_lock_key`);
-  2. per-(warehouse, item) advisory locks;
-  3. `FOR SHARE` on the referenced master rows;
-  then validates.
-  **Binding for M4+:** every stock-posting function must use the same order (ADR-0007).
-- REDTEAM M3 (database-security-reviewer), all fixed with regression tests:
-  - H1: an approver who edited the lines could approve them;
-  - M1: master data could change between validation and the ledger insert;
-  - M2: the same serial could be posted in two warehouses;
-  - L1: infinite unit costs were accepted;
-  - L2: a project's funding source could change after approval;
-  - L3: separation of duties was checked only on role assignment.
+## Next milestone — M4
 
-  Accepted residual risks are listed in ADR-0007. A mutation check confirmed each new test fails without its fix.
-- Open M2 gap closed here: an item's batch/expiry/serial tracking flags can no longer change once it has ledger entries.
-- **NEEDS POLICY/PROCEDURE CONFIRMATION (HB-4):** who may approve an opening balance. `OPENING_BALANCE_APPROVER` is a technical role; the approver must record the external sign-off reference and cannot be anyone who created, edited or submitted the batch.
-- Closed periods do not exist yet (HB-7). Opening posting will need the period check when period close lands.
-- Browser verification of the opening-balance screens is pending a dev Firebase project (as for M2).
+Create a fresh branch from updated `main`, e.g.:
 
-## Next milestone
+`claude/m4-receipt-inspection`
 
-M4 Receipt + inspection after M3 is approved and merged. Carry-overs: the shared (warehouse, item) advisory-lock scheme, pre-cast quantity validation (ADR-0005 §6), item-scoped reversal exemptions (ADR-0006 L5), and GRN/SRV labels kept configurable (HB-8).
+M4 should start with:
+1. reusable hard-copy document-reference model;
+2. receipt/delivery header + lines;
+3. Model 19/GRN default reference plus independent SRV/delivery/invoice/PO/inspection references;
+4. pending-inspection custody;
+5. inspection/accept/reject/quarantine;
+6. supplier-return traceability;
+7. required batch/expiry/serial capture;
+8. atomic/idempotent ledger posting;
+9. audit/reconciliation;
+10. browser/API/database/REDTEAM acceptance.
+
+Do not start M5 until M4 is merged.
