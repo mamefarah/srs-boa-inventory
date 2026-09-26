@@ -331,15 +331,32 @@ function ReceiptDetail({ id, can, onClose, onOpenReturn }: { id: number; can: Ca
 function DocumentTable({ documents }: { documents: DocumentReference[] }) {
   if (!documents.length) return <p>{t('receiptNoDocuments')}</p>;
   return (
-    <table className="data"><thead><tr><th>{t('receiptDocumentType')}</th><th>{t('receiptDocumentNo')}</th><th>{t('receiptDocumentDate')}</th><th>{t('receiptPaperApprover')}</th><th>{t('receiptPhysicalFile')}</th></tr></thead>
-      <tbody>{documents.map((d) => <tr key={d.id}><td data-label={t('receiptDocumentType')}>{d.documentType}</td><td data-label={t('receiptDocumentNo')}>{d.documentNumber}</td><td data-label={t('receiptDocumentDate')}>{d.documentDate}</td><td data-label={t('receiptPaperApprover')}>{[d.approvedByName, d.approvedByTitle].filter(Boolean).join(' · ') || '—'}</td><td data-label={t('receiptPhysicalFile')}>{d.physicalFileRef ?? '—'}</td></tr>)}</tbody>
+    <table className="data"><thead><tr><th>{t('receiptDocumentType')}</th><th>{t('receiptDocumentNo')}</th><th>{t('receiptDocumentDate')}</th><th>{t('receiptSourceUnit')}</th><th>{t('receiptPaperActors')}</th><th>{t('receiptPhysicalFile')}</th></tr></thead>
+      <tbody>{documents.map((d) => <tr key={d.id}>
+        <td data-label={t('receiptDocumentType')}>{d.documentType}</td>
+        <td data-label={t('receiptDocumentNo')}>{d.documentNumber}</td>
+        <td data-label={t('receiptDocumentDate')}>{d.documentDate}</td>
+        <td data-label={t('receiptSourceUnit')}>{d.sourceUnit ?? '—'}</td>
+        <td data-label={t('receiptPaperActors')}>{[
+          d.preparedByName && `${t('receiptPreparedBy')}: ${[d.preparedByName,d.preparedByTitle].filter(Boolean).join(' · ')}`,
+          d.checkedByName && `${t('receiptCheckedBy')}: ${[d.checkedByName,d.checkedByTitle].filter(Boolean).join(' · ')}`,
+          d.approvedByName && `${t('receiptPaperApprover')}: ${[d.approvedByName,d.approvedByTitle].filter(Boolean).join(' · ')}`,
+          d.recipientName && `${t('receiptRecipient')}: ${[d.recipientName,d.recipientTitle].filter(Boolean).join(' · ')}`,
+        ].filter(Boolean).join(' | ') || '—'}</td>
+        <td data-label={t('receiptPhysicalFile')}>{d.physicalFileRef ?? '—'}</td>
+      </tr>)}</tbody>
     </table>
   );
 }
 
 function DocumentForm({ path, onAdded }: { path: string; onAdded: () => void }) {
   const today = new Date().toISOString().slice(0, 10);
-  const [f, setF] = useState({ documentType: 'MODEL_19_GRN', documentNumber: '', documentDate: today, approvedByName: '', approvedByTitle: '', physicalFileRef: '' });
+  const [f, setF] = useState({
+    documentType: 'MODEL_19_GRN', documentNumber: '', documentDate: today, sourceUnit: '',
+    preparedByName: '', preparedByTitle: '', checkedByName: '', checkedByTitle: '',
+    approvedByName: '', approvedByTitle: '', recipientName: '', recipientTitle: '',
+    approvalDate: '', physicalFileRef: '', remarks: '',
+  });
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
   const submit = async (e: FormEvent) => {
@@ -347,9 +364,19 @@ function DocumentForm({ path, onAdded }: { path: string; onAdded: () => void }) 
     try {
       await api(path, { method: 'POST', body: {
         documentType: f.documentType, documentNumber: f.documentNumber, documentDate: f.documentDate,
-        approvedByName: f.approvedByName || null, approvedByTitle: f.approvedByTitle || null, physicalFileRef: f.physicalFileRef || null,
+        sourceUnit: f.sourceUnit || null,
+        preparedByName: f.preparedByName || null, preparedByTitle: f.preparedByTitle || null,
+        checkedByName: f.checkedByName || null, checkedByTitle: f.checkedByTitle || null,
+        approvedByName: f.approvedByName || null, approvedByTitle: f.approvedByTitle || null,
+        recipientName: f.recipientName || null, recipientTitle: f.recipientTitle || null,
+        approvalDate: f.approvalDate || null,
+        physicalFileRef: f.physicalFileRef || null, remarks: f.remarks || null,
       }});
-      setF({ ...f, documentNumber: '', approvedByName: '', approvedByTitle: '', physicalFileRef: '' }); onAdded();
+      setF({
+        ...f, documentNumber: '', sourceUnit: '', preparedByName: '', preparedByTitle: '',
+        checkedByName: '', checkedByTitle: '', approvedByName: '', approvedByTitle: '',
+        recipientName: '', recipientTitle: '', approvalDate: '', physicalFileRef: '', remarks: '',
+      }); onAdded();
     } catch (e) { setError(asError(e)); } finally { setBusy(false); }
   };
   return (
@@ -361,9 +388,18 @@ function DocumentForm({ path, onAdded }: { path: string; onAdded: () => void }) 
         </select></Field>
         <Field label="receiptDocumentNo"><input required maxLength={200} value={f.documentNumber} onChange={(e) => setF({ ...f, documentNumber: e.target.value })} /></Field>
         <Field label="receiptDocumentDate"><input required type="date" value={f.documentDate} onChange={(e) => setF({ ...f, documentDate: e.target.value })} /></Field>
+        <Field label="receiptSourceUnit"><input maxLength={200} value={f.sourceUnit} onChange={(e) => setF({ ...f, sourceUnit: e.target.value })} /></Field>
+        <Field label="receiptPreparedBy"><input maxLength={200} value={f.preparedByName} onChange={(e) => setF({ ...f, preparedByName: e.target.value })} /></Field>
+        <Field label="receiptPreparedByTitle"><input maxLength={200} value={f.preparedByTitle} onChange={(e) => setF({ ...f, preparedByTitle: e.target.value })} /></Field>
+        <Field label="receiptCheckedBy"><input maxLength={200} value={f.checkedByName} onChange={(e) => setF({ ...f, checkedByName: e.target.value })} /></Field>
+        <Field label="receiptCheckedByTitle"><input maxLength={200} value={f.checkedByTitle} onChange={(e) => setF({ ...f, checkedByTitle: e.target.value })} /></Field>
         <Field label="receiptPaperApprover"><input maxLength={200} value={f.approvedByName} onChange={(e) => setF({ ...f, approvedByName: e.target.value })} /></Field>
         <Field label="receiptPaperApproverTitle"><input maxLength={200} value={f.approvedByTitle} onChange={(e) => setF({ ...f, approvedByTitle: e.target.value })} /></Field>
+        <Field label="receiptRecipient"><input maxLength={200} value={f.recipientName} onChange={(e) => setF({ ...f, recipientName: e.target.value })} /></Field>
+        <Field label="receiptRecipientTitle"><input maxLength={200} value={f.recipientTitle} onChange={(e) => setF({ ...f, recipientTitle: e.target.value })} /></Field>
+        <Field label="receiptApprovalDate"><input type="date" value={f.approvalDate} onChange={(e) => setF({ ...f, approvalDate: e.target.value })} /></Field>
         <Field label="receiptPhysicalFile"><input maxLength={300} value={f.physicalFileRef} onChange={(e) => setF({ ...f, physicalFileRef: e.target.value })} /></Field>
+        <Field label="receiptDocumentRemarks"><textarea maxLength={1000} value={f.remarks} onChange={(e) => setF({ ...f, remarks: e.target.value })} /></Field>
       </fieldset>
       <button className="btn secondary" type="submit" disabled={busy}>{t('receiptAddDocument')}</button>
     </form>
