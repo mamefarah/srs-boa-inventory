@@ -20,8 +20,8 @@ Use this file to connect business rules to implementation and tests. Every criti
 | INV-018 | Transfer discrepancy | TBD | No disappearing variance | TBD | Planned |
 | INV-019 | Period close | TBD | Closed-period block | TBD | Planned |
 | INV-020 | Period reopen | TBD | Reopen authority/audit | TBD | Planned |
-| INV-022 | UOM | Composite FK entries(item_id, base_uom_id) → items | `tests/database.test.ts` non-base UOM rejected | TBD | M1 foundation |
-| INV-023 | UOM conversion | TBD | Invalid conversion blocked | TBD | Planned |
+| INV-022 | UOM | Composite FK entries(item_id, base_uom_id) → items; base-UOM lock trigger (ADR-0006); NUMERIC(20,6) + per-UOM decimals (ADR-0005) | `tests/database.test.ts`, `tests/item-master.test.ts` | TBD | M1+M2 |
+| INV-023 | UOM conversion | `item_uom_conversions` activation gate (VERIFIED evidence + approval) | `tests/item-master.test.ts` | TBD | M2 gate (CG-1 open) |
 | INV-026 | FEFO | TBD | FEFO/override | TBD | Planned |
 | INV-027 | Funding | TBD | Funding segregation | TBD | Planned |
 | INV-028 | Opening | TBD | Approved migration batch | TBD | Planned |
@@ -42,3 +42,4 @@ Use this file to connect business rules to implementation and tests. Every criti
 Rules not listed above remain mandatory; expand the matrix as their implementation begins.
 | INV-029 | Authorization | SYSTEM_ADMIN has no stock/ledger/audit/approval permissions | `tests/database.test.ts` role matrix | TBD | M1 foundation |
 | INV-033 | Time | All timestamps `timestamptz`; server-forced recording time | `tests/database.test.ts` | TBD | M1 foundation |
+| INV-021 | Item master | Unique immutable item code; items never deleted (ADR-0006) | `tests/item-master.test.ts` | TBD | M2 |

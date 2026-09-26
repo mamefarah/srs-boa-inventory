@@ -36,11 +36,18 @@ export async function withUserContext<T>(
   db: Db,
   userId: number,
   fn: (tx: Tx) => Promise<T>,
-  opts: { readOnly?: boolean } = {},
+  opts: { readOnly?: boolean; changeReason?: string; requestId?: string } = {},
 ): Promise<T> {
   return db.transaction(
     async (tx) => {
       await tx.execute(sql`SELECT set_config('boa.user_id', ${String(userId)}, true)`);
+      // Read by database audit triggers (transaction-local, never leaks across requests).
+      if (opts.changeReason !== undefined) {
+        await tx.execute(sql`SELECT set_config('boa.change_reason', ${opts.changeReason}, true)`);
+      }
+      if (opts.requestId !== undefined) {
+        await tx.execute(sql`SELECT set_config('boa.request_id', ${opts.requestId}, true)`);
+      }
       return fn(tx);
     },
     { accessMode: opts.readOnly ? 'read only' : 'read write', isolationLevel: 'read committed' },

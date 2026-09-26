@@ -8,8 +8,8 @@
  *
  * Conventions:
  * - All timestamps are `timestamptz` (INV-033).
- * - Quantities are unconstrained `numeric` (never float). Precision/scale is an M2
- *   decision (see ADR-0004 §Quantity) and must not be pre-empted with INTEGER.
+ * - Quantities are NUMERIC(20,6), never float; per-UOM entry precision is enforced
+ *   and excess decimals are rejected, never rounded (ADR-0005).
  * - Foreign keys to authoritative evidence use RESTRICT, never CASCADE.
  */
 import { sql } from 'drizzle-orm';
@@ -198,44 +198,140 @@ export const projects = pgTable('projects', {
 // Item / UOM foundation (extended in M2)
 // ---------------------------------------------------------------------------
 
-export const uoms = pgTable('uoms', {
-  id: id(),
-  code: text('code').notNull().unique(),
-  name: text('name').notNull(),
-  isActive: boolean('is_active').notNull().default(true),
-});
+const CODE_RE = "'^[A-Z0-9][A-Z0-9_-]{0,19}$'";
 
-export const itemCategories = pgTable('item_categories', {
-  id: id(),
-  code: text('code').notNull().unique(),
-  name: text('name').notNull(),
-  isActive: boolean('is_active').notNull().default(true),
-});
+export const uoms = pgTable(
+  'uoms',
+  {
+    id: id(),
+    code: text('code').notNull().unique(),
+    name: text('name').notNull(),
+    description: text('description'),
+    // Entry precision: quantities in this UOM may carry at most this many decimals
+    // (ADR-0005). Excess decimals are rejected, never rounded.
+    decimalPlaces: integer('decimal_places').notNull().default(0),
+    isActive: boolean('is_active').notNull().default(true),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+    updatedAt: tstz('updated_at').notNull().defaultNow(),
+    rowVersion: integer('row_version').notNull().default(1),
+  },
+  (t) => [
+    check('uoms_code_format', sql.raw(`"code" ~ ${CODE_RE}`)),
+    check('uoms_name_not_blank', sql`length(btrim(${t.name})) > 0`),
+    check('uoms_decimal_places_range', sql`${t.decimalPlaces} BETWEEN 0 AND 6`),
+  ],
+);
+
+export const itemCategories = pgTable(
+  'item_categories',
+  {
+    id: id(),
+    code: text('code').notNull().unique(),
+    name: text('name').notNull(),
+    description: text('description'),
+    // One level of subcategory (parent must itself be top-level); enforced by trigger.
+    parentId: integer('parent_id'),
+    isActive: boolean('is_active').notNull().default(true),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+    updatedAt: tstz('updated_at').notNull().defaultNow(),
+    rowVersion: integer('row_version').notNull().default(1),
+  },
+  (t) => [
+    foreignKey({ name: 'item_categories_parent_fk', columns: [t.parentId], foreignColumns: [t.id] }).onDelete('restrict'),
+    check('item_categories_code_format', sql.raw(`"code" ~ ${CODE_RE}`)),
+    check('item_categories_name_not_blank', sql`length(btrim(${t.name})) > 0`),
+    check('item_categories_not_own_parent', sql`${t.parentId} IS DISTINCT FROM ${t.id}`),
+  ],
+);
 
 export const items = pgTable(
   'items',
   {
     id: id(),
+    // Controlled Bureau-wide code (INV-021): unique, immutable, never reused (items are never deleted).
     itemCode: text('item_code').notNull().unique(),
     name: text('name').notNull(),
+    // Duplicate-detection key computed by the database (NFKC, invisible characters removed,
+    // Unicode spaces/punctuation folded, lower-cased): see boa_item_name_key() in 0006.
+    nameKey: text('name_key').generatedAlwaysAs(sql`boa_item_name_key(name)`),
     description: text('description'),
+    specification: text('specification'),
     categoryId: integer('category_id')
       .notNull()
       .references(() => itemCategories.id, { onDelete: 'restrict' }),
     baseUomId: integer('base_uom_id')
       .notNull()
       .references(() => uoms.id, { onDelete: 'restrict' }),
+    // Manual classification; automatic monetary classification is gated by HB-2.
     assetControlType: text('asset_control_type').notNull().default('UNCLASSIFIED'),
+    isBatchTracked: boolean('is_batch_tracked').notNull().default(false),
+    isExpiryTracked: boolean('is_expiry_tracked').notNull().default(false),
+    isSerialTracked: boolean('is_serial_tracked').notNull().default(false),
+    isHazardous: boolean('is_hazardous').notNull().default(false),
+    defaultShelfLifeDays: integer('default_shelf_life_days'),
+    usefulLifeMonths: integer('useful_life_months'),
     isActive: boolean('is_active').notNull().default(true),
     createdAt: tstz('created_at').notNull().defaultNow(),
+    updatedAt: tstz('updated_at').notNull().defaultNow(),
+    createdByUserId: integer('created_by_user_id').references(() => users.id, { onDelete: 'restrict' }),
+    updatedByUserId: integer('updated_by_user_id').references(() => users.id, { onDelete: 'restrict' }),
+    rowVersion: integer('row_version').notNull().default(1),
   },
   (t) => [
     check(
       'items_asset_control_type_valid',
       sql`${t.assetControlType} IN ('SUPPLY', 'FIXED_ASSET_CANDIDATE', 'SPECIAL_CONTROLLED_ITEM', 'UNCLASSIFIED')`,
     ),
+    check('items_item_code_format', sql`${t.itemCode} ~ '^[A-Z0-9][A-Z0-9._/-]{1,39}$'`),
+    check('items_name_not_blank', sql`length(btrim(${t.name})) > 0`),
+    // Expiry is recorded per batch/lot, so expiry tracking requires batch tracking.
+    check('items_expiry_requires_batch', sql`NOT ${t.isExpiryTracked} OR ${t.isBatchTracked}`),
+    check('items_shelf_life_positive', sql`${t.defaultShelfLifeDays} IS NULL OR ${t.defaultShelfLifeDays} > 0`),
+    check('items_shelf_life_requires_expiry', sql`${t.defaultShelfLifeDays} IS NULL OR ${t.isExpiryTracked}`),
+    check('items_useful_life_positive', sql`${t.usefulLifeMonths} IS NULL OR ${t.usefulLifeMonths} > 0`),
+    // Duplicate prevention: names are unique Bureau-wide on the normalised key.
+    uniqueIndex('items_name_key_unique').on(t.nameKey),
+    // Homoglyph defence: a name may not mix Latin letters with Greek/Cyrillic letters.
+    check('items_name_single_script', sql`NOT (${t.name} ~ '[A-Za-z]' AND ${t.name} ~ '[\u0370-\u03FF\u0400-\u052F]')`),
+    check('items_name_key_not_blank', sql`length(${t.nameKey}) > 0`),
     // Target for the composite FK that forces ledger quantities into the item's base UOM.
     unique('items_id_base_uom').on(t.id, t.baseUomId),
+    index('items_category_idx').on(t.categoryId),
+  ],
+);
+
+/**
+ * Alternate-UOM conversions (PRD §25, CG-1). Present for data capture only: a row can
+ * become ACTIVE only with VERIFIED evidence and an approval reference, and no posting
+ * path uses conversions until an approved conversion policy exists.
+ */
+export const itemUomConversions = pgTable(
+  'item_uom_conversions',
+  {
+    id: id(),
+    itemId: integer('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'restrict' }),
+    uomId: integer('uom_id')
+      .notNull()
+      .references(() => uoms.id, { onDelete: 'restrict' }),
+    factorToBase: numeric('factor_to_base', { precision: 30, scale: 12 }).notNull(),
+    status: text('status').notNull().default('DRAFT'),
+    evidenceStatus: text('evidence_status').notNull().default('UNVERIFIED'),
+    approvalRef: text('approval_ref'),
+    sourceEvidenceRef: text('source_evidence_ref'),
+    effectiveFrom: tstz('effective_from'),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    check('item_uom_conversions_factor_positive', sql`${t.factorToBase} > 0`),
+    check('item_uom_conversions_status_valid', sql`${t.status} IN ('DRAFT', 'ACTIVE', 'RETIRED')`),
+    check('item_uom_conversions_evidence_valid', sql`${t.evidenceStatus} IN ('VERIFIED', 'UNVERIFIED')`),
+    check(
+      'item_uom_conversions_active_requires_approval',
+      sql`${t.status} <> 'ACTIVE' OR (${t.evidenceStatus} = 'VERIFIED' AND length(btrim(coalesce(${t.approvalRef}, ''))) > 0 AND length(btrim(coalesce(${t.sourceEvidenceRef}, ''))) > 0 AND ${t.effectiveFrom} IS NOT NULL)`,
+    ),
+    uniqueIndex('item_uom_conversions_one_active').on(t.itemId, t.uomId).where(sql`${t.status} = 'ACTIVE'`),
   ],
 );
 
@@ -343,7 +439,7 @@ export const inventoryEntries = pgTable(
     lineNo: integer('line_no').notNull(),
     businessDocumentLineRef: text('business_document_line_ref'),
     itemId: integer('item_id').notNull(),
-    signedQuantity: numeric('signed_quantity').notNull(),
+    signedQuantity: numeric('signed_quantity', { precision: 20, scale: 6 }).notNull(),
     baseUomId: integer('base_uom_id').notNull(),
     custodyScope: text('custody_scope').notNull(),
     warehouseId: integer('warehouse_id').references(() => warehouses.id, { onDelete: 'restrict' }),
@@ -376,6 +472,8 @@ export const inventoryEntries = pgTable(
       foreignColumns: [warehouseLocations.id, warehouseLocations.warehouseId],
     }).onDelete('restrict'),
     check('inventory_entries_quantity_nonzero', sql`${t.signedQuantity} <> 0`),
+    // PostgreSQL numeric accepts NaN and treats NaN = NaN; it would poison every SUM.
+    check('inventory_entries_quantity_finite', sql`${t.signedQuantity} <> 'NaN'::numeric`),
     check(
       'inventory_entries_custody_scope_valid',
       sql`${t.custodyScope} IN ('WAREHOUSE', 'IN_TRANSIT', 'INTERNAL_CUSTODY', 'EXTERNAL', 'TERMINAL_EXIT', 'OPENING_BALANCE_CONTRA')`,

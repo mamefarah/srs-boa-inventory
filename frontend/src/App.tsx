@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { api, ApiError, type Principal } from './api.ts';
 import { authConfigured, signInWithGoogle, signOutUser, watchUser } from './auth.ts';
 import { t, type MessageKey } from './i18n.ts';
+import { ItemsView, ReferenceView } from './ItemMaster.tsx';
 
 type Session =
   | { state: 'loading' }
@@ -9,12 +10,13 @@ type Session =
   | { state: 'blocked'; code: string; requestId?: string }
   | { state: 'ready'; principal: Principal };
 
-type TabId = 'stock' | 'items' | 'warehouses' | 'policies' | 'audit';
+type TabId = 'stock' | 'items' | 'reference' | 'warehouses' | 'policies' | 'audit';
 
 // Navigation hints only. The server enforces every permission and scope independently.
 const TABS: Array<{ id: TabId; label: MessageKey; permission: string }> = [
   { id: 'stock', label: 'tabStock', permission: 'READ_STOCK' },
   { id: 'items', label: 'tabItems', permission: 'READ_ITEMS' },
+  { id: 'reference', label: 'tabReference', permission: 'READ_ITEMS' },
   { id: 'warehouses', label: 'tabWarehouses', permission: 'READ_WAREHOUSES' },
   { id: 'policies', label: 'tabPolicies', permission: 'READ_POLICIES' },
   { id: 'audit', label: 'tabAudit', permission: 'READ_AUDIT' },
@@ -129,7 +131,8 @@ function Workspace({ principal }: { principal: Principal }) {
             ))}
           </nav>
           {active === 'stock' && <StockView />}
-          {active === 'items' && <ItemsView />}
+          {active === 'items' && <ItemsView canManage={principal.permissions.includes('MANAGE_ITEMS')} />}
+          {active === 'reference' && <ReferenceView canManage={principal.permissions.includes('MANAGE_MASTER_REFERENCE')} />}
           {active === 'warehouses' && <WarehousesView />}
           {active === 'policies' && <PoliciesView />}
           {active === 'audit' && <AuditView />}
@@ -211,20 +214,6 @@ const StockView = () => (
       { key: 'cond', label: 'condition', render: (r) => <span className="badge">{r.conditionCode}</span> },
       { key: 'loc', label: 'location', render: (r) => r.warehouseLocationId ?? '—' },
       { key: 'qty', label: 'onHand', render: (r) => <span className="qty">{`${r.onHandQuantity} ${r.baseUomCode}`}</span> },
-    ]}
-  />
-);
-
-type ItemRow = { itemCode: string; name: string; baseUomCode: string; assetControlType: string; isActive: boolean };
-const ItemsView = () => (
-  <DataView<ItemRow>
-    path="/items"
-    columns={[
-      { key: 'code', label: 'code', render: (r) => r.itemCode },
-      { key: 'name', label: 'name', render: (r) => r.name },
-      { key: 'uom', label: 'uom', render: (r) => r.baseUomCode },
-      { key: 'ctl', label: 'control', render: (r) => r.assetControlType },
-      { key: 'st', label: 'status', render: (r) => <span className="badge">{r.isActive ? t('active') : t('inactive')}</span> },
     ]}
   />
 );

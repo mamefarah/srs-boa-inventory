@@ -47,7 +47,9 @@ async function asAppUser<T>(userId: number | null, fn: (c: pg.PoolClient) => Pro
 describe('clean migration', () => {
   it('applied all migrations in order', async () => {
     const r = await admin.query('SELECT count(*)::int AS n FROM drizzle.__drizzle_migrations');
-    assert.equal(r.rows[0].n, 4);
+    const { readFile } = await import('node:fs/promises');
+    const journal = JSON.parse(await readFile('drizzle/meta/_journal.json', 'utf8')) as { entries: unknown[] };
+    assert.equal(r.rows[0].n, journal.entries.length);
   });
 
   it('created the expected tables', async () => {
@@ -83,7 +85,7 @@ describe('clean migration', () => {
 
   it('seeds only neutral technical roles and grants WAREHOUSE_SCOPE_ALL to no role except WAREHOUSE_SCOPE_GLOBAL', async () => {
     const roles = await admin.query('SELECT code FROM roles ORDER BY code');
-    assert.deepEqual(roles.rows.map((x) => x.code).sort(), ['GENERIC_APPROVER', 'REQUESTER', 'SYSTEM_ADMIN', 'SYSTEM_AUDITOR', 'WAREHOUSE_OPERATOR', 'WAREHOUSE_SCOPE_GLOBAL']);
+    assert.deepEqual(roles.rows.map((x) => x.code).sort(), ['GENERIC_APPROVER', 'MASTER_DATA_STEWARD', 'REQUESTER', 'SYSTEM_ADMIN', 'SYSTEM_AUDITOR', 'WAREHOUSE_OPERATOR', 'WAREHOUSE_SCOPE_GLOBAL']);
     const r = await admin.query(`SELECT r.code FROM role_permissions rp JOIN roles r ON r.id = rp.role_id JOIN permissions p ON p.id = rp.permission_id WHERE p.code = 'WAREHOUSE_SCOPE_ALL'`);
     assert.deepEqual(r.rows.map((x) => x.code), ['WAREHOUSE_SCOPE_GLOBAL']);
   });
@@ -119,8 +121,8 @@ describe('append-only ledger and audit — raw SQL as the table owner', () => {
   }
 
   it('the rows survived every attack', async () => {
-    const r = await admin.query('SELECT sum(signed_quantity)::text AS s, count(*)::int AS n FROM inventory_entries WHERE transaction_id = $1', [fx.txId]);
-    assert.deepEqual(r.rows[0], { s: '0.0', n: 3 });
+    const r = await admin.query('SELECT trim_scale(sum(signed_quantity))::text AS s, count(*)::int AS n FROM inventory_entries WHERE transaction_id = $1', [fx.txId]);
+    assert.deepEqual(r.rows[0], { s: '0', n: 3 });
   });
 
   it('forces server time on audit occurred_at (no backdating)', async () => {

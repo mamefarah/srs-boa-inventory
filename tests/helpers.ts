@@ -47,6 +47,7 @@ export const USERS = {
   inactive: { uid: 'inactive-op', roles: ['WAREHOUSE_OPERATOR'], warehouses: ['TWH-A'], active: false },
   requester: { uid: 'requester', roles: ['REQUESTER'], warehouses: ['TWH-A'], active: true },
   admin: { uid: 'admin-1', roles: ['SYSTEM_ADMIN'], warehouses: [], active: true },
+  steward: { uid: 'steward-1', roles: ['MASTER_DATA_STEWARD'], warehouses: [], active: true },
   admin2: { uid: 'admin-2', roles: ['SYSTEM_ADMIN'], warehouses: [], active: true },
   target1: { uid: 'target-1', roles: [], warehouses: [], active: false },
   target2: { uid: 'target-2', roles: [], warehouses: [], active: true },
@@ -70,7 +71,7 @@ export async function ensureFixtures(admin: pg.Pool): Promise<Fixture> {
       await client.query('BEGIN');
       await client.query(`INSERT INTO warehouses (code, name) VALUES ('TWH-A', 'Test warehouse A'), ('TWH-B', 'Test warehouse B')`);
       await client.query(`INSERT INTO warehouse_locations (warehouse_id, code, name) SELECT id, 'BIN-1', 'Bin 1' FROM warehouses WHERE code = 'TWH-A'`);
-      await client.query(`INSERT INTO uoms (code, name) VALUES ('TST-EA', 'Test each')`);
+      await client.query(`INSERT INTO uoms (code, name, decimal_places) VALUES ('TST-EA', 'Test unit (1 decimal)', 1)`);
       await client.query(`INSERT INTO item_categories (code, name) VALUES ('TST-CAT', 'Test category')`);
       await client.query(`INSERT INTO items (item_code, name, category_id, base_uom_id, asset_control_type)
         SELECT 'TST-ITEM-1', 'Test item 1', c.id, u.id, 'SUPPLY' FROM item_categories c, uoms u WHERE c.code = 'TST-CAT' AND u.code = 'TST-EA'`);
