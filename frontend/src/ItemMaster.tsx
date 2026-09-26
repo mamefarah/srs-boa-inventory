@@ -53,7 +53,7 @@ function useReference() {
   return { uoms, categories, loading, error, reload };
 }
 
-function ErrorBox({ error }: { error: ApiError | null }) {
+export function ErrorBox({ error }: { error: ApiError | null }) {
   if (!error) return null;
   const issues = (error.details?.issues as Array<{ path: string; message: string }> | undefined) ?? [];
   return (
@@ -77,7 +77,7 @@ function ErrorBox({ error }: { error: ApiError | null }) {
   );
 }
 
-function Field({ label, children }: { label: MessageKey; children: ReactNode }) {
+export function Field({ label, children }: { label: MessageKey; children: ReactNode }) {
   return (
     <label className="field">
       <span>{t(label)}</span>

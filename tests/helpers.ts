@@ -51,6 +51,13 @@ export const USERS = {
   admin2: { uid: 'admin-2', roles: ['SYSTEM_ADMIN'], warehouses: [], active: true },
   target1: { uid: 'target-1', roles: [], warehouses: [], active: false },
   target2: { uid: 'target-2', roles: [], warehouses: [], active: true },
+  // M3 opening balances (technical roles; no Bureau authority implied: HB-4).
+  preparerA: { uid: 'ob-preparer-a', roles: ['OPENING_BALANCE_PREPARER', 'WAREHOUSE_OPERATOR'], warehouses: ['TWH-A'], active: true },
+  preparerA2: { uid: 'ob-preparer-a2', roles: ['OPENING_BALANCE_PREPARER'], warehouses: ['TWH-A'], active: true },
+  approverA: { uid: 'ob-approver-a', roles: ['OPENING_BALANCE_APPROVER'], warehouses: ['TWH-A'], active: true },
+  approverB: { uid: 'ob-approver-b', roles: ['OPENING_BALANCE_APPROVER'], warehouses: ['TWH-B'], active: true },
+  bothA: { uid: 'ob-both-a', roles: ['OPENING_BALANCE_PREPARER', 'OPENING_BALANCE_APPROVER'], warehouses: ['TWH-A'], active: true },
+  preparerB: { uid: 'ob-preparer-b', roles: ['OPENING_BALANCE_PREPARER'], warehouses: ['TWH-B'], active: true },
 } as const;
 
 export interface Fixture {

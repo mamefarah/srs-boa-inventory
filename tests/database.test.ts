@@ -61,8 +61,11 @@ describe('clean migration', () => {
   });
 
   it('has no editable authoritative balance table or column', async () => {
+    // opening_balance_* are approval documents (ADR-0007), not balances: stock is derived only
+    // from ledger entries. Their columns are still checked against the balance-name pattern.
     const r = await admin.query(`SELECT table_name, column_name FROM information_schema.columns
-      WHERE table_schema = 'public' AND (column_name ~* '(balance|on_hand|current_stock|quantity_on_hand)' OR table_name ~* '(balance|stock_level|current_stock)')`);
+      WHERE table_schema = 'public' AND (column_name ~* '(balance|on_hand|current_stock|quantity_on_hand)'
+        OR (table_name ~* '(balance|stock_level|current_stock)' AND table_name NOT IN ('opening_balance_batches', 'opening_balance_lines', 'opening_balance_contributors')))`);
     assert.deepEqual(r.rows, []);
   });
 
@@ -85,7 +88,7 @@ describe('clean migration', () => {
 
   it('seeds only neutral technical roles and grants WAREHOUSE_SCOPE_ALL to no role except WAREHOUSE_SCOPE_GLOBAL', async () => {
     const roles = await admin.query('SELECT code FROM roles ORDER BY code');
-    assert.deepEqual(roles.rows.map((x) => x.code).sort(), ['GENERIC_APPROVER', 'MASTER_DATA_STEWARD', 'REQUESTER', 'SYSTEM_ADMIN', 'SYSTEM_AUDITOR', 'WAREHOUSE_OPERATOR', 'WAREHOUSE_SCOPE_GLOBAL']);
+    assert.deepEqual(roles.rows.map((x) => x.code).sort(), ['GENERIC_APPROVER', 'MASTER_DATA_STEWARD', 'OPENING_BALANCE_APPROVER', 'OPENING_BALANCE_PREPARER', 'REQUESTER', 'SYSTEM_ADMIN', 'SYSTEM_AUDITOR', 'WAREHOUSE_OPERATOR', 'WAREHOUSE_SCOPE_GLOBAL']);
     const r = await admin.query(`SELECT r.code FROM role_permissions rp JOIN roles r ON r.id = rp.role_id JOIN permissions p ON p.id = rp.permission_id WHERE p.code = 'WAREHOUSE_SCOPE_ALL'`);
     assert.deepEqual(r.rows.map((x) => x.code), ['WAREHOUSE_SCOPE_GLOBAL']);
   });
@@ -93,7 +96,9 @@ describe('clean migration', () => {
   it('SYSTEM_ADMIN has no stock, ledger or audit read permission (INV-029)', async () => {
     const r = await admin.query(`SELECT p.code FROM role_permissions rp JOIN roles r ON r.id = rp.role_id JOIN permissions p ON p.id = rp.permission_id WHERE r.code = 'SYSTEM_ADMIN'`);
     const codes = r.rows.map((x) => x.code);
-    for (const c of ['READ_STOCK', 'READ_LEDGER', 'READ_AUDIT', 'WAREHOUSE_SCOPE_ALL']) assert.ok(!codes.includes(c), c);
+    for (const c of ['READ_STOCK', 'READ_LEDGER', 'READ_AUDIT', 'WAREHOUSE_SCOPE_ALL', 'READ_OPENING_BALANCE', 'PREPARE_OPENING_BALANCE', 'APPROVE_OPENING_BALANCE', 'POST_OPENING_BALANCE']) {
+      assert.ok(!codes.includes(c), c);
+    }
   });
 
   it('the application login is not superuser and cannot bypass RLS', async () => {

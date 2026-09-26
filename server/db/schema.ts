@@ -17,6 +17,7 @@ import {
   bigint,
   boolean,
   check,
+  date,
   foreignKey,
   index,
   integer,
@@ -456,6 +457,8 @@ export const inventoryEntries = pgTable(
     projectId: integer('project_id').references(() => projects.id, { onDelete: 'restrict' }),
     unitCostAmount: numeric('unit_cost_amount'),
     currencyCode: text('currency_code'),
+    // Expiry of the batch/lot held in this bucket (FEFO input from M6); set only for expiry-tracked items.
+    expiryDate: date('expiry_date', { mode: 'string' }),
     createdAt: tstz('created_at').notNull().defaultNow(),
   },
   (t) => [
@@ -490,11 +493,156 @@ export const inventoryEntries = pgTable(
       'inventory_entries_cost_currency_pair',
       sql`(${t.unitCostAmount} IS NULL) = (${t.currencyCode} IS NULL)`,
     ),
-    check('inventory_entries_cost_nonnegative', sql`${t.unitCostAmount} IS NULL OR ${t.unitCostAmount} >= 0`),
+    // numeric orders NaN above Infinity, so `< 'Infinity'` also rejects NaN.
+    check('inventory_entries_cost_nonnegative', sql`${t.unitCostAmount} IS NULL OR (${t.unitCostAmount} >= 0 AND ${t.unitCostAmount} < 'Infinity'::numeric)`),
     index('inventory_entries_item_warehouse_idx').on(t.itemId, t.warehouseId),
     index('inventory_entries_warehouse_idx').on(t.warehouseId),
     index('inventory_entries_transaction_idx').on(t.transactionId),
   ],
+);
+
+// ---------------------------------------------------------------------------
+// Opening balance migration batches (M3; PRD §38, INV-028; ADR-0007)
+// ---------------------------------------------------------------------------
+
+export const OPENING_BALANCE_STATUSES = ['DRAFT', 'SUBMITTED', 'APPROVED', 'POSTED', 'CANCELLED'] as const;
+
+/**
+ * One warehouse's verified opening position as of a cutoff. Workflow columns change only
+ * through the SECURITY DEFINER transition functions in drizzle/0009; POSTED and CANCELLED
+ * batches are immutable for every writer.
+ */
+export const openingBalanceBatches = pgTable(
+  'opening_balance_batches',
+  {
+    id: id(),
+    warehouseId: integer('warehouse_id')
+      .notNull()
+      .references(() => warehouses.id, { onDelete: 'restrict' }),
+    // Effective time of the opening position; becomes inventory_transactions.effective_at.
+    cutoffAt: tstz('cutoff_at').notNull(),
+    description: text('description'),
+    // Signed count sheet / stock card reference (attachments arrive with the attachment ADR).
+    sourceEvidenceRef: text('source_evidence_ref'),
+    status: text('status').notNull().default('DRAFT'),
+    createdByUserId: integer('created_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+    updatedAt: tstz('updated_at').notNull().defaultNow(),
+    rowVersion: integer('row_version').notNull().default(1),
+    submittedByUserId: integer('submitted_by_user_id').references(() => users.id, { onDelete: 'restrict' }),
+    submittedAt: tstz('submitted_at'),
+    approvedByUserId: integer('approved_by_user_id').references(() => users.id, { onDelete: 'restrict' }),
+    approvedAt: tstz('approved_at'),
+    // External management sign-off document reference (approval authority: HB-4).
+    approvalReference: text('approval_reference'),
+    postedByUserId: integer('posted_by_user_id').references(() => users.id, { onDelete: 'restrict' }),
+    postedAt: tstz('posted_at'),
+    transactionId: uuid('transaction_id')
+      .unique()
+      .references(() => inventoryTransactions.id, { onDelete: 'restrict' }),
+    cancelledByUserId: integer('cancelled_by_user_id').references(() => users.id, { onDelete: 'restrict' }),
+    cancelledAt: tstz('cancelled_at'),
+  },
+  (t) => [
+    check('opening_balance_batches_status_valid', sql`${t.status} IN ('DRAFT', 'SUBMITTED', 'APPROVED', 'POSTED', 'CANCELLED')`),
+    check(
+      'opening_balance_batches_submitted_fields',
+      sql`${t.status} NOT IN ('SUBMITTED', 'APPROVED', 'POSTED') OR (${t.submittedByUserId} IS NOT NULL AND ${t.submittedAt} IS NOT NULL)`,
+    ),
+    check(
+      'opening_balance_batches_approved_fields',
+      sql`${t.status} NOT IN ('APPROVED', 'POSTED') OR (${t.approvedByUserId} IS NOT NULL AND ${t.approvedAt} IS NOT NULL AND length(btrim(coalesce(${t.approvalReference}, ''))) > 0)`,
+    ),
+    check(
+      'opening_balance_batches_posted_fields',
+      sql`(${t.status} = 'POSTED') = (${t.transactionId} IS NOT NULL AND ${t.postedByUserId} IS NOT NULL AND ${t.postedAt} IS NOT NULL)`,
+    ),
+    check(
+      'opening_balance_batches_cancelled_fields',
+      sql`${t.status} <> 'CANCELLED' OR (${t.cancelledByUserId} IS NOT NULL AND ${t.cancelledAt} IS NOT NULL)`,
+    ),
+    // Maker-checker (INV-016): the approver neither created nor submitted the batch.
+    check(
+      'opening_balance_batches_maker_checker',
+      sql`${t.approvedByUserId} IS NULL OR (${t.approvedByUserId} <> ${t.createdByUserId} AND ${t.approvedByUserId} IS DISTINCT FROM ${t.submittedByUserId})`,
+    ),
+    index('opening_balance_batches_warehouse_status_idx').on(t.warehouseId, t.status),
+  ],
+);
+
+/**
+ * One counted stock bucket. `quantity` is unconstrained numeric on purpose: a value with
+ * too many decimals is rejected rather than rounded by type coercion (ADR-0005 §6), and a
+ * validated value casts exactly into the ledger's NUMERIC(20,6).
+ */
+export const openingBalanceLines = pgTable(
+  'opening_balance_lines',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    batchId: integer('batch_id')
+      .notNull()
+      .references(() => openingBalanceBatches.id, { onDelete: 'restrict' }),
+    lineNo: integer('line_no').notNull(),
+    itemId: integer('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'restrict' }),
+    // Server-derived from the item at write time; re-checked at submit, approve and post.
+    baseUomId: integer('base_uom_id')
+      .notNull()
+      .references(() => uoms.id, { onDelete: 'restrict' }),
+    quantity: numeric('quantity').notNull(),
+    warehouseLocationId: integer('warehouse_location_id').references(() => warehouseLocations.id, { onDelete: 'restrict' }),
+    conditionCode: text('condition_code')
+      .notNull()
+      .default('USABLE')
+      .references(() => conditionCodes.code, { onDelete: 'restrict' }),
+    batchRef: text('batch_ref'),
+    expiryDate: date('expiry_date', { mode: 'string' }),
+    serialRef: text('serial_ref'),
+    fundingSourceId: integer('funding_source_id').references(() => fundingSources.id, { onDelete: 'restrict' }),
+    projectId: integer('project_id').references(() => projects.id, { onDelete: 'restrict' }),
+    unitCostAmount: numeric('unit_cost_amount'),
+    currencyCode: text('currency_code'),
+    sourceLineRef: text('source_line_ref'),
+    notes: text('notes'),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+    updatedAt: tstz('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    unique('opening_balance_lines_line_per_batch').on(t.batchId, t.lineNo),
+    check('opening_balance_lines_quantity_positive', sql`${t.quantity} > 0`),
+    check('opening_balance_lines_quantity_finite', sql`${t.quantity} <> 'NaN'::numeric`),
+    // At most 6 decimals (the ledger scale) and 14 integer digits (NUMERIC(20,6)).
+    check('opening_balance_lines_quantity_scale', sql`scale(${t.quantity}) <= 6`),
+    check('opening_balance_lines_quantity_range', sql`${t.quantity} < 100000000000000`),
+    check('opening_balance_lines_cost_currency_pair', sql`(${t.unitCostAmount} IS NULL) = (${t.currencyCode} IS NULL)`),
+    check('opening_balance_lines_cost_nonnegative', sql`${t.unitCostAmount} IS NULL OR (${t.unitCostAmount} >= 0 AND ${t.unitCostAmount} < 'Infinity'::numeric)`),
+    check('opening_balance_lines_currency_format', sql`${t.currencyCode} IS NULL OR ${t.currencyCode} ~ '^[A-Z]{3}$'`),
+    check('opening_balance_lines_refs_not_blank', sql`(${t.batchRef} IS NULL OR length(btrim(${t.batchRef})) > 0) AND (${t.serialRef} IS NULL OR length(btrim(${t.serialRef})) > 0)`),
+    index('opening_balance_lines_item_idx').on(t.itemId),
+  ],
+);
+
+/**
+ * Everyone who changed a batch's content (created it, edited its header or lines, or
+ * submitted it). Written only by the audit trigger; never cleared. Maker-checker (INV-016)
+ * refuses approval by any contributor, not only the creator and submitter.
+ */
+export const openingBalanceContributors = pgTable(
+  'opening_balance_contributors',
+  {
+    batchId: integer('batch_id')
+      .notNull()
+      .references(() => openingBalanceBatches.id, { onDelete: 'restrict' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    firstAction: text('first_action').notNull(),
+    firstAt: tstz('first_at').notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ name: 'opening_balance_contributors_pk', columns: [t.batchId, t.userId] })],
 );
 
 // ---------------------------------------------------------------------------
