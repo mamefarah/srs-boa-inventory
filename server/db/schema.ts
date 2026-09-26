@@ -646,7 +646,7 @@ export const openingBalanceContributors = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Receipt + inspection (M4; PRD v3.1 §§21-22; ADR-0009)
+// Receipt + inspection (M4; PRD v3.1 ``21-22; ADR-0009)
 // ---------------------------------------------------------------------------
 
 export const RECEIPT_STATUSES = ['DRAFT', 'SUBMITTED', 'ARRIVED', 'INSPECTED', 'CANCELLED'] as const;
@@ -654,12 +654,9 @@ export const SUPPLIER_RETURN_STATUSES = ['DRAFT', 'POSTED', 'CANCELLED'] as cons
 export const DOCUMENT_ENTITY_TYPES = ['RECEIPT', 'SUPPLIER_RETURN'] as const;
 
 /**
- * Reusable hard-copy evidence reference. The signed original remains outside BoA-IMS;
- * this row stores the traceable reference and paper actors. The authenticated system
- * actor is recorded separately by createdByUserId/audit_events (ADR-0008).
- *
- * entityId is text so later business modules may link either integer or UUID identifiers.
- * M4 security triggers validate the referenced entity and warehouse scope.
+ * Reusable hard-copy evidence reference. Signed originals remain outside BoA-IMS;
+ * the system stores the traceable reference and paper actors separately from the
+ * authenticated system actor (ADR-0008).
  */
 export const documentReferences = pgTable(
   'document_references',
@@ -755,8 +752,8 @@ export const receiptHeaders = pgTable(
 );
 
 /**
- * One delivered stock bucket. Quantity and inspection outcomes are unconstrained numeric
- * intentionally: the API/database validate original scale before any NUMERIC(20,6) cast.
+ * One delivered stock bucket. Workflow quantities are unconstrained numeric on purpose:
+ * the original value is validated before authoritative NUMERIC(20,6) ledger insertion.
  */
 export const receiptLines = pgTable(
   'receipt_lines',
@@ -794,67 +791,12 @@ export const receiptLines = pgTable(
   (t) => [
     unique('receipt_lines_line_per_receipt').on(t.receiptId, t.lineNo),
     check('receipt_lines_quantity_positive', sql`${t.quantity} > 0`),
-    check('receipt_lines_quantity_finite', sql`${t.quantity} <> 'NaN'::numeric`),
+    check('receipt_lines_quantity_finite', sql`${t.quantity} < 'Infinity'::numeric`),
     check('receipt_lines_quantity_scale', sql`scale(${t.quantity}) <= 6`),
     check('receipt_lines_quantity_range', sql`${t.quantity} < 100000000000000`),
     check('receipt_lines_cost_currency_pair', sql`(${t.unitCostAmount} IS NULL) = (${t.currencyCode} IS NULL)`),
     check('receipt_lines_cost_nonnegative', sql`${t.unitCostAmount} IS NULL OR (${t.unitCostAmount} >= 0 AND ${t.unitCostAmount} < 'Infinity'::numeric)`),
-    check('receipt_lines_currency_format', sql`${t.currencyCode} IS NULL OR ${t.currencyCode} ~ '^[A-Z]{3}
-
-export const idempotencyRecords = pgTable(
-  'idempotency_records',
-  {
-    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
-    idempotencyKey: text('idempotency_key').notNull().unique(),
-    operationType: text('operation_type').notNull(),
-    actorUserId: integer('actor_user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'restrict' }),
-    requestHash: text('request_hash').notNull(),
-    status: text('status').notNull().default('IN_PROGRESS'),
-    transactionId: uuid('transaction_id').references(() => inventoryTransactions.id, {
-      onDelete: 'restrict',
-    }),
-    responseSummary: jsonb('response_summary'),
-    createdAt: tstz('created_at').notNull().defaultNow(),
-    completedAt: tstz('completed_at'),
-  },
-  (t) => [
-    check('idempotency_records_status_valid', sql`${t.status} IN ('IN_PROGRESS', 'COMPLETED', 'FAILED')`),
-    check('idempotency_records_key_length', sql`length(${t.idempotencyKey}) BETWEEN 16 AND 200`),
-    check('idempotency_records_hash_format', sql`${t.requestHash} ~ '^[0-9a-f]{64}$'`),
-  ],
-);
-
-// ---------------------------------------------------------------------------
-// Append-only audit (PRD §30, INV-032)
-// ---------------------------------------------------------------------------
-
-export const auditEvents = pgTable(
-  'audit_events',
-  {
-    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
-    occurredAt: tstz('occurred_at').notNull().defaultNow(),
-    actorUserId: integer('actor_user_id').references(() => users.id, { onDelete: 'restrict' }),
-    actorFirebaseUid: text('actor_firebase_uid'),
-    action: text('action').notNull(),
-    result: text('result').notNull(),
-    entityType: text('entity_type').notNull(),
-    entityId: text('entity_id'),
-    warehouseId: integer('warehouse_id').references(() => warehouses.id, { onDelete: 'restrict' }),
-    reason: text('reason'),
-    requestId: text('request_id'),
-    oldData: jsonb('old_data'),
-    newData: jsonb('new_data'),
-  },
-  (t) => [
-    check('audit_events_result_valid', sql`${t.result} IN ('SUCCESS', 'FAILED', 'DENIED')`),
-    index('audit_events_occurred_at_idx').on(t.occurredAt),
-    index('audit_events_warehouse_idx').on(t.warehouseId),
-    index('audit_events_actor_idx').on(t.actorUserId),
-  ],
-);
-`),
+    check('receipt_lines_currency_format', sql`${t.currencyCode} IS NULL OR ${t.currencyCode} ~ '^[A-Z]{3}$'`),
     check('receipt_lines_refs_not_blank', sql`(${t.batchRef} IS NULL OR length(btrim(${t.batchRef})) > 0) AND (${t.serialRef} IS NULL OR length(btrim(${t.serialRef})) > 0)`),
     check(
       'receipt_lines_outcomes_nonnegative',
@@ -862,7 +804,7 @@ export const auditEvents = pgTable(
     ),
     check(
       'receipt_lines_outcomes_finite',
-      sql`${t.acceptedQuantity} <> 'NaN'::numeric AND ${t.rejectedQuantity} <> 'NaN'::numeric AND ${t.damagedQuantity} <> 'NaN'::numeric AND ${t.quarantineQuantity} <> 'NaN'::numeric`,
+      sql`${t.acceptedQuantity} < 'Infinity'::numeric AND ${t.rejectedQuantity} < 'Infinity'::numeric AND ${t.damagedQuantity} < 'Infinity'::numeric AND ${t.quarantineQuantity} < 'Infinity'::numeric`,
     ),
     check(
       'receipt_lines_outcomes_scale',
@@ -935,7 +877,7 @@ export const supplierReturnLines = pgTable(
     unique('supplier_return_lines_line_per_return').on(t.supplierReturnId, t.lineNo),
     unique('supplier_return_lines_receipt_line_unique').on(t.supplierReturnId, t.receiptLineId),
     check('supplier_return_lines_quantity_positive', sql`${t.quantity} > 0`),
-    check('supplier_return_lines_quantity_finite', sql`${t.quantity} <> 'NaN'::numeric`),
+    check('supplier_return_lines_quantity_finite', sql`${t.quantity} < 'Infinity'::numeric`),
     check('supplier_return_lines_quantity_scale', sql`scale(${t.quantity}) <= 6`),
     check('supplier_return_lines_quantity_range', sql`${t.quantity} < 100000000000000`),
     index('supplier_return_lines_return_idx').on(t.supplierReturnId),
