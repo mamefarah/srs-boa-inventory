@@ -103,7 +103,6 @@ CREATE OR REPLACE FUNCTION boa_document_warehouse(p_entity_type text, p_entity_i
 RETURNS integer
 LANGUAGE plpgsql
 STABLE
-SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
