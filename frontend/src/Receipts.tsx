@@ -8,6 +8,8 @@ type Body = Record<string, unknown>;
 
 interface Warehouse { id: number; code: string; name: string; isActive: boolean }
 interface Location { id: number; code: string; name: string; isActive: boolean }
+interface FundingSource { id: number; code: string; name: string; isActive: boolean }
+interface Project { id: number; code: string; name: string; fundingSourceId: number | null; isActive: boolean }
 interface ReceiptLine {
   id: number;
   lineNo: number;
@@ -26,6 +28,10 @@ interface ReceiptLine {
   batchRef: string | null;
   expiryDate: string | null;
   serialRef: string | null;
+  fundingSourceId: number | null;
+  projectId: number | null;
+  unitCostAmount: string | null;
+  currencyCode: string | null;
   sourceLineRef: string | null;
   acceptedQuantity: string;
   rejectedQuantity: string;
@@ -421,13 +427,28 @@ function ReceiptLinesTable({ receipt, canPrepare, busy, onChanged }: { receipt: 
 
 function AddReceiptLine({ receipt, onAdded }: { receipt: Receipt; onAdded: () => void }) {
   const [locations, setLocations] = useState<Location[]>([]);
+  const [fundingSources, setFundingSources] = useState<FundingSource[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [q, setQ] = useState('');
   const [matches, setMatches] = useState<Item[]>([]);
   const [item, setItem] = useState<Item | null>(null);
-  const [f, setF] = useState({ quantity: '', expectedQuantity: '', locationId: '', batchRef: '', expiryDate: '', serialRef: '', sourceLineRef: '' });
+  const [f, setF] = useState({
+    quantity: '', expectedQuantity: '', locationId: '', batchRef: '', expiryDate: '', serialRef: '',
+    fundingSourceId: '', projectId: '', unitCostAmount: '', currencyCode: '', sourceLineRef: '',
+  });
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { void api<{ data: Location[] }>(`/warehouses/${receipt.warehouseId}/locations`).then((r) => setLocations(r.data.filter((l) => l.isActive))).catch((e) => setError(asError(e))); }, [receipt.warehouseId]);
+  useEffect(() => {
+    void Promise.all([
+      api<{ data: Location[] }>(`/warehouses/${receipt.warehouseId}/locations`),
+      api<{ data: FundingSource[] }>('/funding-sources'),
+      api<{ data: Project[] }>('/projects'),
+    ]).then(([loc, fs, pr]) => {
+      setLocations(loc.data.filter((l) => l.isActive));
+      setFundingSources(fs.data.filter((x) => x.isActive));
+      setProjects(pr.data.filter((x) => x.isActive));
+    }).catch((e) => setError(asError(e)));
+  }, [receipt.warehouseId]);
   const search = async () => {
     try { const r = await api<{ data: Item[] }>(`/items?${new URLSearchParams({ q: q.trim(), active: 'true', limit: '10' })}`); setMatches(r.data); } catch (e) { setError(asError(e)); }
   };
@@ -437,9 +458,17 @@ function AddReceiptLine({ receipt, onAdded }: { receipt: Receipt; onAdded: () =>
       await api(`/receipts/${receipt.id}/lines`, { method: 'POST', body: {
         itemId: item.id, quantity: f.quantity.trim(), expectedQuantity: f.expectedQuantity.trim() || null,
         warehouseLocationId: f.locationId ? Number(f.locationId) : null,
-        batchRef: f.batchRef || null, expiryDate: f.expiryDate || null, serialRef: f.serialRef || null, sourceLineRef: f.sourceLineRef || null,
+        batchRef: f.batchRef || null, expiryDate: f.expiryDate || null, serialRef: f.serialRef || null,
+        fundingSourceId: f.fundingSourceId ? Number(f.fundingSourceId) : null,
+        projectId: f.projectId ? Number(f.projectId) : null,
+        unitCostAmount: f.unitCostAmount.trim() || null,
+        currencyCode: f.unitCostAmount.trim() ? (f.currencyCode.trim().toUpperCase() || null) : null,
+        sourceLineRef: f.sourceLineRef || null,
       }});
-      setQ(''); setMatches([]); setItem(null); setF({ quantity:'',expectedQuantity:'',locationId:'',batchRef:'',expiryDate:'',serialRef:'',sourceLineRef:'' }); onAdded();
+      setQ(''); setMatches([]); setItem(null); setF({
+        quantity:'',expectedQuantity:'',locationId:'',batchRef:'',expiryDate:'',serialRef:'',
+        fundingSourceId:'',projectId:'',unitCostAmount:'',currencyCode:'',sourceLineRef:'',
+      }); onAdded();
     } catch (e) { setError(asError(e)); } finally { setBusy(false); }
   };
   return (
@@ -457,6 +486,17 @@ function AddReceiptLine({ receipt, onAdded }: { receipt: Receipt; onAdded: () =>
           {item.isBatchTracked && <Field label="obBatchRef"><input required value={f.batchRef} onChange={(e) => setF({ ...f, batchRef: e.target.value })} /></Field>}
           {item.isExpiryTracked && <Field label="obExpiryDate"><input required type="date" value={f.expiryDate} onChange={(e) => setF({ ...f, expiryDate: e.target.value })} /></Field>}
           {item.isSerialTracked && <Field label="obSerialRef"><input required value={f.serialRef} onChange={(e) => setF({ ...f, serialRef: e.target.value })} /></Field>}
+          <Field label="receiptFundingSource"><select value={f.fundingSourceId} onChange={(e) => setF({ ...f, fundingSourceId: e.target.value, projectId: '' })}>
+            <option value="">—</option>{fundingSources.map((x) => <option key={x.id} value={x.id}>{x.code} · {x.name}</option>)}
+          </select></Field>
+          <Field label="receiptProject"><select value={f.projectId} onChange={(e) => {
+            const project = projects.find((x) => String(x.id) === e.target.value);
+            setF({ ...f, projectId: e.target.value, fundingSourceId: project?.fundingSourceId ? String(project.fundingSourceId) : f.fundingSourceId });
+          }}>
+            <option value="">—</option>{projects.filter((x) => !f.fundingSourceId || x.fundingSourceId == null || String(x.fundingSourceId) === f.fundingSourceId).map((x) => <option key={x.id} value={x.id}>{x.code} · {x.name}</option>)}
+          </select></Field>
+          <Field label="receiptUnitCost"><input inputMode="decimal" value={f.unitCostAmount} onChange={(e) => setF({ ...f, unitCostAmount: e.target.value })} /></Field>
+          <Field label="receiptCurrency"><input maxLength={3} placeholder="ETB" value={f.currencyCode} onChange={(e) => setF({ ...f, currencyCode: e.target.value.toUpperCase() })} /></Field>
           <Field label="obSourceLine"><input value={f.sourceLineRef} onChange={(e) => setF({ ...f, sourceLineRef: e.target.value })} /></Field>
         </fieldset>
         <div className="toolbar"><button type="submit" className="btn primary" disabled={busy}>{t('receiptAddLine')}</button><button type="button" className="btn secondary" onClick={() => setItem(null)}>{t('cancel')}</button></div>
