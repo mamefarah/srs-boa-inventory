@@ -193,10 +193,10 @@ GRANT SELECT ON document_references, receipt_headers, receipt_lines, supplier_re
 GRANT INSERT (warehouse_id, source_party_name, source_reference, description) ON receipt_headers TO boa_ims_app;
 GRANT UPDATE (source_party_name, source_reference, description, updated_at) ON receipt_headers TO boa_ims_app;
 
-GRANT INSERT (receipt_id, item_id, quantity, warehouse_location_id, batch_ref, expiry_date, serial_ref,
+GRANT INSERT (receipt_id, item_id, quantity, expected_quantity, warehouse_location_id, batch_ref, expiry_date, serial_ref,
   funding_source_id, project_id, unit_cost_amount, currency_code, source_line_ref, notes)
   ON receipt_lines TO boa_ims_app;
-GRANT UPDATE (item_id, quantity, warehouse_location_id, batch_ref, expiry_date, serial_ref,
+GRANT UPDATE (item_id, quantity, expected_quantity, warehouse_location_id, batch_ref, expiry_date, serial_ref,
   funding_source_id, project_id, unit_cost_amount, currency_code, source_line_ref, notes)
   ON receipt_lines TO boa_ims_app;
 GRANT DELETE ON receipt_lines TO boa_ims_app;
@@ -456,6 +456,15 @@ BEGIN
   IF NEW.quantity = 'NaN'::numeric OR NEW.quantity >= 'Infinity'::numeric
      OR NEW.quantity <= 0 OR NEW.quantity <> round(NEW.quantity, v_item.decimal_places) THEN
     RAISE EXCEPTION 'BOA_QUANTITY_PRECISION: delivered quantity is invalid for the item base UOM' USING ERRCODE = 'BA008';
+  END IF;
+  IF NEW.expected_quantity IS NOT NULL AND (
+       NEW.expected_quantity = 'NaN'::numeric OR NEW.expected_quantity >= 'Infinity'::numeric
+       OR NEW.expected_quantity <= 0 OR NEW.expected_quantity <> round(NEW.expected_quantity, v_item.decimal_places)
+     ) THEN
+    RAISE EXCEPTION 'BOA_QUANTITY_PRECISION: expected/source-authorized quantity is invalid for the item base UOM' USING ERRCODE = 'BA008';
+  END IF;
+  IF v_item.is_serial_tracked AND NEW.expected_quantity IS NOT NULL AND NEW.expected_quantity <> 1 THEN
+    RAISE EXCEPTION 'BOA_RECEIPT_INVALID: expected quantity for a serial-numbered receipt line must equal 1' USING ERRCODE = 'BA021';
   END IF;
   IF v_item.is_serial_tracked AND NEW.quantity <> 1 THEN
     RAISE EXCEPTION 'BOA_RECEIPT_INVALID: serial-numbered receipt lines must have quantity 1' USING ERRCODE = 'BA021';
@@ -856,6 +865,12 @@ BEGIN
       WHEN l.base_uom_id <> i.base_uom_id THEN 'item base UOM changed'
       WHEN l.quantity = 'NaN'::numeric OR l.quantity >= 'Infinity'::numeric OR l.quantity <= 0 THEN 'quantity is invalid'
       WHEN l.quantity <> round(l.quantity, u.decimal_places) THEN 'quantity exceeds base-UOM decimal places'
+      WHEN l.expected_quantity IS NOT NULL AND (
+        l.expected_quantity = 'NaN'::numeric OR l.expected_quantity >= 'Infinity'::numeric OR l.expected_quantity <= 0
+        OR l.expected_quantity <> round(l.expected_quantity, u.decimal_places)
+      ) THEN 'expected/source-authorized quantity is invalid for the base UOM'
+      WHEN i.is_serial_tracked AND l.expected_quantity IS NOT NULL AND l.expected_quantity <> 1
+        THEN 'expected quantity for a serial-numbered line must equal 1'
       WHEN l.warehouse_location_id IS NOT NULL AND NOT EXISTS (
         SELECT 1 FROM public.warehouse_locations wl
          WHERE wl.id = l.warehouse_location_id AND wl.warehouse_id = p_receipt.warehouse_id AND wl.is_active
