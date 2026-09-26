@@ -9,7 +9,9 @@ import {
   RECEIPT_STATUSES,
   SUPPLIER_RETURN_STATUSES,
   documentReferences,
+  fundingSources,
   items,
+  projects,
   receiptHeaders,
   receiptLines,
   supplierReturnHeaders,
@@ -239,8 +241,12 @@ export function receiptRoutes({ db, logger, authenticated }: RouteDeps) {
       expiryDate: receiptLines.expiryDate,
       serialRef: receiptLines.serialRef,
       fundingSourceId: receiptLines.fundingSourceId,
+      fundingSourceCode: fundingSources.code,
+      fundingSourceName: fundingSources.name,
       projectId: receiptLines.projectId,
-      unitCostAmount: sql<string | null>`trim_scale(${receiptLines.unitCostAmount})::text`,
+      projectCode: projects.code,
+      projectName: projects.name,
+      unitCostAmount: sql<string | null>`CASE WHEN ${receiptLines.unitCostAmount} IS NULL THEN NULL ELSE trim_scale(${receiptLines.unitCostAmount})::text END`,
       currencyCode: receiptLines.currencyCode,
       sourceLineRef: receiptLines.sourceLineRef,
       notes: receiptLines.notes,
@@ -254,6 +260,8 @@ export function receiptRoutes({ db, logger, authenticated }: RouteDeps) {
       .innerJoin(items, eq(items.id, receiptLines.itemId))
       .innerJoin(uoms, eq(uoms.id, receiptLines.baseUomId))
       .leftJoin(warehouseLocations, eq(warehouseLocations.id, receiptLines.warehouseLocationId))
+      .leftJoin(fundingSources, eq(fundingSources.id, receiptLines.fundingSourceId))
+      .leftJoin(projects, eq(projects.id, receiptLines.projectId))
       .where(eq(receiptLines.receiptId, id))
       .orderBy(asc(receiptLines.lineNo));
 
