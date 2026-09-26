@@ -1907,7 +1907,7 @@ This PRD consolidates:
 - merged M1 security/foundation architecture;
 - merged M2 item/UOM architecture;
 - merged M3 opening-balance architecture;
-- ADR-0001 through ADR-0007;
+- ADR-0001 through ADR-0008;
 - schema, migrations, API routes, tests and CI;
 - predecessor controlled v2.2 documentation used as the source baseline for this v3.1 consolidation.
 
