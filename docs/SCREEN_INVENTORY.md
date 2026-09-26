@@ -1,4 +1,4 @@
-# Screen Inventory
+# Screen Inventory — v3.1
 
 ## Authentication
 - Sign in
@@ -17,6 +17,14 @@
 - Item ledger/bin card
 - Batch/lot/serial detail
 
+## Opening Balance
+- Opening-balance batch list
+- New/edit draft batch
+- Opening-balance lines / CSV import
+- Submit / return / approve / cancel / post actions
+- Source/hard-copy sign-off reference
+- Reconciliation view
+
 ## Warehouses
 - Warehouse list
 - Warehouse detail/dashboard
@@ -26,8 +34,10 @@
 - Receipt list
 - New receipt
 - Receipt detail
+- Hard-copy document references (Model 19/GRN, SRV, delivery note, invoice, PO/contract, inspection certificate as applicable)
 - Inspection/acceptance
 - Rejected delivery follow-up
+- Supplier return
 
 ## Requisitions
 - My requisitions
@@ -87,7 +97,19 @@
 ## Administration
 - Users/roles
 - Warehouse access
-- Approval authority
+- Technical approval configuration
 - Master data
+- Policy/fallback configuration
 - Audit log
 - System settings
+
+## Evidence / document-reference UX
+
+Applicable transaction screens must provide a reusable evidence panel capable of showing:
+- document type/number/date;
+- source/issuer;
+- paper preparer/checker/approver/recipient and titles where applicable;
+- physical file reference;
+- optional attachment metadata if attachment support is later enabled.
+
+The UI must distinguish paper actors from authenticated system actors and must not present a workflow click as a legal digital signature.
