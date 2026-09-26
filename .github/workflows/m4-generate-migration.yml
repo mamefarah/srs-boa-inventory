@@ -1,0 +1,37 @@
+name: M4 generate Drizzle migration
+
+on:
+  push:
+    branches:
+      - claude/m4-receipt-inspection
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/m4-receipt-inspection
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Generate migration from schema
+        run: node node_modules/drizzle-kit/bin.cjs generate --config drizzle.config.ts --name m4_receipts
+      - name: Commit generated migration metadata
+        run: |
+          if git diff --quiet -- drizzle; then
+            echo "No generated migration changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add drizzle
+          git commit -m "chore(m4): generate Drizzle receipt migration [skip m4-generate]"
+          git push origin HEAD:claude/m4-receipt-inspection
