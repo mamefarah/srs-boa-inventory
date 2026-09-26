@@ -2,7 +2,7 @@
 
 > Working notes for engineers and agents. This file never outranks the controlled documents listed in `docs/CONTROLLED_DOCUMENTS.md`.
 
-**Updated:** 2026-09-25
+**Updated:** 2026-09-26
 
 ## Milestone status
 
@@ -10,8 +10,9 @@
 |---|---|---|
 | M0 Procedure/legal validation | PARTIALLY VERIFIED (controlled docs v2.2) | merged |
 | M1 Foundation/security | Merged (PR #10) | — |
-| **M2 Item master/UOM** | **Implemented; in review** | `claude/m1-consolidation-security-n9puag` (session-designated branch, reset from `main` after PR #10) |
-| M3 Opening balance | Not started. Blocked on M2 merge | — |
+| M2 Item master/UOM | Merged (PR #11) | — |
+| **M3 Opening balance** | **Implemented; in review** | `claude/m1-consolidation-security-n9puag` (session-designated branch, reset from `main` after PR #11) |
+| M4 Receipt + inspection | Not started. Blocked on M3 merge | — |
 
 ## Migrations
 
@@ -25,6 +26,8 @@
 | `drizzle/0006_m2_redteam_constraints.sql` | Generated + name-key function: NaN CHECK, Unicode-robust `name_key` uniqueness, single-script names |
 | `drizzle/0007_m2_redteam_hardening.sql` | Hand-written: ledger guard row locks, category hierarchy serialisation, column INSERT grants, visible-character reasons, in-use protection, conversion guard/audit |
 | `drizzle/0003_m1_access_hardening.sql` | Hand-written: audited SECURITY DEFINER admin functions, SoD trigger, admin-removal dual-control block, idempotency RLS and state machine, policy lifecycle, CONNECT revoked from PUBLIC |
+| `drizzle/0008_m3_opening_balance.sql` | Generated: opening balance batches and lines (workflow and maker-checker CHECKs, unconstrained validated line quantity), ledger `expiry_date` |
+| `drizzle/0009_m3_opening_balance_security.sql` | Hand-written: opening-balance permissions/roles, column grants, RLS, guard and audit triggers, SECURITY DEFINER submit/return/approve/cancel/post and reconciliation (ADR-0007) |
 
 The migration baseline was re-created for the canonical repository. Any AI Studio development database built from the staging migrations must be **recreated**, not upgraded.
 
@@ -44,7 +47,7 @@ The migration baseline was re-created for the canonical repository. Any AI Studi
 | Tamper-evidence against privileged DBAs (audit hash chain / external log shipping) | M15 |
 | Rate limiting is per process (in-memory); a shared limiter or WAF is needed for multi-instance deployment | M15 |
 | Content-Security-Policy for the SPA | M15 |
-| Audit rows are inserted by the application role directly. A single SECURITY DEFINER audit writer would limit forgery by stolen app credentials | M3 (with posting functions) |
+| Audit rows are inserted by the application role directly. A single SECURITY DEFINER audit writer would limit forgery by stolen app credentials. M3 opening-balance events are written by SECURITY DEFINER triggers, but the M1 `INSERT` grant on `audit_events` remains | M4 (revoke once all writers are triggers/functions) |
 | Ledger legs without a warehouse (IN_TRANSIT/EXTERNAL/contra) are visible only with global scope | M7 |
 | Item aliases/alternate names for search (UX_PATTERNS §4) | M2 follow-up / M4 |
 | Browser verification of the item master UI against a real Firebase project | Before pilot (M16), earlier when a dev Firebase project exists |
@@ -59,6 +62,13 @@ HB-1 … HB-8 and CG-1 … CG-3, per `docs/M0_BLOCKER_MATRIX.md`. M1 seeds no re
 - A single technical administrator can still activate a *second, non-admin* identity they control and grant it read roles. Every step is audited with the acting administrator, and the database prevents one identity from being both administrator and data reader. Prevention needs a dual-control rule for sensitive grants, which belongs to the Bureau approval/segregation matrix and is not invented here.
 - Removing or deactivating an administrator is blocked in the application (`ADMIN_CHANGE_REQUIRES_DUAL_CONTROL`). Until HB-4 defines who may approve it, it is a reviewed, owner-run database procedure with an audit row.
 
+## M3 notes
+
+- Posting path: `boa_ob_post` is the only function that writes opening balances to the ledger. It takes per-(warehouse, item) advisory locks in ascending item order. **Binding for M4+:** every function that writes WAREHOUSE-custody entries must take the same locks (ADR-0007).
+- **NEEDS POLICY/PROCEDURE CONFIRMATION (HB-4):** who may approve an opening balance. `OPENING_BALANCE_APPROVER` is a technical role; the approver must record the external sign-off reference and cannot be the preparer or submitter.
+- Closed periods do not exist yet (HB-7). Opening posting will need the period check when period close lands.
+- Browser verification of the opening-balance screens is pending a dev Firebase project (as for M2).
+
 ## Next milestone
 
-M3 Opening balance after M2 is approved and merged. Binding carry-overs from the M2 REDTEAM: quantities are validated before any NUMERIC(20,6) cast (ADR-0005 §6), and reversal/correction exemptions are item-scoped. M3 also needs: posting through a reviewed SECURITY DEFINER function against OPENING_BALANCE_CONTRA, with approved count/source evidence, idempotency and duplicate-opening prevention.
+M4 Receipt + inspection after M3 is approved and merged. Carry-overs: the shared (warehouse, item) advisory-lock scheme, pre-cast quantity validation (ADR-0005 §6), item-scoped reversal exemptions (ADR-0006 L5), and GRN/SRV labels kept configurable (HB-8).

@@ -517,6 +517,38 @@ describe('opening balance: duplicate prevention and concurrency', () => {
     assert.equal(n.rows[0].n, 1);
   });
 
+  it('blocks a competing post on the (warehouse, item) lock until the first commits, then refuses it', async () => {
+    // Deterministic interleaving (no timing luck): tx1 posts and holds its transaction open;
+    // tx2 must wait on the advisory lock, then see tx1's entries and refuse a second opening.
+    await createItem('OB-RACE', item.eaUom, (await admin.query(`SELECT id FROM item_categories WHERE code = 'OB-CAT'`)).rows[0].id);
+    const a = await approved('ob-preparer-a', [{ itemId: item['OB-RACE'], quantity: '2' }]);
+    const b = await approved('ob-preparer-a2', [{ itemId: item['OB-RACE'], quantity: '2' }]);
+    const c1 = await pool.connect();
+    const c2 = await pool.connect();
+    try {
+      for (const c of [c1, c2]) {
+        await c.query('BEGIN');
+        await c.query("SELECT set_config('boa.user_id', $1, true)", [String(fx.userIds['ob-approver-a'])]);
+      }
+      await c1.query('SELECT boa_ob_post($1, $2, $3, $4)', [a.id, a.rowVersion, key(), 'a'.repeat(64)]);
+      let settled = false;
+      const second = c2.query('SELECT boa_ob_post($1, $2, $3, $4)', [b.id, b.rowVersion, key(), 'b'.repeat(64)]).then(
+        () => { settled = true; return null; },
+        (e: Error) => { settled = true; return e; },
+      );
+      await new Promise((r) => setTimeout(r, 400));
+      assert.equal(settled, false, 'the competing post must wait for the first transaction');
+      await c1.query('COMMIT');
+      const err = await second;
+      assert.ok(err instanceof Error && /BOA_DUPLICATE_OPENING/.test(err.message), String(err));
+    } finally {
+      await c2.query('ROLLBACK').catch(() => undefined);
+      await c1.query('ROLLBACK').catch(() => undefined);
+      c1.release();
+      c2.release();
+    }
+  });
+
   it('posts a batch once under a burst of concurrent requests', async () => {
     const b = await approved('ob-preparer-a', [{ itemId: item['OB-PUMP'], quantity: '1', serialRef: 'SN-900' }]);
     const sameKey = key();
