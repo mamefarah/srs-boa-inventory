@@ -3,7 +3,7 @@
 **Product:** Somali Regional State Bureau of Agriculture Inventory Management System (BoA-IMS)  
 **Version:** 3.1 — Consolidated Final Candidate  
 **Date:** 26 September 2026  
-**Status:** Final candidate for adoption as the next controlled repository baseline  
+**Status:** Controlled baseline v3.1; effective upon merge of the governance synchronization PR  
 **Repository:** `mamefarah/srs-boa-inventory`  
 **Implementation baseline reviewed:** `main` at 26 September 2026, with M1, M2 and M3 merged  
 **Primary regional legal baseline:** Somali Regional State Revised Proclamation for Procurement and Public Property Administration No. 196/2020 (196/2012 E.C.)  
