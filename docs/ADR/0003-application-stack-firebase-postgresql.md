@@ -48,3 +48,15 @@ Option B.
 ## Supersedes / Superseded by
 
 Supersedes the Supabase/Next.js recommendation in `docs/TECH_STACK.md` (subordinate document).
+
+
+## ADR-0008 supersession note
+
+ADR-0008 supersedes this ADR's earlier statement that attachment storage required a dedicated ADR before M4.
+
+Under PRD v3.1:
+- signed hard-copy government source documents remain official supporting evidence;
+- BoA-IMS records first-class document references and electronic workflow/audit;
+- legal digital signatures are out of scope;
+- scanned attachments are optional and may receive a later storage design if operationally needed;
+- attachment storage therefore does not block M4.
