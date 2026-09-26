@@ -133,6 +133,18 @@ describe('M4 database boundaries', () => {
       await assert.rejects(c.query(`SELECT boa_receipt_lock(1,1,ARRAY['RECEIVE_RECEIPTS'])`), /permission denied/);
     });
   });
+
+  it('does not leak a hidden parent warehouse through the document-reference RLS helper', async () => {
+    const hidden = await draftReceipt('receipt-op-b', fx.warehouseB, '1.0');
+    await asApp('receipt-op-a', async (c) => {
+      const r = await c.query(`SELECT boa_document_warehouse('RECEIPT',$1) AS warehouse_id`, [String(hidden.id)]);
+      assert.equal(r.rows[0].warehouse_id, null);
+    });
+    await asApp('receipt-op-b', async (c) => {
+      const r = await c.query(`SELECT boa_document_warehouse('RECEIPT',$1) AS warehouse_id`, [String(hidden.id)]);
+      assert.equal(r.rows[0].warehouse_id, fx.warehouseB);
+    });
+  });
 });
 
 describe('M4 receipt workflow', () => {
@@ -165,6 +177,53 @@ describe('M4 receipt workflow', () => {
       [String(receipt.id)],
     );
     assert.equal(ledger.rows[0].n, 0);
+  });
+
+  it('derives short and over-delivery quantities from the optional source-authorized quantity', async () => {
+    const h = await post('/api/receipts', 'receipt-op-a', {
+      warehouseId: fx.warehouseA,
+      sourcePartyName: 'Delivery variance supplier',
+      sourceReference: `PO-${randomUUID()}`,
+    });
+    assert.equal(h.status, 201, JSON.stringify(h.body));
+
+    const shortLine = await post(`/api/receipts/${h.body.data.id}/lines`, 'receipt-op-a', {
+      itemId: fx.itemId,
+      quantity: '10.0',
+      expectedQuantity: '12.0',
+      warehouseLocationId: binA,
+      sourceLineRef: 'PO-L1',
+    });
+    assert.equal(shortLine.status, 201, JSON.stringify(shortLine.body));
+
+    const overLine = await post(`/api/receipts/${h.body.data.id}/lines`, 'receipt-op-a', {
+      itemId: fx.itemId,
+      quantity: '10.0',
+      expectedQuantity: '8.0',
+      warehouseLocationId: binA,
+      sourceLineRef: 'PO-L2',
+    });
+    assert.equal(overLine.status, 201, JSON.stringify(overLine.body));
+
+    const detail = (await get(`/api/receipts/${h.body.data.id}`, 'receipt-op-a')).body.data;
+    assert.deepEqual(
+      detail.lines.map((l: any) => ({
+        expected: l.expectedQuantity,
+        short: l.shortQuantity,
+        over: l.overDeliveredQuantity,
+        status: l.deliveryVarianceStatus,
+      })),
+      [
+        { expected: '12', short: '2', over: '0', status: 'SHORT' },
+        { expected: '8', short: '0', over: '2', status: 'OVER_DELIVERED' },
+      ],
+    );
+
+    const ledger = await admin.query(
+      `SELECT count(*)::int AS n FROM inventory_transactions WHERE business_document_type='RECEIPT' AND business_document_id=$1`,
+      [String(h.body.data.id)],
+    );
+    assert.equal(ledger.rows[0].n, 0, 'delivery variance is documentary until physical arrival');
   });
 
   it('enforces warehouse scope', async () => {
