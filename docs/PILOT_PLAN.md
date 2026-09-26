@@ -21,12 +21,14 @@ Pilot:
 7. Warehouse transfer + destination receipt.
 8. Transfer discrepancy.
 9. Return/condition change.
-10. Blind physical count and approved variance.
+10. Physical count and approved variance (blind first count may be exercised as an optional control).
 11. Adjustment/reversal.
 12. Period close.
 13. Reports/audit.
 14. Backup and restore.
 15. Phone usability.
+16. Hard-copy source documents can be traced from system document references and vice versa.
+17. System actor and paper signatory are distinguishable; no digital-signature dependency exists.
 
 ## Scale gate
 

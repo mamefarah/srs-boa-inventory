@@ -1,6 +1,6 @@
-# Conceptual Data Model — v2.2
+# Conceptual Data Model — v3.1
 
-> Design only. `PRD.md` v2.2, `M0_EVIDENCE_REGISTER.md` and `M0_BLOCKER_MATRIX.md` are controlling. Do not hard-code unresolved policy such as fixed-asset monetary thresholds, approval authorities, GRN/SRV mapping, project-stock restrictions or disposal/deletion thresholds.
+> Design only. `PRD.md` v3.1, `M0_EVIDENCE_REGISTER.md` and `M0_BLOCKER_MATRIX.md` are controlling. Current federal property/stock rules may be configured as documented operational fallback where regional detail is unavailable. Preserve provenance, effective dates and regional override. Do not invent project restrictions, UOM conversion factors or legal digital signatures.
 
 ## Identity and authorization
 
@@ -11,7 +11,7 @@
 - user_warehouse_access
 - approval_authorities
 
-Approval authority should be scopeable by transaction type, warehouse, item category and value/quantity threshold when policy requires.
+Approval authority should be scopeable by transaction type, warehouse, item category and value/quantity threshold when policy requires. Technical approval roles are software capabilities; actual paper signatory/title data is recorded separately and does not become a legal digital signature.
 
 ## Organization/master data
 
@@ -26,6 +26,7 @@ Approval authority should be scopeable by transaction type, warehouse, item cate
 - funding_sources
 - projects
 - procurement_references
+- documents / document_references (hard-copy evidence references; optional attachment metadata)
 
 ## Physical inventory model
 
@@ -177,10 +178,47 @@ Disposal and deletion/write-off are distinct business processes. Both may ultima
 - period_reopen_events
 
 ## Governance
-- attachments
+- documents / document_references
+- optional attachments
 - notifications
-- audit_logs
+- audit_logs / audit_events
+- policy_versions
 - idempotency_records if idempotency is not fully represented on transaction headers
+
+### documents / document_references
+
+The reusable evidence model must support:
+- document type;
+- document number/reference;
+- document date;
+- issuing/source unit;
+- linked business entity/document/transaction;
+- warehouse where relevant;
+- paper prepared-by name/title;
+- paper checked-by name/title;
+- paper approved-by/signatory name/title;
+- paper recipient/receiver name/title where applicable;
+- paper approval/signature date;
+- physical file reference/location;
+- optional external-system reference;
+- optional attachment metadata;
+- remarks;
+- created-by system user and created-at.
+
+Paper actors are separate from authenticated system actors. A document reference is evidence linkage, not an electronic signature.
+
+### policy_versions
+
+Policy configuration must retain:
+- policy type;
+- source jurisdiction (regional / Bureau / federal / project);
+- source document/reference;
+- effective-from/to dates;
+- fallback/override status;
+- configured value/rule;
+- evidence/approval reference where applicable.
+
+A later regional rule may supersede a federal fallback prospectively without rewriting posted history.
 
 ## Read/write boundaries
 
@@ -188,10 +226,12 @@ Application clients:
 - may read authorized projections/documents;
 - may create/update draft business documents according to permission;
 - may request approved posting functions;
+- may record authorized hard-copy document references according to workflow permissions;
 - must not directly write authoritative ledger entries/transactions;
 - must not directly write balance projections;
 - must not directly mutate audit logs;
-- must not bypass period locks.
+- must not bypass period locks;
+- must not represent a system click as a legal digital signature.
 
 ## Key invariants
 
@@ -207,3 +247,13 @@ Application clients:
 10. Closed-period posting is blocked except through controlled correction/reopen policy.
 11. Every ledger/commitment quantity uses item base UOM.
 12. Application clients cannot directly mutate ledger/projection/audit structures.
+
+
+## Evidence-model invariants
+
+1. Required signed government originals may remain outside the database as hard copy.
+2. BoA-IMS must preserve sufficient document references to locate and reconcile those originals.
+3. System actor and paper signatory are separate data.
+4. Optional scans/attachments are supporting convenience, not the authoritative stock ledger.
+5. Multiple source documents may be linked to one transaction without declaring them legally equivalent.
+6. Federal fallback configuration must preserve federal provenance and permit later regional override.

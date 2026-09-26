@@ -1,81 +1,98 @@
-# M0 — Official Procedure Validation Status v2.2
+# M0 — Procedure / Evidence Configuration Status v3.1
+
+**Updated:** 26 September 2026
 
 ## Current status
 
-**PARTIALLY VERIFIED.** The project now has a controlling Somali Regional State legal baseline, but specified implementing-policy questions remain open.
+**OPERATIONALLY BASELINED; REGIONAL EVIDENCE ENRICHMENT CONTINUES.**
 
-Application development may proceed only within the READY/MECHANICS READY boundaries in `docs/M0_BLOCKER_MATRIX.md`. Production policy routing must not be invented.
+BoA-IMS now has:
+- a verified regional legal baseline;
+- current BoA operational evidence;
+- a defined current-federal fallback mechanism for missing procedural detail;
+- a hybrid hard-copy/electronic evidence model;
+- explicit project-specific and item-specific exceptions.
 
-## Major evidence advancement — 25 September 2026
+M0 therefore continues as evidence/configuration governance rather than a blanket software-development blocker.
 
-The following new evidence was reviewed and incorporated:
+## Governing rules
 
-- Somali Regional State Revised Procurement and Public Property Administration Proclamation No. 196/2020 (196/2012 E.C.).
-- Revised Somali Regional procurement directive material dated 2015 E.C.
-- Somali-language Stock Management Guide.
-- Somali Regional Government Fixed Asset Management Guide.
-- Somali Regional internal-audit/control material.
-- Federal Public Procurement Directive No. 1073/2025 and the older federal procurement manual as reference-only sources.
+1. Current Somali Regional/BoA/BoFED rule overrides.
+2. Current BoA practice may define operations where consistent with higher authority.
+3. If regional procedural detail is unavailable, use the latest official federal property/stock procedure as a documented, configurable fallback.
+4. Preserve the federal source as federal; do not relabel it as regional law.
+5. A later regional rule overrides prospectively through policy configuration, without rewriting posted history.
+6. Project/donor restrictions remain project-specific.
+7. UOM conversion remains item-specific and evidence-based.
+8. Signed hard-copy source documents remain official supporting evidence; no legal digital-signature feature is required.
 
-## What is now verified
+## Evidence now available
 
-- Proclamation 196/2020 applies to Somali Regional public-property administration.
-- Public property, fixed assets, supplies, custodial responsibility and life-cycle management have a regional legal basis.
-- Property records must support life-cycle traceability including date, description, quantity and cost.
-- Fixed-asset custodian/location tracking is required.
-- Public-property inventory must be physically verified against records at least annually.
-- Disposal and deletion/write-off are separate concepts.
-- The former Proclamation No. 82 framework is repealed; manuals based on it are legacy evidence only unless confirmed current/consistent.
-- Applicable donor/international obligations may prevail where the controlling legal framework provides for that priority.
+Regional/BoA:
+- Proclamation No. 196/2020;
+- regional procurement/property/stock materials already registered;
+- BoA/DRDIP FM, procurement and PIM operational evidence;
+- BoA internal-audit evidence.
 
-## Still unresolved
+Federal fallback/reference:
+- Federal Government Property Administration Directive No. 1095/2025;
+- Federal Public Procurement and Property Administration Proclamation No. 1333/2024;
+- Federal Stock Management Manual/training resources;
+- fixed-asset training material;
+- 2026 Hazardous Property Management Manual.
 
-1. HB-1 — detailed disposal/deletion committee, valuation, methods, approvals and thresholds.
-2. HB-2 — current fixed-asset monetary threshold under the implementing directive.
-3. HB-3 — funding/project attribution versus legally restricted stock.
-4. HB-4 — consolidated approval/signature matrix.
-5. HB-5 — adjustment/variance authority and thresholds.
-6. HB-6 — warehouse-transfer authorization and discrepancy-resolution authority.
-7. HB-7 — period-close/reopen certifying authority.
-8. HB-8 — GRN/Model 19 versus SRV relationship.
-9. CG-1 — approved UOM/package conversions.
-10. CG-2 — regional paper-original/electronic-signature policy.
-11. CG-3 — hazardous/expired agricultural-input disposition rules.
+## Reclassified former blockers
+
+- HB-1: federal fallback available; regional override open.
+- HB-2: federal 10,000 Birr threshold/special-fixed-asset fallback configurable; regional override open.
+- HB-3: project-specific evidence still required.
+- HB-4: configuration gap, not development blocker; technical workflow + hard-copy signatory capture.
+- HB-5: federal fallback available.
+- HB-6: federal fallback available.
+- HB-7: configuration gap, not development blocker.
+- HB-8: resolved for software design by multiple independent document references.
+- CG-1: item-specific data requirement.
+- CG-2: resolved by scope; no digital-signature feature.
+- CG-3: federal hazardous-property fallback available; sector override open.
+
+See `docs/M0_BLOCKER_MATRIX.md` for the full matrix.
 
 ## Development gate
 
 ### May proceed
 
-- authentication and technical RBAC scaffolding;
-- warehouse/location master;
-- item/category/base-UOM master;
-- immutable transaction/entry ledger;
-- audit and idempotency infrastructure;
-- policy-version tables;
-- receipt/inspection state mechanics with configurable document labels;
-- internal-custody/custodian/location data structures;
-- annual physical-count engine;
-- generic approval engine without real unverified authority mappings;
-- transfer, adjustment, period-close and disposal/deletion technical mechanisms behind policy gates.
+M4 through M16 may proceed milestone-by-milestone under the v3.1 controlled baseline, provided each feature:
+- preserves policy provenance;
+- uses the configured fallback only where appropriate;
+- keeps regional override possible;
+- does not invent project restrictions or UOM conversions;
+- captures required hard-copy evidence references;
+- preserves all ledger/security invariants.
 
-### Must not be hard-coded yet
+### Still requires specific evidence
 
-- Birr fixed-asset threshold;
-- real Bureau signatory/approval routing;
-- adjustment/disposal thresholds;
-- cross-project stock substitutability;
-- transfer discrepancy authority;
-- period reopen authority;
-- GRN/SRV one-vs-two-document workflow;
-- alternate UOM conversion factors;
-- hazardous-input destruction/disposal workflow.
+- cross-project/funding restrictions for each affected project;
+- item/package conversion factors;
+- later regional overrides where management wants regional-specific authority/title/threshold configuration.
+
+## Hybrid evidence decision
+
+BoA-IMS is authoritative for electronic inventory state, workflow, ledger, reconciliation and audit.
+
+Required signed source documents remain hard copy for official government filing/audit. The system records references and relevant paper actors. System workflow approval is not a legal digital signature.
+
+## Implementation status
+
+- M1 Foundation/Security — merged.
+- M2 Item Master/UOM — merged.
+- M3 Opening Balance — merged.
+- M4 Receipt + Inspection — next.
 
 ## Controlled-document precedence
 
-For implementation, read in this order:
-
-1. `docs/PRD.md` — v2.2 product/control requirements.
-2. `docs/M0_EVIDENCE_REGISTER.md` — evidence provenance and authority.
-3. `docs/M0_BLOCKER_MATRIX.md` — what remains blocked/configurable.
-4. `docs/OFFICIAL_PROCESS_MAPPING.md` — process translation.
-5. `docs/BUSINESS_RULES.md`, `docs/DATA_MODEL.md`, `docs/WORKFLOWS.md` — subordinate design documents; where they conflict with the above, the v2.2 controlled documents prevail until those design files are synchronized.
+1. `docs/PRD.md` v3.1
+2. `docs/M0_EVIDENCE_REGISTER.md`
+3. `docs/M0_BLOCKER_MATRIX.md`
+4. `docs/OFFICIAL_PROCESS_MAPPING.md`
+5. this file
+6. subordinate technical documents and ADRs

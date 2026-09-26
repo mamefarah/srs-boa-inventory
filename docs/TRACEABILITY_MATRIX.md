@@ -1,4 +1,4 @@
-# Requirement / Rule Traceability Matrix
+# Requirement / Rule Traceability Matrix — v3.1
 
 Use this file to connect business rules to implementation and tests. Every critical rule must be represented before its feature reaches production.
 
@@ -24,7 +24,7 @@ Use this file to connect business rules to implementation and tests. Every criti
 | INV-023 | UOM conversion | `item_uom_conversions` activation gate (VERIFIED evidence + approval) | `tests/item-master.test.ts` | TBD | M2 gate (CG-1 open) |
 | INV-026 | FEFO | TBD | FEFO/override | TBD | Planned |
 | INV-027 | Funding | TBD | Funding segregation | TBD | Planned |
-| INV-028 | Opening | Opening balance batches: DRAFT→SUBMITTED→APPROVED→POSTED in the database; source evidence and sign-off reference required; `boa_ob_post` sole ledger path; duplicate-opening refusal; reconciliation (ADR-0007) | `tests/opening-balance.test.ts` | TBD | M3 (approval authority HB-4 open) |
+| INV-028 | Opening | Opening balance batches: DRAFT→SUBMITTED→APPROVED→POSTED; source/hard-copy sign-off reference; `boa_ob_post` sole ledger path; duplicate-opening refusal; reconciliation (ADR-0007/0008) | `tests/opening-balance.test.ts` | Browser/UAT evidence to be retained during pilot verification | M3 complete; paper authority mapping remains configurable |
 | INV-030 | Authorization | `server/authz/authorize.ts` + RLS policies | `tests/http-authz.test.ts`, RLS suite in `tests/database.test.ts` | TBD | M1 foundation |
 | INV-031 | Ledger security | `boa_ims_app` grants (no ledger writes) | `tests/database.test.ts` direct-write prohibition | TBD | M1 foundation |
 | INV-032 | Audit | `server/audit/audit.ts`; admin/authn/authz events | `tests/http-admin.test.ts`, `tests/http-auth.test.ts` | TBD | M1 foundation |
@@ -38,6 +38,12 @@ Use this file to connect business rules to implementation and tests. Every criti
 | INV-044 | Reversal | TBD | Unsafe reversal blocked | TBD | Planned |
 | INV-045 | Closed-period correction | TBD | Current-period correction | TBD | Planned |
 | INV-046 | Reports | TBD | Distinct inventory totals | TBD | Planned |
+
+| INV-048 | Evidence | Reusable hard-copy document-reference model (PRD v3.1 / ADR-0008) | Add with M4 evidence-model tests | TBD | M4 planned |
+| INV-049 | Evidence/Audit | System actor kept separate from paper signatory | Add M4+ API/DB tests | TBD | v3.1 control |
+| INV-050 | Approval | No legal digital-signature claim; system approval is technical workflow state | UI/API wording tests as workflows land | TBD | v3.1 control |
+| INV-051 | Policy | Federal fallback retains provenance/effective date and regional override | Policy-version tests as fallback configuration lands | TBD | v3.1 control |
+| INV-052 | Documents | Multiple independent official document references may link to one business transaction | M4 document-reference tests | TBD | M4 planned |
 
 Rules not listed above remain mandatory; expand the matrix as their implementation begins.
 | INV-029 | Authorization | SYSTEM_ADMIN has no stock/ledger/audit/approval permissions | `tests/database.test.ts` role matrix | TBD | M1 foundation |

@@ -172,5 +172,5 @@ A posted batch and its ledger entries are immutable. Once an item has any ledger
 - **HB-4:** the approval authority (above).
 - **Go-live cutoff and counting method:** chosen by the Bureau. The system records the cutoff and evidence references; it does not prescribe the count procedure.
 - **HB-7:** closed-period controls do not exist yet. When period close arrives, opening posting must respect it.
-- **Attachments:** documents are stored as references until the attachment storage ADR.
+- **Attachments / document evidence:** ADR-0008 supersedes the earlier attachment-storage dependency. Required signed originals remain hard copy; BoA-IMS stores document references. Scanned attachments are optional and do not block M4.
 - **INV-047:** valuation. Unit cost is optional evidence and is not used for any valuation.

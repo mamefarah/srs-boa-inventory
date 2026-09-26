@@ -1,4 +1,4 @@
-# Test Plan — v2.1
+# Test Plan — v3.1
 
 ## Quality layers
 
@@ -30,6 +30,7 @@
 - Direct reversal is blocked when dependencies/current quantities make it unsafe.
 - Closed-period correction posts in current period unless an authorized reopen explicitly occurs.
 - Physical-count variance alone does not change stock.
+- Blind-count mode is tested when enabled, but annual verification does not require blind mode by default.
 - Unauthorized warehouse/user action is blocked at DB/API level.
 - All authoritative quantities use item base UOM.
 
@@ -119,6 +120,20 @@ Receipt 100 followed by issue 80; attempt to reverse full original receipt:
 - direct reversal blocked if it would create impossible stock;
 - correction path required.
 
+## Evidence / workflow tests
+
+Applicable workflows must test:
+- required hard-copy document reference fields;
+- ability to link multiple document types to one transaction;
+- separation of paper signatory identity from authenticated system actor;
+- system approval state without any claim of legal digital signature;
+- policy-source provenance for federal fallback configuration;
+- later regional override without rewriting posted historical evidence;
+- no guessed UOM conversion;
+- project-specific restriction only when controlling project evidence is configured.
+
 ## UI testing
 
 Test 360–430px mobile widths, tablet and desktop. Verify keyboard access, visible focus, labels, error recovery, empty/loading states and no color-only status. Verify on-hand, committed and available-to-promise are not visually conflated.
+
+Where hard-copy evidence is required, verify the evidence/reference panel clearly distinguishes document number/date/paper actors/physical file reference from the authenticated system user and system timestamps.
