@@ -3,6 +3,7 @@ import { api, ApiError, type Principal } from './api.ts';
 import { authConfigured, signInWithGoogle, signOutUser, watchUser } from './auth.ts';
 import { t, type MessageKey } from './i18n.ts';
 import { ItemsView, ReferenceView } from './ItemMaster.tsx';
+import { OpeningBalancesView } from './OpeningBalance.tsx';
 
 type Session =
   | { state: 'loading' }
@@ -10,16 +11,17 @@ type Session =
   | { state: 'blocked'; code: string; requestId?: string }
   | { state: 'ready'; principal: Principal };
 
-type TabId = 'stock' | 'items' | 'reference' | 'warehouses' | 'policies' | 'audit';
+type TabId = 'stock' | 'items' | 'reference' | 'opening' | 'warehouses' | 'policies' | 'audit';
 
 // Navigation hints only. The server enforces every permission and scope independently.
-const TABS: Array<{ id: TabId; label: MessageKey; permission: string }> = [
-  { id: 'stock', label: 'tabStock', permission: 'READ_STOCK' },
-  { id: 'items', label: 'tabItems', permission: 'READ_ITEMS' },
-  { id: 'reference', label: 'tabReference', permission: 'READ_ITEMS' },
-  { id: 'warehouses', label: 'tabWarehouses', permission: 'READ_WAREHOUSES' },
-  { id: 'policies', label: 'tabPolicies', permission: 'READ_POLICIES' },
-  { id: 'audit', label: 'tabAudit', permission: 'READ_AUDIT' },
+const TABS: Array<{ id: TabId; label: MessageKey; permissions: string[] }> = [
+  { id: 'stock', label: 'tabStock', permissions: ['READ_STOCK'] },
+  { id: 'items', label: 'tabItems', permissions: ['READ_ITEMS'] },
+  { id: 'reference', label: 'tabReference', permissions: ['READ_ITEMS'] },
+  { id: 'opening', label: 'tabOpening', permissions: ['READ_OPENING_BALANCE', 'PREPARE_OPENING_BALANCE', 'APPROVE_OPENING_BALANCE', 'POST_OPENING_BALANCE'] },
+  { id: 'warehouses', label: 'tabWarehouses', permissions: ['READ_WAREHOUSES'] },
+  { id: 'policies', label: 'tabPolicies', permissions: ['READ_POLICIES'] },
+  { id: 'audit', label: 'tabAudit', permissions: ['READ_AUDIT'] },
 ];
 
 export function App() {
@@ -97,7 +99,7 @@ function SessionView({ session }: { session: Session }) {
 }
 
 function Workspace({ principal }: { principal: Principal }) {
-  const tabs = TABS.filter((tab) => principal.permissions.includes(tab.permission));
+  const tabs = TABS.filter((tab) => tab.permissions.some((p) => principal.permissions.includes(p)));
   const [active, setActive] = useState<TabId | undefined>(tabs[0]?.id);
   return (
     <>
@@ -133,6 +135,7 @@ function Workspace({ principal }: { principal: Principal }) {
           {active === 'stock' && <StockView />}
           {active === 'items' && <ItemsView canManage={principal.permissions.includes('MANAGE_ITEMS')} />}
           {active === 'reference' && <ReferenceView canManage={principal.permissions.includes('MANAGE_MASTER_REFERENCE')} />}
+          {active === 'opening' && <OpeningBalancesView principal={principal} />}
           {active === 'warehouses' && <WarehousesView />}
           {active === 'policies' && <PoliciesView />}
           {active === 'audit' && <AuditView />}

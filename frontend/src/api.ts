@@ -13,11 +13,15 @@ export class ApiError extends Error {
 }
 
 /** All data comes from the server API. Nothing authoritative is cached in browser storage. */
-export async function api<T>(path: string, init: { method?: 'GET' | 'POST' | 'PATCH'; body?: unknown } = {}): Promise<T> {
+export async function api<T>(
+  path: string,
+  init: { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; body?: unknown; headers?: Record<string, string> } = {},
+): Promise<T> {
   const token = await currentIdToken();
   const res = await fetch(`/api${path}`, {
     method: init.method ?? 'GET',
     headers: {
+      ...(init.headers ?? {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
     },
