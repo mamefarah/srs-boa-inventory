@@ -1845,7 +1845,6 @@ Before pilot go-live:
 - Re-evaluate dependency advisories without unsafe forced upgrades.
 - Retrofit period-state checks into earlier posting functions when M11 lands.
 - Complete M10 correction path before broad operational use of posted M3/M4/M6 transactions.
-- Update stale repository documentation that still describes M3 as in review.
 
 ---
 
@@ -1910,7 +1909,7 @@ This PRD consolidates:
 - merged M3 opening-balance architecture;
 - ADR-0001 through ADR-0007;
 - schema, migrations, API routes, tests and CI;
-- current controlled v2.2 documentation.
+- predecessor controlled v2.2 documentation used as the source baseline for this v3.1 consolidation.
 
 ---
 
