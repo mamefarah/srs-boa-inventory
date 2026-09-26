@@ -57,9 +57,18 @@ async function addDocument(receiptId: number, uid = 'receipt-op-a', type = 'MODE
     documentType: type,
     documentNumber: number,
     documentDate: '2026-09-26',
+    sourceUnit: 'BoA Stores / Supplier File',
+    preparedByName: 'Paper Preparer Example',
+    preparedByTitle: 'Storekeeper',
+    checkedByName: 'Paper Checker Example',
+    checkedByTitle: 'Property Officer',
     approvedByName: 'Paper Approver Example',
     approvedByTitle: 'Authorized Officer',
+    recipientName: 'Paper Receiver Example',
+    recipientTitle: 'Receiving Officer',
+    approvalDate: '2026-09-26',
     physicalFileRef: 'Store File / 2019 EFY / Test',
+    remarks: 'Hard-copy evidence retained for audit',
   });
   assert.equal(r.status, 201, JSON.stringify(r.body));
   return r.body.data;
@@ -250,13 +259,19 @@ describe('M4 receipt workflow', () => {
   it('records hard-copy evidence separately from the authenticated system actor', async () => {
     await addDocument(receipt.id);
     const r = await admin.query(
-      `SELECT d.approved_by_name, d.approved_by_title, u.firebase_uid
+      `SELECT d.source_unit, d.prepared_by_name, d.checked_by_name, d.approved_by_name, d.approved_by_title,
+              d.recipient_name, d.physical_file_ref, u.firebase_uid
          FROM document_references d JOIN users u ON u.id=d.created_by_user_id
         WHERE d.entity_type='RECEIPT' AND d.entity_id=$1 ORDER BY d.id DESC LIMIT 1`,
       [String(receipt.id)],
     );
+    assert.equal(r.rows[0].source_unit, 'BoA Stores / Supplier File');
+    assert.equal(r.rows[0].prepared_by_name, 'Paper Preparer Example');
+    assert.equal(r.rows[0].checked_by_name, 'Paper Checker Example');
     assert.equal(r.rows[0].approved_by_name, 'Paper Approver Example');
     assert.equal(r.rows[0].approved_by_title, 'Authorized Officer');
+    assert.equal(r.rows[0].recipient_name, 'Paper Receiver Example');
+    assert.equal(r.rows[0].physical_file_ref, 'Store File / 2019 EFY / Test');
     assert.equal(r.rows[0].firebase_uid, 'receipt-op-a');
   });
 
