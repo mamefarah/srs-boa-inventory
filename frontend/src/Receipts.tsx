@@ -310,7 +310,7 @@ function ReceiptDetail({ id, can, onClose, onOpenReturn }: { id: number; can: Ca
         <section>
           <h3>{t('supplierReturns')}</h3>
           {can.returnRejected && <button type="button" className="btn primary" disabled={busy} onClick={() => void act(async () => {
-            const r = await api<{ data: SupplierReturn }>('/supplier-returns', { method: 'POST', body: { receiptId: id, reason: 'Rejected stock return' } });
+            const r = await api<{ data: SupplierReturn }>('/supplier-returns', { method: 'POST', body: { receiptId: id, reason: t('supplierReturnDefaultReason') } });
             onOpenReturn(r.data.id);
           })}>{t('supplierReturnNew')}</button>}
           {!!receipt.supplierReturns?.length && (
@@ -353,7 +353,7 @@ function DocumentForm({ path, onAdded }: { path: string; onAdded: () => void }) 
       <h4>{t('receiptAddDocument')}</h4><p className="hint">{t('receiptPaperHint')}</p><ErrorBox error={error} />
       <fieldset disabled={busy}>
         <Field label="receiptDocumentType"><select value={f.documentType} onChange={(e) => setF({ ...f, documentType: e.target.value })}>
-          <option value="MODEL_19_GRN">Model 19 / GRN</option><option value="STORES_RECEIPT_VOUCHER">Stores Receipt Voucher</option><option value="DELIVERY_NOTE">Delivery note</option><option value="INVOICE">Invoice</option><option value="PO_CONTRACT">PO / Contract</option><option value="INSPECTION_CERTIFICATE">Inspection certificate</option><option value="SUPPLIER_RETURN">Supplier return</option><option value="OTHER">Other</option>
+          <option value="MODEL_19_GRN">{t('receiptDocModel19')}</option><option value="STORES_RECEIPT_VOUCHER">{t('receiptDocSrv')}</option><option value="DELIVERY_NOTE">{t('receiptDocDeliveryNote')}</option><option value="INVOICE">{t('receiptDocInvoice')}</option><option value="PO_CONTRACT">{t('receiptDocPo')}</option><option value="INSPECTION_CERTIFICATE">{t('receiptDocInspection')}</option><option value="SUPPLIER_RETURN">{t('receiptDocSupplierReturn')}</option><option value="OTHER">{t('receiptDocOther')}</option>
         </select></Field>
         <Field label="receiptDocumentNo"><input required maxLength={200} value={f.documentNumber} onChange={(e) => setF({ ...f, documentNumber: e.target.value })} /></Field>
         <Field label="receiptDocumentDate"><input required type="date" value={f.documentDate} onChange={(e) => setF({ ...f, documentDate: e.target.value })} /></Field>
@@ -372,7 +372,7 @@ function ReceiptLinesTable({ receipt, canPrepare, busy, onChanged }: { receipt: 
   return (
     <table className="data"><thead><tr><th>#</th><th>{t('item')}</th><th>{t('quantity')}</th><th>{t('location')}</th><th>{t('receiptTracking')}</th><th>{t('receiptInspectionOutcome')}</th>{receipt.status === 'DRAFT' && canPrepare && <th>{t('action')}</th>}</tr></thead>
       <tbody>{lines.map((l) => <tr key={l.id}>
-        <td data-label="#">{l.lineNo}</td><td data-label={t('item')}>{l.itemCode} · {l.itemName}</td><td data-label={t('quantity')}><span className="qty">{l.quantity}</span> {l.baseUomCode}</td><td data-label={t('location')}>{l.locationCode ?? '—'}</td><td data-label={t('receiptTracking')}>{[l.batchRef,l.expiryDate,l.serialRef].filter(Boolean).join(' · ') || '—'}</td><td data-label={t('receiptInspectionOutcome')}>{`A ${l.acceptedQuantity} · R ${l.rejectedQuantity} · D ${l.damagedQuantity} · Q ${l.quarantineQuantity}`}</td>
+        <td data-label="#">{l.lineNo}</td><td data-label={t('item')}>{l.itemCode} · {l.itemName}</td><td data-label={t('quantity')}><span className="qty">{l.quantity}</span> {l.baseUomCode}</td><td data-label={t('location')}>{l.locationCode ?? '—'}</td><td data-label={t('receiptTracking')}>{[l.batchRef,l.expiryDate,l.serialRef].filter(Boolean).join(' · ') || '—'}</td><td data-label={t('receiptInspectionOutcome')}>{t('receiptAccepted')} {l.acceptedQuantity} · {t('receiptRejected')} {l.rejectedQuantity} · {t('receiptDamaged')} {l.damagedQuantity} · {t('receiptQuarantine')} {l.quarantineQuantity}</td>
         {receipt.status === 'DRAFT' && canPrepare && <td data-label={t('action')}><button type="button" className="btn secondary" disabled={busy} onClick={() => void api(`/receipts/${receipt.id}/lines/${l.id}`, { method: 'DELETE' }).then(onChanged)}>{t('obRemove')}</button></td>}
       </tr>)}</tbody>
     </table>
