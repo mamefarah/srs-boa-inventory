@@ -71,6 +71,7 @@ const updateReceiptBody = z.object({
 const lineFields = {
   itemId: positiveInt,
   quantity: receiptQuantityString,
+  expectedQuantity: receiptQuantityString.nullable().optional(),
   warehouseLocationId: positiveInt.nullable().optional(),
   batchRef: optionalText(100),
   expiryDate: isoDate.nullable().optional(),
@@ -223,6 +224,15 @@ export function receiptRoutes({ db, logger, authenticated }: RouteDeps) {
       baseUomId: receiptLines.baseUomId,
       baseUomCode: uoms.code,
       quantity: sql<string>`trim_scale(${receiptLines.quantity})::text`,
+      expectedQuantity: sql<string | null>`CASE WHEN ${receiptLines.expectedQuantity} IS NULL THEN NULL ELSE trim_scale(${receiptLines.expectedQuantity})::text END`,
+      shortQuantity: sql<string | null>`CASE WHEN ${receiptLines.expectedQuantity} IS NULL THEN NULL ELSE trim_scale(greatest(${receiptLines.expectedQuantity} - ${receiptLines.quantity}, 0))::text END`,
+      overDeliveredQuantity: sql<string | null>`CASE WHEN ${receiptLines.expectedQuantity} IS NULL THEN NULL ELSE trim_scale(greatest(${receiptLines.quantity} - ${receiptLines.expectedQuantity}, 0))::text END`,
+      deliveryVarianceStatus: sql<string>`CASE
+        WHEN ${receiptLines.expectedQuantity} IS NULL THEN 'NOT_ASSESSED'
+        WHEN ${receiptLines.quantity} < ${receiptLines.expectedQuantity} THEN 'SHORT'
+        WHEN ${receiptLines.quantity} > ${receiptLines.expectedQuantity} THEN 'OVER_DELIVERED'
+        ELSE 'MATCHED'
+      END`,
       warehouseLocationId: receiptLines.warehouseLocationId,
       locationCode: warehouseLocations.code,
       batchRef: receiptLines.batchRef,
@@ -293,10 +303,10 @@ export function receiptRoutes({ db, logger, authenticated }: RouteDeps) {
   async function insertReceiptLine(tx: Tx, receiptId: number, l: LineInput) {
     const r = await tx.execute(sql`
       INSERT INTO ${receiptLines}
-        (receipt_id,item_id,quantity,warehouse_location_id,batch_ref,expiry_date,serial_ref,
+        (receipt_id,item_id,quantity,expected_quantity,warehouse_location_id,batch_ref,expiry_date,serial_ref,
          funding_source_id,project_id,unit_cost_amount,currency_code,source_line_ref,notes)
       VALUES
-        (${receiptId},${l.itemId},${l.quantity},${l.warehouseLocationId ?? null},${l.batchRef ?? null},${l.expiryDate ?? null},${l.serialRef ?? null},
+        (${receiptId},${l.itemId},${l.quantity},${l.expectedQuantity ?? null},${l.warehouseLocationId ?? null},${l.batchRef ?? null},${l.expiryDate ?? null},${l.serialRef ?? null},
          ${l.fundingSourceId ?? null},${l.projectId ?? null},${l.unitCostAmount ?? null},${l.currencyCode ?? null},${l.sourceLineRef ?? null},${l.notes ?? null})
       RETURNING id,line_no AS "lineNo"`);
     return r.rows[0] as { id: number; lineNo: number };
