@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError, type Principal } from './api.ts';
 import { ErrorBox, Field, type Item } from './ItemMaster.tsx';
-import { t } from './i18n.ts';
+import { t, type MessageKey } from './i18n.ts';
 
 type ReceiptStatus = 'DRAFT' | 'SUBMITTED' | 'ARRIVED' | 'INSPECTED' | 'CANCELLED';
+type Body = Record<string, unknown>;
 
 interface Warehouse { id: number; code: string; name: string; isActive: boolean }
 interface Location { id: number; code: string; name: string; isActive: boolean }
@@ -109,12 +110,12 @@ interface SupplierReturn {
   documents: DocumentReference[];
 }
 
-const STATUS: Record<ReceiptStatus, { icon: string; label: string }> = {
-  DRAFT: { icon: '✎', label: 'Draft' },
-  SUBMITTED: { icon: '⏳', label: 'Submitted' },
-  ARRIVED: { icon: '📦', label: 'Arrived — pending inspection' },
-  INSPECTED: { icon: '✔', label: 'Inspected' },
-  CANCELLED: { icon: '✖', label: 'Cancelled' },
+const STATUS: Record<ReceiptStatus, { icon: string; label: MessageKey }> = {
+  DRAFT: { icon: '✎', label: 'receiptStatusDraft' },
+  SUBMITTED: { icon: '⏳', label: 'receiptStatusSubmitted' },
+  ARRIVED: { icon: '📦', label: 'receiptStatusArrived' },
+  INSPECTED: { icon: '✔', label: 'receiptStatusInspected' },
+  CANCELLED: { icon: '✖', label: 'receiptStatusCancelled' },
 };
 
 const asError = (e: unknown) => (e instanceof ApiError ? e : new ApiError(0, 'NETWORK', String(e)));
@@ -143,7 +144,7 @@ export function ReceiptsView({ principal }: { principal: Principal }) {
 }
 
 function StatusBadge({ status }: { status: ReceiptStatus }) {
-  return <span className={`badge status-${status.toLowerCase()}`}><span aria-hidden="true">{STATUS[status].icon}</span> {STATUS[status].label}</span>;
+  return <span className={`badge status-${status.toLowerCase()}`}><span aria-hidden="true">{STATUS[status].icon}</span> {t(STATUS[status].label)}</span>;
 }
 
 function ReceiptList({ canPrepare, onOpen, onNew }: { canPrepare: boolean; onOpen: (id: number) => void; onNew: () => void }) {
@@ -163,7 +164,7 @@ function ReceiptList({ canPrepare, onOpen, onNew }: { canPrepare: boolean; onOpe
       <div className="toolbar">
         <select aria-label={t('status')} value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">{t('receiptAllStatuses')}</option>
-          {Object.entries(STATUS).map(([code, v]) => <option key={code} value={code}>{v.label}</option>)}
+          {Object.entries(STATUS).map(([code, v]) => <option key={code} value={code}>{t(v.label)}</option>)}
         </select>
         {canPrepare && <button type="button" className="btn primary" onClick={onNew}>{t('receiptNew')}</button>}
       </div>
