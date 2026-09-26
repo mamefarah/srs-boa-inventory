@@ -84,13 +84,17 @@ export function mapDbError(err: unknown): unknown {
     case 'BA014':
       return new HttpError(409, 'INVALID_STATE', controlMessage(e, 'The record is not in a state that allows this action'));
     case 'BA015':
-      return new HttpError(403, 'MAKER_CHECKER', 'The approver may not be the person who prepared or submitted the batch');
+      return new HttpError(403, 'MAKER_CHECKER', 'The approver may not be anyone who prepared, edited or submitted the batch');
     case 'BA016':
       return new HttpError(409, 'DUPLICATE_OPENING', controlMessage(e, 'An opening balance already exists for this item and warehouse'));
     case 'BA017':
       return new HttpError(422, 'OPENING_BALANCE_INVALID', controlMessage(e, 'The opening balance batch is not valid'));
     case 'BA018':
       return new HttpError(409, 'STALE_VERSION', 'The batch was changed by someone else; reload and try again');
+    case 'BA019':
+      return new HttpError(409, 'TRACKING_LOCKED', 'Batch, expiry and serial tracking cannot change once the item has ledger entries');
+    case 'BA020':
+      return new HttpError(409, 'TRACKING_MISMATCH', controlMessage(e, 'The stock entry does not match the item\'s batch, expiry or serial tracking'));
     case '23505': {
       const known = e.constraint ? UNIQUE_CODES[e.constraint] : undefined;
       return known ? new HttpError(409, known[0], known[1]) : new HttpError(409, 'DUPLICATE', 'A record with these values already exists');

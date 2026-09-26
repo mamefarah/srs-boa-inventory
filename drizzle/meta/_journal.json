@@ -71,6 +71,20 @@
       "when": 1790382542933,
       "tag": "0009_m3_opening_balance_security",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790384018040,
+      "tag": "0010_m3_redteam_checks",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790384023058,
+      "tag": "0011_m3_redteam_hardening",
+      "breakpoints": true
     }
   ]
 }

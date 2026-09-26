@@ -65,7 +65,7 @@ describe('clean migration', () => {
     // from ledger entries. Their columns are still checked against the balance-name pattern.
     const r = await admin.query(`SELECT table_name, column_name FROM information_schema.columns
       WHERE table_schema = 'public' AND (column_name ~* '(balance|on_hand|current_stock|quantity_on_hand)'
-        OR (table_name ~* '(balance|stock_level|current_stock)' AND table_name NOT IN ('opening_balance_batches', 'opening_balance_lines')))`);
+        OR (table_name ~* '(balance|stock_level|current_stock)' AND table_name NOT IN ('opening_balance_batches', 'opening_balance_lines', 'opening_balance_contributors')))`);
     assert.deepEqual(r.rows, []);
   });
 

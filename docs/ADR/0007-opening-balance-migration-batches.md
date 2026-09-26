@@ -73,10 +73,13 @@ Access-administration identities cannot hold these permissions (extends the M1 s
 
 ### 4. Maker-checker (INV-016)
 
-The approver must be neither the batch's creator nor its submitter. This is enforced twice:
+The approver must not be a **contributor** to the batch: anyone who created it, edited its header, added, changed or removed a line, or submitted it. The rule is enforced as follows:
 
-- in `boa_ob_approve`;
-- by a table CHECK constraint.
+- The audit trigger records each contributor in `opening_balance_contributors`. It fires on every writer path, and entries are never cleared, including after a return to DRAFT.
+- `boa_ob_approve` refuses approval by any contributor.
+- A table CHECK constraint also enforces "approver ≠ creator/submitter", even for direct owner writes.
+
+Holding both the preparer and approver roles remains possible. Such a user can still approve batches they never touched.
 
 Approval also requires an **approval reference**: the identifier of the external management sign-off document.
 
@@ -87,17 +90,24 @@ Approval also requires an **approval reference**: the identifier of the external
 `boa_ob_post` is SECURITY DEFINER and runs in one database transaction. It:
 
 1. locks the batch row and checks permission, scope, `APPROVED` state and row version;
-2. takes transaction-scoped advisory locks on every (warehouse, item) pair, in ascending item order;
-3. **refuses a duplicate opening**: any existing ledger entry for that item in that warehouse, any posted serial already in the ledger, or a cutoff in the future;
-4. re-validates every line against current master data:
-   - the item is active and its base UOM is unchanged;
+2. takes the shared stock locks (see "Binding requirement" below). First it takes one serial lock per serial-numbered item, then one lock per (warehouse, item) pair, each in ascending item order;
+3. locks every master row the batch references `FOR SHARE`: the warehouse, items, UOMs, locations, condition codes, projects and funding sources. A concurrent tracking change, UOM change or deactivation therefore waits until the posting commits and is then re-checked by its own guards;
+4. re-validates every line against current master data, which is now frozen:
+   - the item is active and its base UOM and tracking flags match the line;
    - the location belongs to the warehouse and is active;
    - the condition, funding source and project are active;
-5. writes one `OPENING_BALANCE` transaction. Each line becomes two legs:
+   - the project still belongs to the line's funding source;
+   - the cutoff is not in the future;
+5. **refuses a duplicate opening**:
+   - any existing ledger entry for that item in that warehouse;
+   - any serial number already in the ledger, in any warehouse. The serial lock makes this check hold across warehouses;
+6. writes one `OPENING_BALANCE` transaction. Each line becomes two legs:
    - `+q` in `WAREHOUSE` custody with the line's dimensions;
    - `−q` in `OPENING_BALANCE_CONTRA`, carrying the same item, warehouse and dimensions, so the transaction nets to zero per item (INV-042, INV-043);
-6. checks, before commit, that the warehouse legs equal the batch lines exactly and that each item nets to zero (reconciliation);
-7. marks the batch `POSTED` and records the transaction id. The batch is then locked.
+7. checks, before commit, that the warehouse legs equal the batch lines exactly and that each item nets to zero (reconciliation);
+8. marks the batch `POSTED` and records the transaction id. The batch is then locked.
+
+**Defence in depth (all writers).** Every ledger entry must match its item's batch, expiry and serial tracking, and a serial-numbered entry must have a quantity of exactly ±1 (BA020). Once an item has any ledger entry, its tracking flags can no longer change (BA019), just as its base UOM already cannot (BA010).
 
 **Idempotency (INV-008).** The API claims the `Idempotency-Key` in the same database transaction:
 
@@ -133,7 +143,29 @@ Transition functions take a reason and store it on the event.
 
 ## Binding requirement for later posting functions
 
-The advisory-lock scheme in step 5 is shared. Any future function that writes `WAREHOUSE`-custody entries (M4 onwards) must take `pg_advisory_xact_lock(warehouse_id, item_id)` for each pair it touches, in ascending item order. This reserves the two-integer advisory-lock space for these stock locks. Without it, a receipt could interleave with an opening post for the same item.
+The advisory-lock scheme in step 5 is shared. Any future function that writes stock entries (M4 onwards) must take locks in this order:
+
+1. for each serial-numbered item it writes: `pg_advisory_xact_lock(boa_serial_lock_key(item_id))`, in ascending item order. This uses the single-`bigint` key space;
+2. for each (warehouse, item) pair it touches: `pg_advisory_xact_lock(warehouse_id, item_id)`, in ascending item order. This uses the two-integer key space, which is reserved for these locks;
+3. `FOR SHARE` on the master rows whose state it validates, before validating them.
+
+Taking the locks in the same order everywhere prevents deadlocks. Without them, a receipt could interleave with an opening post for the same item, or put the same serial number in two places.
+
+## Correcting a posted opening balance
+
+A posted batch and its ledger entries are immutable. Once an item has any ledger history in a warehouse, the duplicate-opening rule refuses a second opening for it. An error found after posting is therefore corrected through the approved stock-adjustment workflow, which is a compensating entry (planned for a later milestone), not through another opening batch. Until that workflow exists, a wrong posting can only be recorded. It must not be patched in the database.
+
+## Rollback and forward fix
+
+- Migrations 0008–0011 only add objects: tables, functions, triggers and grants. Before any batch has been posted they can be undone by dropping those objects, as a reviewed and approved production change.
+- After a posting, ledger rows reference the batch, and the ledger is append-only. Any fix is a forward migration. Posted data is never deleted.
+
+## Accepted residual risks (REDTEAM M3)
+
+- **Serial duplicate message.** The duplicate-serial message names the serial and item even when the existing entry sits in a warehouse outside the caller's scope. It reveals that the serial exists, but not where. This was accepted because serials are asset identifiers the approver already holds.
+- **Refusals are not audited.** A refusal raised inside the database (maker-checker, duplicate opening, stale version) rolls back with its transaction, so it is not audited. Only route-level permission denials are audited. Durable failure auditing needs a separate channel and is deferred.
+- **Owner detection.** `boa_is_app_writer()` treats a role as the owner only if it lacks an inheriting membership in `boa_ims_app`. Production role setup must not give the migration owner that membership. If it did, the checks would fail closed: transitions would be refused.
+- **Cutoffs.** Different batches for the same warehouse may use different cutoffs, and the cutoff has no lower bound. The go-live cutoff is a Bureau decision (see below).
 
 ## Not decided here
 

@@ -28,6 +28,8 @@
 | `drizzle/0003_m1_access_hardening.sql` | Hand-written: audited SECURITY DEFINER admin functions, SoD trigger, admin-removal dual-control block, idempotency RLS and state machine, policy lifecycle, CONNECT revoked from PUBLIC |
 | `drizzle/0008_m3_opening_balance.sql` | Generated: opening balance batches and lines (workflow and maker-checker CHECKs, unconstrained validated line quantity), ledger `expiry_date` |
 | `drizzle/0009_m3_opening_balance_security.sql` | Hand-written: opening-balance permissions/roles, column grants, RLS, guard and audit triggers, SECURITY DEFINER submit/return/approve/cancel/post and reconciliation (ADR-0007) |
+| `drizzle/0010_m3_redteam_checks.sql` | Generated: `opening_balance_contributors`; unit cost must be finite on batch lines and ledger entries |
+| `drizzle/0011_m3_redteam_hardening.sql` | Hand-written REDTEAM fixes: contributor-based maker-checker, posting lock order (serial → (warehouse, item) → master rows FOR SHARE → validate), ledger tracking guard (BA020), tracking flags locked once posted (BA019), separation of duties re-checked on `role_permissions`, helper EXECUTE revoked from PUBLIC |
 
 The migration baseline was re-created for the canonical repository. Any AI Studio development database built from the staging migrations must be **recreated**, not upgraded.
 
@@ -64,8 +66,23 @@ HB-1 … HB-8 and CG-1 … CG-3, per `docs/M0_BLOCKER_MATRIX.md`. M1 seeds no re
 
 ## M3 notes
 
-- Posting path: `boa_ob_post` is the only function that writes opening balances to the ledger. It takes per-(warehouse, item) advisory locks in ascending item order. **Binding for M4+:** every function that writes WAREHOUSE-custody entries must take the same locks (ADR-0007).
-- **NEEDS POLICY/PROCEDURE CONFIRMATION (HB-4):** who may approve an opening balance. `OPENING_BALANCE_APPROVER` is a technical role; the approver must record the external sign-off reference and cannot be the preparer or submitter.
+- Posting path: `boa_ob_post` is the only function that writes opening balances to the ledger. It takes locks in this order, each in ascending item order:
+  1. serial locks (`boa_serial_lock_key`);
+  2. per-(warehouse, item) advisory locks;
+  3. `FOR SHARE` on the referenced master rows;
+  then validates.
+  **Binding for M4+:** every stock-posting function must use the same order (ADR-0007).
+- REDTEAM M3 (database-security-reviewer), all fixed with regression tests:
+  - H1: an approver who edited the lines could approve them;
+  - M1: master data could change between validation and the ledger insert;
+  - M2: the same serial could be posted in two warehouses;
+  - L1: infinite unit costs were accepted;
+  - L2: a project's funding source could change after approval;
+  - L3: separation of duties was checked only on role assignment.
+
+  Accepted residual risks are listed in ADR-0007. A mutation check confirmed each new test fails without its fix.
+- Open M2 gap closed here: an item's batch/expiry/serial tracking flags can no longer change once it has ledger entries.
+- **NEEDS POLICY/PROCEDURE CONFIRMATION (HB-4):** who may approve an opening balance. `OPENING_BALANCE_APPROVER` is a technical role; the approver must record the external sign-off reference and cannot be anyone who created, edited or submitted the batch.
 - Closed periods do not exist yet (HB-7). Opening posting will need the period check when period close lands.
 - Browser verification of the opening-balance screens is pending a dev Firebase project (as for M2).
 

@@ -57,6 +57,7 @@ export const USERS = {
   approverA: { uid: 'ob-approver-a', roles: ['OPENING_BALANCE_APPROVER'], warehouses: ['TWH-A'], active: true },
   approverB: { uid: 'ob-approver-b', roles: ['OPENING_BALANCE_APPROVER'], warehouses: ['TWH-B'], active: true },
   bothA: { uid: 'ob-both-a', roles: ['OPENING_BALANCE_PREPARER', 'OPENING_BALANCE_APPROVER'], warehouses: ['TWH-A'], active: true },
+  preparerB: { uid: 'ob-preparer-b', roles: ['OPENING_BALANCE_PREPARER'], warehouses: ['TWH-B'], active: true },
 } as const;
 
 export interface Fixture {

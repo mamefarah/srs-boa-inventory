@@ -566,3 +566,178 @@ describe('opening balance: duplicate prevention and concurrency', () => {
     assert.equal(n.rows[0].n, 1);
   });
 });
+
+describe('opening balance: REDTEAM M3 regressions', () => {
+  const catId = async () => (await admin.query(`SELECT id FROM item_categories WHERE code = 'OB-CAT'`)).rows[0].id as number;
+
+  /** Holds `first` open on its own connection and asserts `second` waits until it commits. */
+  async function blocksUntilCommit(first: pg.PoolClient, second: Promise<unknown>) {
+    let settled = false;
+    const outcome = second.then(
+      () => { settled = true; return null; },
+      (e: Error) => { settled = true; return e; },
+    );
+    await new Promise((r) => setTimeout(r, 400));
+    assert.equal(settled, false, 'the second operation must wait for the first transaction');
+    await first.query('COMMIT');
+    return outcome;
+  }
+
+  async function appTx(uid: string) {
+    const c = await pool.connect();
+    await c.query('BEGIN');
+    await c.query("SELECT set_config('boa.user_id', $1, true)", [String(fx.userIds[uid])]);
+    return c;
+  }
+
+  it('H1: nobody who edited the lines or header may approve, even without creating or submitting', async () => {
+    const b = await draft('ob-preparer-a', [{ itemId: item['OB-SPRAYER'], quantity: '1', conditionCode: 'DAMAGED' }]);
+    const edit = await patch(`/api/opening-balances/${b.id}/lines/${b.lines[0].id}`, 'ob-both-a', { quantity: '1000' });
+    assert.equal(edit.status, 200, JSON.stringify(edit.body));
+    const cur = (await get(`/api/opening-balances/${b.id}`, 'ob-preparer-a')).body.data;
+    const s = await post(`/api/opening-balances/${b.id}/submit`, 'ob-preparer-a', { rowVersion: cur.rowVersion });
+    assert.equal(s.status, 200, JSON.stringify(s.body));
+    const self = await post(`/api/opening-balances/${b.id}/approve`, 'ob-both-a', { rowVersion: s.body.data.rowVersion, approvalReference: 'SIGNOFF-H1' });
+    assert.equal(self.status, 403, JSON.stringify(self.body));
+    assert.equal(self.body.error.code, 'MAKER_CHECKER');
+    const other = await post(`/api/opening-balances/${b.id}/approve`, 'ob-approver-a', { rowVersion: s.body.data.rowVersion, approvalReference: 'SIGNOFF-H1' });
+    assert.equal(other.status, 200, JSON.stringify(other.body));
+
+    const h = await draft('ob-preparer-a', [{ itemId: item['OB-SPRAYER'], quantity: '1', conditionCode: 'QUARANTINE' }]);
+    const hdr = await patch(`/api/opening-balances/${h.id}`, 'ob-both-a', { rowVersion: h.rowVersion, sourceEvidenceRef: 'COUNT-SHEET-EDITED' });
+    assert.equal(hdr.status, 200, JSON.stringify(hdr.body));
+    const hs = await post(`/api/opening-balances/${h.id}/submit`, 'ob-preparer-a', { rowVersion: hdr.body.data.rowVersion });
+    assert.equal(hs.status, 200, JSON.stringify(hs.body));
+    const hself = await post(`/api/opening-balances/${h.id}/approve`, 'ob-both-a', { rowVersion: hs.body.data.rowVersion, approvalReference: 'SIGNOFF-H1' });
+    assert.equal(hself.body.error?.code, 'MAKER_CHECKER');
+
+    const contributors = await admin.query(
+      `SELECT u.firebase_uid FROM opening_balance_contributors c JOIN users u ON u.id = c.user_id WHERE c.batch_id = $1 ORDER BY 1`, [b.id]);
+    assert.deepEqual(contributors.rows.map((r) => r.firebase_uid), ['ob-both-a', 'ob-preparer-a']);
+    await asApp('ob-both-a', async (c) => {
+      await assert.rejects(c.query(`SELECT * FROM opening_balance_contributors`), /permission denied/);
+    });
+  });
+
+  it('M1: master data is frozen between validation and the ledger insert; tracking locks once posted', async () => {
+    const id = await createItem('OB-TRK', item.eaUom, await catId());
+    const a = await approved('ob-preparer-a', [{ itemId: id, quantity: '3' }]);
+    const c1 = await appTx('ob-approver-a');
+    const c2 = await admin.connect();
+    try {
+      await c1.query('SELECT boa_ob_post($1, $2, $3, $4)', [a.id, a.rowVersion, key(), 'c'.repeat(64)]);
+      const err = await blocksUntilCommit(c1, c2.query('UPDATE items SET is_serial_tracked = true WHERE id = $1', [id]));
+      assert.ok(err instanceof Error && /BOA_TRACKING_LOCKED/.test(err.message), String(err));
+    } finally {
+      await c1.query('ROLLBACK').catch(() => undefined);
+      c1.release();
+      c2.release();
+    }
+    const flags = await admin.query(`SELECT is_serial_tracked FROM items WHERE id = $1`, [id]);
+    assert.equal(flags.rows[0].is_serial_tracked, false);
+  });
+
+  it('M1: a location cannot be deactivated while a post that uses it is in flight', async () => {
+    const id = await createItem('OB-LOC', item.eaUom, await catId());
+    const a = await approved('ob-preparer-a', [{ itemId: id, quantity: '4', warehouseLocationId: binA }]);
+    const c1 = await appTx('ob-approver-a');
+    const c2 = await admin.connect();
+    try {
+      await c2.query('BEGIN');
+      await c1.query('SELECT boa_ob_post($1, $2, $3, $4)', [a.id, a.rowVersion, key(), '9'.repeat(64)]);
+      const err = await blocksUntilCommit(c1, c2.query('UPDATE warehouse_locations SET is_active = false WHERE id = $1', [binA]));
+      assert.equal(err, null, 'the deactivation proceeds only after the posting has committed');
+    } finally {
+      await c2.query('ROLLBACK').catch(() => undefined);
+      await c1.query('ROLLBACK').catch(() => undefined);
+      c1.release();
+      c2.release();
+    }
+  });
+
+  it('M1: the ledger guard refuses entries that do not match item tracking (every writer)', async () => {
+    await asOwner(async (c) => {
+      const tx = await c.query(
+        `INSERT INTO inventory_transactions (transaction_type, effective_at, posted_by_user_id, idempotency_key, request_hash, reason, business_document_type, business_document_id)
+         VALUES ('TEST_FIXTURE', now(), $1, $2, repeat('d', 64), 'Tracking probe', 'TEST_DOC', 'TRK-1') RETURNING id`,
+        [fx.userIds['admin-1'], key()],
+      );
+      await assert.rejects(
+        c.query(
+          `INSERT INTO inventory_entries (transaction_id, line_no, item_id, signed_quantity, base_uom_id, custody_scope, warehouse_id, condition_code)
+           SELECT $1, 1, i.id, 1, i.base_uom_id, 'WAREHOUSE', $2, 'USABLE' FROM items i WHERE i.id = $3`,
+          [tx.rows[0].id, fx.warehouseA, item['OB-PUMP']],
+        ),
+        /BOA_TRACKING_MISMATCH/,
+      );
+    });
+  });
+
+  it('M2: the same serial cannot be opened in two warehouses at once', async () => {
+    const id = await createItem('OB-SERIAL2', item.eaUom, await catId(), { isSerialTracked: true });
+    const a = await approved('ob-preparer-a', [{ itemId: id, quantity: '1', serialRef: 'SN-XWH' }]);
+    const bs = await submitted('ob-preparer-b', [{ itemId: id, quantity: '1', serialRef: 'SN-XWH' }], { warehouseId: fx.warehouseB });
+    const b = await post(`/api/opening-balances/${bs.id}/approve`, 'ob-approver-b', { rowVersion: bs.rowVersion, approvalReference: 'SIGNOFF-B' });
+    assert.equal(b.status, 200, JSON.stringify(b.body));
+    const c1 = await appTx('ob-approver-a');
+    const c2 = await appTx('ob-approver-b');
+    try {
+      await c1.query('SELECT boa_ob_post($1, $2, $3, $4)', [a.id, a.rowVersion, key(), 'e'.repeat(64)]);
+      const err = await blocksUntilCommit(c1, c2.query('SELECT boa_ob_post($1, $2, $3, $4)', [bs.id, b.body.data.rowVersion, key(), 'f'.repeat(64)]));
+      assert.ok(err instanceof Error && /BOA_DUPLICATE_OPENING/.test(err.message), String(err));
+    } finally {
+      await c2.query('ROLLBACK').catch(() => undefined);
+      await c1.query('ROLLBACK').catch(() => undefined);
+      c1.release();
+      c2.release();
+    }
+    const n = await admin.query(`SELECT count(*)::int AS n FROM inventory_entries WHERE item_id = $1 AND custody_scope = 'WAREHOUSE'`, [id]);
+    assert.equal(n.rows[0].n, 1);
+  });
+
+  it('L1: infinite or NaN unit costs are rejected by the database', async () => {
+    const b = await draft('ob-preparer-a', []);
+    for (const cost of ['Infinity', 'NaN']) {
+      await asApp('ob-preparer-a', async (c) => {
+        await assert.rejects(
+          c.query(`INSERT INTO opening_balance_lines (batch_id, item_id, quantity, unit_cost_amount, currency_code) VALUES ($1, $2, '1', $3, 'ETB')`,
+            [b.id, item['OB-SPRAYER'], cost]),
+          /cost_nonnegative/,
+        );
+      });
+    }
+  });
+
+  it('L2: a project moved to another funding source after approval blocks posting', async () => {
+    const f = await admin.query(`INSERT INTO funding_sources (code, name) VALUES ('OB-F1', 'Fund one'), ('OB-F2', 'Fund two') RETURNING id`);
+    const [f1, f2] = f.rows.map((r) => r.id as number);
+    const p = await admin.query(`INSERT INTO projects (code, name, funding_source_id) VALUES ('OB-P1', 'Project one', $1) RETURNING id`, [f1]);
+    const id = await createItem('OB-FUND', item.eaUom, await catId());
+    const a = await approved('ob-preparer-a', [{ itemId: id, quantity: '2', fundingSourceId: f1, projectId: p.rows[0].id }]);
+    await admin.query(`UPDATE projects SET funding_source_id = $1 WHERE id = $2`, [f2, p.rows[0].id]);
+    const r = await post(`/api/opening-balances/${a.id}/post`, 'ob-approver-a', { rowVersion: a.rowVersion }, { 'Idempotency-Key': key() });
+    assert.equal(r.status, 422, JSON.stringify(r.body));
+    assert.match(r.body.error.message, /different funding source/);
+  });
+
+  it('L3: a role cannot gain a permission that breaks separation of duties for its holders', async () => {
+    await asOwner(async (c) => {
+      await assert.rejects(
+        c.query(`INSERT INTO role_permissions (role_id, permission_id)
+                 SELECT r.id, p.id FROM roles r, permissions p WHERE r.code = 'SYSTEM_ADMIN' AND p.code = 'APPROVE_OPENING_BALANCE'`),
+        /BOA_SOD/,
+      );
+    });
+  });
+
+  it('requires a meaningful sign-off reference and keeps helpers off PUBLIC', async () => {
+    const b = await submitted('ob-preparer-a', [{ itemId: item['OB-SPRAYER'], quantity: '1', conditionCode: 'USABLE' }]);
+    const r = await post(`/api/opening-balances/${b.id}/approve`, 'ob-approver-a', { rowVersion: b.rowVersion, approvalReference: '.....' });
+    assert.equal(r.status, 422, JSON.stringify(r.body));
+    const acl = await admin.query(`
+      SELECT p.proname FROM pg_proc p CROSS JOIN LATERAL aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+       WHERE p.proname IN ('boa_is_app_writer', 'boa_warehouse_in_scope', 'boa_can_read_opening_balance', 'boa_ref_ok', 'boa_serial_lock_key')
+         AND a.grantee = 0`);
+    assert.deepEqual(acl.rows, []);
+  });
+});

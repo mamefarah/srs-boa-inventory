@@ -493,7 +493,8 @@ export const inventoryEntries = pgTable(
       'inventory_entries_cost_currency_pair',
       sql`(${t.unitCostAmount} IS NULL) = (${t.currencyCode} IS NULL)`,
     ),
-    check('inventory_entries_cost_nonnegative', sql`${t.unitCostAmount} IS NULL OR ${t.unitCostAmount} >= 0`),
+    // numeric orders NaN above Infinity, so `< 'Infinity'` also rejects NaN.
+    check('inventory_entries_cost_nonnegative', sql`${t.unitCostAmount} IS NULL OR (${t.unitCostAmount} >= 0 AND ${t.unitCostAmount} < 'Infinity'::numeric)`),
     index('inventory_entries_item_warehouse_idx').on(t.itemId, t.warehouseId),
     index('inventory_entries_warehouse_idx').on(t.warehouseId),
     index('inventory_entries_transaction_idx').on(t.transactionId),
@@ -617,11 +618,31 @@ export const openingBalanceLines = pgTable(
     check('opening_balance_lines_quantity_scale', sql`scale(${t.quantity}) <= 6`),
     check('opening_balance_lines_quantity_range', sql`${t.quantity} < 100000000000000`),
     check('opening_balance_lines_cost_currency_pair', sql`(${t.unitCostAmount} IS NULL) = (${t.currencyCode} IS NULL)`),
-    check('opening_balance_lines_cost_nonnegative', sql`${t.unitCostAmount} IS NULL OR (${t.unitCostAmount} >= 0 AND ${t.unitCostAmount} <> 'NaN'::numeric)`),
+    check('opening_balance_lines_cost_nonnegative', sql`${t.unitCostAmount} IS NULL OR (${t.unitCostAmount} >= 0 AND ${t.unitCostAmount} < 'Infinity'::numeric)`),
     check('opening_balance_lines_currency_format', sql`${t.currencyCode} IS NULL OR ${t.currencyCode} ~ '^[A-Z]{3}$'`),
     check('opening_balance_lines_refs_not_blank', sql`(${t.batchRef} IS NULL OR length(btrim(${t.batchRef})) > 0) AND (${t.serialRef} IS NULL OR length(btrim(${t.serialRef})) > 0)`),
     index('opening_balance_lines_item_idx').on(t.itemId),
   ],
+);
+
+/**
+ * Everyone who changed a batch's content (created it, edited its header or lines, or
+ * submitted it). Written only by the audit trigger; never cleared. Maker-checker (INV-016)
+ * refuses approval by any contributor, not only the creator and submitter.
+ */
+export const openingBalanceContributors = pgTable(
+  'opening_balance_contributors',
+  {
+    batchId: integer('batch_id')
+      .notNull()
+      .references(() => openingBalanceBatches.id, { onDelete: 'restrict' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    firstAction: text('first_action').notNull(),
+    firstAt: tstz('first_at').notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ name: 'opening_balance_contributors_pk', columns: [t.batchId, t.userId] })],
 );
 
 // ---------------------------------------------------------------------------

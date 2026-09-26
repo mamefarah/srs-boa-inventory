@@ -43,5 +43,5 @@ Rules not listed above remain mandatory; expand the matrix as their implementati
 | INV-029 | Authorization | SYSTEM_ADMIN has no stock/ledger/audit/approval permissions | `tests/database.test.ts` role matrix | TBD | M1 foundation |
 | INV-033 | Time | All timestamps `timestamptz`; server-forced recording time | `tests/database.test.ts` | TBD | M1 foundation |
 | INV-021 | Item master | Unique immutable item code; items never deleted (ADR-0006) | `tests/item-master.test.ts` | TBD | M2 |
-| INV-016 | Maker-checker | Opening balance approver ≠ creator/submitter: `boa_ob_approve` + table CHECK | `tests/opening-balance.test.ts` | TBD | M3 (opening balance) |
+| INV-016 | Maker-checker | Opening balance approver is not a contributor (creator, editor or submitter; `opening_balance_contributors`): `boa_ob_approve`, plus a table CHECK (approver ≠ creator/submitter) | `tests/opening-balance.test.ts` | TBD | M3 (opening balance) |
 | INV-024 | Serial | Serial once per item per batch; posting refuses a serial already in the ledger | `tests/opening-balance.test.ts` | TBD | M3 (opening balance) |
