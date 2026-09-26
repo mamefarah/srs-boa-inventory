@@ -3,6 +3,13 @@ import { HttpError } from './errors.ts';
 interface PgErrorLike {
   code?: string;
   constraint?: string;
+  message?: string;
+}
+
+/** A database-control message authored in our migrations, without its BOA_* prefix. */
+function controlMessage(e: PgErrorLike, fallback: string): string {
+  const m = /^BOA_[A-Z_]+: (.+)$/s.exec(e.message ?? '');
+  return m ? m[1] : fallback;
 }
 
 function pgError(err: unknown): PgErrorLike {
@@ -15,6 +22,8 @@ const UNIQUE_CODES: Record<string, [string, string]> = {
   items_item_code_unique: ['DUPLICATE_ITEM_CODE', 'An item with this code already exists'],
   items_name_key_unique: ['DUPLICATE_ITEM_NAME', 'An item with this name already exists (ignoring case, spacing and punctuation)'],
   uoms_code_unique: ['DUPLICATE_UOM_CODE', 'A unit of measure with this code already exists'],
+  opening_balance_lines_bucket_unique: ['DUPLICATE_LINE', 'This batch already has a line for the same item, location, condition and tracking/funding details'],
+  opening_balance_lines_serial_unique: ['DUPLICATE_SERIAL', 'This serial number is already listed for the item in this batch'],
   item_categories_code_unique: ['DUPLICATE_CATEGORY_CODE', 'A category with this code already exists'],
 };
 
@@ -28,6 +37,14 @@ const CHECK_MESSAGES: Record<string, string> = {
   uoms_code_format: 'Unit code format is invalid',
   item_categories_code_format: 'Category code format is invalid',
   uoms_decimal_places_range: 'Decimal places must be between 0 and 6',
+  opening_balance_lines_quantity_positive: 'Quantity must be greater than zero',
+  opening_balance_lines_quantity_finite: 'Quantity must be a number',
+  opening_balance_lines_quantity_scale: 'Quantity may have at most 6 decimal places (it is never rounded)',
+  opening_balance_lines_quantity_range: 'Quantity is too large',
+  opening_balance_lines_cost_currency_pair: 'Unit cost and currency must be given together',
+  opening_balance_lines_cost_nonnegative: 'Unit cost cannot be negative',
+  opening_balance_lines_currency_format: 'Currency must be a three-letter code',
+  opening_balance_lines_refs_not_blank: 'Batch and serial references cannot be blank',
 };
 
 /**
@@ -53,17 +70,27 @@ export function mapDbError(err: unknown): unknown {
     case 'BA007':
       return new HttpError(400, 'REASON_REQUIRED', 'A reason is required for this change');
     case 'BA008':
-      return new HttpError(409, 'QUANTITY_PRECISION', 'Existing quantities use more decimal places than requested');
+      return new HttpError(409, 'QUANTITY_PRECISION', controlMessage(e, 'Existing quantities use more decimal places than requested'));
     case 'BA009':
       return new HttpError(409, 'IMMUTABLE_CODE', 'Codes cannot be changed and records cannot be deleted');
     case 'BA010':
       return new HttpError(409, 'BASE_UOM_LOCKED', 'The base unit of measure cannot change once ledger entries exist');
     case 'BA011':
-      return new HttpError(409, 'INACTIVE_REFERENCE', 'A referenced record is not active or not valid for this use');
+      return new HttpError(409, 'INACTIVE_REFERENCE', controlMessage(e, 'A referenced record is not active or not valid for this use'));
     case 'BA013':
       return new HttpError(409, 'IN_USE', 'The record is still used by active items or subcategories');
     case 'BA012':
       return new HttpError(409, 'CATEGORY_HIERARCHY', 'Subcategories must sit under an active top-level category');
+    case 'BA014':
+      return new HttpError(409, 'INVALID_STATE', controlMessage(e, 'The record is not in a state that allows this action'));
+    case 'BA015':
+      return new HttpError(403, 'MAKER_CHECKER', 'The approver may not be the person who prepared or submitted the batch');
+    case 'BA016':
+      return new HttpError(409, 'DUPLICATE_OPENING', controlMessage(e, 'An opening balance already exists for this item and warehouse'));
+    case 'BA017':
+      return new HttpError(422, 'OPENING_BALANCE_INVALID', controlMessage(e, 'The opening balance batch is not valid'));
+    case 'BA018':
+      return new HttpError(409, 'STALE_VERSION', 'The batch was changed by someone else; reload and try again');
     case '23505': {
       const known = e.constraint ? UNIQUE_CODES[e.constraint] : undefined;
       return known ? new HttpError(409, known[0], known[1]) : new HttpError(409, 'DUPLICATE', 'A record with these values already exists');

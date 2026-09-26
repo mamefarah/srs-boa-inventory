@@ -57,6 +57,20 @@
       "when": 1790303658769,
       "tag": "0007_m2_redteam_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790382537025,
+      "tag": "0008_m3_opening_balance",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790382542933,
+      "tag": "0009_m3_opening_balance_security",
+      "breakpoints": true
     }
   ]
 }

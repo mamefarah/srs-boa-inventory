@@ -41,6 +41,31 @@ export function requirePermission(db: Db, logger: Logger, permission: Permission
   };
 }
 
+/** As requirePermission, but any one of the listed permissions suffices. Denials are audited. */
+export function requireAnyPermission(db: Db, logger: Logger, permissions: readonly Permission[]): RequestHandler {
+  return async (req, res, next) => {
+    try {
+      const principal = principalOf(res);
+      if (!permissions.some((p) => principal.permissions.has(p))) {
+        await safeAudit(db, logger, {
+          action: 'AUTHZ_DENIED',
+          result: 'DENIED',
+          entityType: 'route',
+          entityId: `${req.method} ${req.baseUrl}${req.route?.path ?? req.path}`,
+          actorUserId: principal.userId,
+          actorFirebaseUid: principal.firebaseUid,
+          reason: `MISSING_PERMISSION:${permissions.join('|')}`,
+          requestId: res.locals.requestId,
+        });
+        throw new HttpError(403, 'PERMISSION_DENIED', `Missing one of the required permissions ${permissions.join(', ')}`);
+      }
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
 export type WarehouseScope = { kind: 'all' } | { kind: 'set'; warehouseIds: number[] };
 
 /**
