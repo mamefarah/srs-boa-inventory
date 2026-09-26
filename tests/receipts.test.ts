@@ -20,7 +20,6 @@ const get = (path: string, uid: string) => request(app).get(path).set(bearer(uid
 const post = (path: string, uid: string, body: Body = {}, headers: Record<string, string> = {}) =>
   request(app).post(path).set(bearer(uid)).set(headers).send(body);
 const patch = (path: string, uid: string, body: Body) => request(app).patch(path).set(bearer(uid)).send(body);
-const del = (path: string, uid: string) => request(app).delete(path).set(bearer(uid));
 const key = () => `rcpt-${randomUUID()}`;
 const effective = () => new Date(Date.now() - 60_000).toISOString();
 
