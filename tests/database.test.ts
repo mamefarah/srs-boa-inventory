@@ -88,7 +88,7 @@ describe('clean migration', () => {
 
   it('seeds only neutral technical roles and grants WAREHOUSE_SCOPE_ALL to no role except WAREHOUSE_SCOPE_GLOBAL', async () => {
     const roles = await admin.query('SELECT code FROM roles ORDER BY code');
-    assert.deepEqual(roles.rows.map((x) => x.code).sort(), ['GENERIC_APPROVER', 'MASTER_DATA_STEWARD', 'OPENING_BALANCE_APPROVER', 'OPENING_BALANCE_PREPARER', 'REQUESTER', 'SYSTEM_ADMIN', 'SYSTEM_AUDITOR', 'WAREHOUSE_OPERATOR', 'WAREHOUSE_SCOPE_GLOBAL']);
+    assert.deepEqual(roles.rows.map((x) => x.code).sort(), ['GENERIC_APPROVER', 'MASTER_DATA_STEWARD', 'OPENING_BALANCE_APPROVER', 'OPENING_BALANCE_PREPARER', 'RECEIPT_INSPECTOR', 'RECEIPT_OPERATOR', 'REQUESTER', 'SYSTEM_ADMIN', 'SYSTEM_AUDITOR', 'WAREHOUSE_OPERATOR', 'WAREHOUSE_SCOPE_GLOBAL']);
     const r = await admin.query(`SELECT r.code FROM role_permissions rp JOIN roles r ON r.id = rp.role_id JOIN permissions p ON p.id = rp.permission_id WHERE p.code = 'WAREHOUSE_SCOPE_ALL'`);
     assert.deepEqual(r.rows.map((x) => x.code), ['WAREHOUSE_SCOPE_GLOBAL']);
   });
@@ -96,7 +96,7 @@ describe('clean migration', () => {
   it('SYSTEM_ADMIN has no stock, ledger or audit read permission (INV-029)', async () => {
     const r = await admin.query(`SELECT p.code FROM role_permissions rp JOIN roles r ON r.id = rp.role_id JOIN permissions p ON p.id = rp.permission_id WHERE r.code = 'SYSTEM_ADMIN'`);
     const codes = r.rows.map((x) => x.code);
-    for (const c of ['READ_STOCK', 'READ_LEDGER', 'READ_AUDIT', 'WAREHOUSE_SCOPE_ALL', 'READ_OPENING_BALANCE', 'PREPARE_OPENING_BALANCE', 'APPROVE_OPENING_BALANCE', 'POST_OPENING_BALANCE']) {
+    for (const c of ['READ_STOCK', 'READ_LEDGER', 'READ_AUDIT', 'WAREHOUSE_SCOPE_ALL', 'READ_OPENING_BALANCE', 'PREPARE_OPENING_BALANCE', 'APPROVE_OPENING_BALANCE', 'POST_OPENING_BALANCE', 'READ_RECEIPTS', 'PREPARE_RECEIPTS', 'RECEIVE_RECEIPTS', 'INSPECT_RECEIPTS', 'RETURN_REJECTED_STOCK']) {
       assert.ok(!codes.includes(c), c);
     }
   });
