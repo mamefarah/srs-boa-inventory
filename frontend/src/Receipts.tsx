@@ -29,7 +29,11 @@ interface ReceiptLine {
   expiryDate: string | null;
   serialRef: string | null;
   fundingSourceId: number | null;
+  fundingSourceCode: string | null;
+  fundingSourceName: string | null;
   projectId: number | null;
+  projectCode: string | null;
+  projectName: string | null;
   unitCostAmount: string | null;
   currencyCode: string | null;
   sourceLineRef: string | null;
@@ -416,9 +420,13 @@ function ReceiptLinesTable({ receipt, canPrepare, busy, onChanged }: { receipt: 
   const lines = receipt.lines ?? [];
   if (!lines.length) return <p>{t('receiptNoLines')}</p>;
   return (
-    <table className="data"><thead><tr><th>#</th><th>{t('item')}</th><th>{t('quantity')}</th><th>{t('receiptDeliveryVariance')}</th><th>{t('location')}</th><th>{t('receiptTracking')}</th><th>{t('receiptInspectionOutcome')}</th>{receipt.status === 'DRAFT' && canPrepare && <th>{t('action')}</th>}</tr></thead>
+    <table className="data"><thead><tr><th>#</th><th>{t('item')}</th><th>{t('quantity')}</th><th>{t('receiptDeliveryVariance')}</th><th>{t('receiptAttribution')}</th><th>{t('location')}</th><th>{t('receiptTracking')}</th><th>{t('receiptInspectionOutcome')}</th>{receipt.status === 'DRAFT' && canPrepare && <th>{t('action')}</th>}</tr></thead>
       <tbody>{lines.map((l) => <tr key={l.id}>
-        <td data-label="#">{l.lineNo}</td><td data-label={t('item')}>{l.itemCode} · {l.itemName}</td><td data-label={t('quantity')}><span className="qty">{l.quantity}</span> {l.baseUomCode}</td><td data-label={t('receiptDeliveryVariance')}>{l.expectedQuantity == null ? t('receiptVarianceNotAssessed') : <>{t('receiptExpectedQty')} <span className="qty">{l.expectedQuantity}</span> · {l.deliveryVarianceStatus === 'MATCHED' ? t('receiptVarianceMatched') : l.deliveryVarianceStatus === 'SHORT' ? `${t('receiptShort')} ${l.shortQuantity}` : `${t('receiptOver')} ${l.overDeliveredQuantity}`}</>}</td><td data-label={t('location')}>{l.locationCode ?? '—'}</td><td data-label={t('receiptTracking')}>{[l.batchRef,l.expiryDate,l.serialRef].filter(Boolean).join(' · ') || '—'}</td><td data-label={t('receiptInspectionOutcome')}>{t('receiptAccepted')} {l.acceptedQuantity} · {t('receiptRejected')} {l.rejectedQuantity} · {t('receiptDamaged')} {l.damagedQuantity} · {t('receiptQuarantine')} {l.quarantineQuantity}</td>
+        <td data-label="#">{l.lineNo}</td><td data-label={t('item')}>{l.itemCode} · {l.itemName}</td><td data-label={t('quantity')}><span className="qty">{l.quantity}</span> {l.baseUomCode}</td><td data-label={t('receiptDeliveryVariance')}>{l.expectedQuantity == null ? t('receiptVarianceNotAssessed') : <>{t('receiptExpectedQty')} <span className="qty">{l.expectedQuantity}</span> · {l.deliveryVarianceStatus === 'MATCHED' ? t('receiptVarianceMatched') : l.deliveryVarianceStatus === 'SHORT' ? `${t('receiptShort')} ${l.shortQuantity}` : `${t('receiptOver')} ${l.overDeliveredQuantity}`}</>}</td><td data-label={t('receiptAttribution')}>{[
+          l.fundingSourceCode && `${l.fundingSourceCode}`,
+          l.projectCode && `${l.projectCode}`,
+          l.unitCostAmount && l.currencyCode && `${l.unitCostAmount} ${l.currencyCode}`,
+        ].filter(Boolean).join(' · ') || '—'}</td><td data-label={t('location')}>{l.locationCode ?? '—'}</td><td data-label={t('receiptTracking')}>{[l.batchRef,l.expiryDate,l.serialRef].filter(Boolean).join(' · ') || '—'}</td><td data-label={t('receiptInspectionOutcome')}>{t('receiptAccepted')} {l.acceptedQuantity} · {t('receiptRejected')} {l.rejectedQuantity} · {t('receiptDamaged')} {l.damagedQuantity} · {t('receiptQuarantine')} {l.quarantineQuantity}</td>
         {receipt.status === 'DRAFT' && canPrepare && <td data-label={t('action')}><button type="button" className="btn secondary" disabled={busy} onClick={() => void api(`/receipts/${receipt.id}/lines/${l.id}`, { method: 'DELETE' }).then(onChanged)}>{t('obRemove')}</button></td>}
       </tr>)}</tbody>
     </table>
