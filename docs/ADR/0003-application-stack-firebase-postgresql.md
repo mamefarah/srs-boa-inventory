@@ -38,7 +38,7 @@ Option B.
 
 - `docs/TECH_STACK.md`, `docs/DEPLOYMENT.md`, `docs/SECURITY.md` and `docs/ROADMAP.md` are updated to this direction. The PRD (a controlled document) is not edited. Its framework preference is a recommendation, and this ADR records the deviation for owner acceptance.
 - `supabase/` placeholders are removed.
-- Attachment storage (PRD §28) needs its own ADR before M4.
+- Under ADR-0008 / PRD v3.1, first-class hard-copy document references are required for M4; scanned attachment storage is optional and does not block M4.
 - Hosting (Cloud Run / Cloud SQL or institutional equivalent) is decided by ADR before M16. No production deployment is authorized by this ADR.
 
 ## Verification
