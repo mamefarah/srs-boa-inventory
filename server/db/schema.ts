@@ -1,7 +1,7 @@
 /**
  * BoA-IMS PostgreSQL schema (M1 foundation).
  *
- * Controlled requirements: PRD v2.2 §7, §9, §36, §37; BUSINESS_RULES INV-001..INV-047.
+ * Controlled requirements: PRD v3.1; BUSINESS_RULES INV-001..INV-052; ADR-0008/0009.
  * Security-critical behaviour that Drizzle cannot express (role grants, append-only
  * triggers, RLS, timestamp forcing) lives in the custom migration
  * `drizzle/0001_m1_security.sql` — see ADR-0004.
@@ -643,6 +643,303 @@ export const openingBalanceContributors = pgTable(
     firstAt: tstz('first_at').notNull().defaultNow(),
   },
   (t) => [primaryKey({ name: 'opening_balance_contributors_pk', columns: [t.batchId, t.userId] })],
+);
+
+// ---------------------------------------------------------------------------
+// Receipt + inspection (M4; PRD v3.1 §§21-22; ADR-0009)
+// ---------------------------------------------------------------------------
+
+export const RECEIPT_STATUSES = ['DRAFT', 'SUBMITTED', 'ARRIVED', 'INSPECTED', 'CANCELLED'] as const;
+export const SUPPLIER_RETURN_STATUSES = ['DRAFT', 'POSTED', 'CANCELLED'] as const;
+export const DOCUMENT_ENTITY_TYPES = ['RECEIPT', 'SUPPLIER_RETURN'] as const;
+
+/**
+ * Reusable hard-copy evidence reference. The signed original remains outside BoA-IMS;
+ * this row stores the traceable reference and paper actors. The authenticated system
+ * actor is recorded separately by createdByUserId/audit_events (ADR-0008).
+ *
+ * entityId is text so later business modules may link either integer or UUID identifiers.
+ * M4 security triggers validate the referenced entity and warehouse scope.
+ */
+export const documentReferences = pgTable(
+  'document_references',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    entityType: text('entity_type').notNull(),
+    entityId: text('entity_id').notNull(),
+    documentType: text('document_type').notNull(),
+    documentNumber: text('document_number').notNull(),
+    documentDate: date('document_date', { mode: 'string' }).notNull(),
+    sourceUnit: text('source_unit'),
+    preparedByName: text('prepared_by_name'),
+    preparedByTitle: text('prepared_by_title'),
+    checkedByName: text('checked_by_name'),
+    checkedByTitle: text('checked_by_title'),
+    approvedByName: text('approved_by_name'),
+    approvedByTitle: text('approved_by_title'),
+    recipientName: text('recipient_name'),
+    recipientTitle: text('recipient_title'),
+    approvalDate: date('approval_date', { mode: 'string' }),
+    physicalFileRef: text('physical_file_ref'),
+    remarks: text('remarks'),
+    createdByUserId: integer('created_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    check('document_references_entity_type_valid', sql`${t.entityType} IN ('RECEIPT', 'SUPPLIER_RETURN')`),
+    check('document_references_entity_id_not_blank', sql`length(btrim(${t.entityId})) > 0`),
+    check('document_references_document_type_not_blank', sql`length(btrim(${t.documentType})) > 0`),
+    check('document_references_document_number_not_blank', sql`length(btrim(${t.documentNumber})) > 0`),
+    unique('document_references_entity_type_number_unique').on(t.entityType, t.entityId, t.documentType, t.documentNumber),
+    index('document_references_entity_idx').on(t.entityType, t.entityId),
+  ],
+);
+
+export const receiptHeaders = pgTable(
+  'receipt_headers',
+  {
+    id: id(),
+    warehouseId: integer('warehouse_id')
+      .notNull()
+      .references(() => warehouses.id, { onDelete: 'restrict' }),
+    sourcePartyName: text('source_party_name').notNull(),
+    sourceReference: text('source_reference'),
+    description: text('description'),
+    status: text('status').notNull().default('DRAFT'),
+    createdByUserId: integer('created_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+    updatedAt: tstz('updated_at').notNull().defaultNow(),
+    rowVersion: integer('row_version').notNull().default(1),
+    submittedByUserId: integer('submitted_by_user_id').references(() => users.id, { onDelete: 'restrict' }),
+    submittedAt: tstz('submitted_at'),
+    arrivalEffectiveAt: tstz('arrival_effective_at'),
+    arrivedByUserId: integer('arrived_by_user_id').references(() => users.id, { onDelete: 'restrict' }),
+    arrivedAt: tstz('arrived_at'),
+    arrivalTransactionId: uuid('arrival_transaction_id')
+      .unique()
+      .references(() => inventoryTransactions.id, { onDelete: 'restrict' }),
+    inspectionEffectiveAt: tstz('inspection_effective_at'),
+    inspectedByUserId: integer('inspected_by_user_id').references(() => users.id, { onDelete: 'restrict' }),
+    inspectedAt: tstz('inspected_at'),
+    inspectionTransactionId: uuid('inspection_transaction_id')
+      .unique()
+      .references(() => inventoryTransactions.id, { onDelete: 'restrict' }),
+    cancelledByUserId: integer('cancelled_by_user_id').references(() => users.id, { onDelete: 'restrict' }),
+    cancelledAt: tstz('cancelled_at'),
+  },
+  (t) => [
+    check('receipt_headers_source_party_not_blank', sql`length(btrim(${t.sourcePartyName})) > 0`),
+    check('receipt_headers_status_valid', sql`${t.status} IN ('DRAFT', 'SUBMITTED', 'ARRIVED', 'INSPECTED', 'CANCELLED')`),
+    check(
+      'receipt_headers_submitted_fields',
+      sql`${t.status} NOT IN ('SUBMITTED', 'ARRIVED', 'INSPECTED') OR (${t.submittedByUserId} IS NOT NULL AND ${t.submittedAt} IS NOT NULL)`,
+    ),
+    check(
+      'receipt_headers_arrival_fields',
+      sql`${t.status} NOT IN ('ARRIVED', 'INSPECTED') OR (${t.arrivalEffectiveAt} IS NOT NULL AND ${t.arrivedByUserId} IS NOT NULL AND ${t.arrivedAt} IS NOT NULL AND ${t.arrivalTransactionId} IS NOT NULL)`,
+    ),
+    check(
+      'receipt_headers_inspection_fields',
+      sql`(${t.status} = 'INSPECTED') = (${t.inspectionEffectiveAt} IS NOT NULL AND ${t.inspectedByUserId} IS NOT NULL AND ${t.inspectedAt} IS NOT NULL AND ${t.inspectionTransactionId} IS NOT NULL)`,
+    ),
+    check(
+      'receipt_headers_cancelled_fields',
+      sql`${t.status} <> 'CANCELLED' OR (${t.cancelledByUserId} IS NOT NULL AND ${t.cancelledAt} IS NOT NULL)`,
+    ),
+    index('receipt_headers_warehouse_status_idx').on(t.warehouseId, t.status),
+  ],
+);
+
+/**
+ * One delivered stock bucket. Quantity and inspection outcomes are unconstrained numeric
+ * intentionally: the API/database validate original scale before any NUMERIC(20,6) cast.
+ */
+export const receiptLines = pgTable(
+  'receipt_lines',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    receiptId: integer('receipt_id')
+      .notNull()
+      .references(() => receiptHeaders.id, { onDelete: 'restrict' }),
+    lineNo: integer('line_no').notNull(),
+    itemId: integer('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'restrict' }),
+    baseUomId: integer('base_uom_id')
+      .notNull()
+      .references(() => uoms.id, { onDelete: 'restrict' }),
+    quantity: numeric('quantity').notNull(),
+    warehouseLocationId: integer('warehouse_location_id').references(() => warehouseLocations.id, { onDelete: 'restrict' }),
+    batchRef: text('batch_ref'),
+    expiryDate: date('expiry_date', { mode: 'string' }),
+    serialRef: text('serial_ref'),
+    fundingSourceId: integer('funding_source_id').references(() => fundingSources.id, { onDelete: 'restrict' }),
+    projectId: integer('project_id').references(() => projects.id, { onDelete: 'restrict' }),
+    unitCostAmount: numeric('unit_cost_amount'),
+    currencyCode: text('currency_code'),
+    sourceLineRef: text('source_line_ref'),
+    notes: text('notes'),
+    acceptedQuantity: numeric('accepted_quantity').notNull().default('0'),
+    rejectedQuantity: numeric('rejected_quantity').notNull().default('0'),
+    damagedQuantity: numeric('damaged_quantity').notNull().default('0'),
+    quarantineQuantity: numeric('quarantine_quantity').notNull().default('0'),
+    inspectionNotes: text('inspection_notes'),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+    updatedAt: tstz('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    unique('receipt_lines_line_per_receipt').on(t.receiptId, t.lineNo),
+    check('receipt_lines_quantity_positive', sql`${t.quantity} > 0`),
+    check('receipt_lines_quantity_finite', sql`${t.quantity} <> 'NaN'::numeric`),
+    check('receipt_lines_quantity_scale', sql`scale(${t.quantity}) <= 6`),
+    check('receipt_lines_quantity_range', sql`${t.quantity} < 100000000000000`),
+    check('receipt_lines_cost_currency_pair', sql`(${t.unitCostAmount} IS NULL) = (${t.currencyCode} IS NULL)`),
+    check('receipt_lines_cost_nonnegative', sql`${t.unitCostAmount} IS NULL OR (${t.unitCostAmount} >= 0 AND ${t.unitCostAmount} < 'Infinity'::numeric)`),
+    check('receipt_lines_currency_format', sql`${t.currencyCode} IS NULL OR ${t.currencyCode} ~ '^[A-Z]{3}
+
+export const idempotencyRecords = pgTable(
+  'idempotency_records',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    idempotencyKey: text('idempotency_key').notNull().unique(),
+    operationType: text('operation_type').notNull(),
+    actorUserId: integer('actor_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    requestHash: text('request_hash').notNull(),
+    status: text('status').notNull().default('IN_PROGRESS'),
+    transactionId: uuid('transaction_id').references(() => inventoryTransactions.id, {
+      onDelete: 'restrict',
+    }),
+    responseSummary: jsonb('response_summary'),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+    completedAt: tstz('completed_at'),
+  },
+  (t) => [
+    check('idempotency_records_status_valid', sql`${t.status} IN ('IN_PROGRESS', 'COMPLETED', 'FAILED')`),
+    check('idempotency_records_key_length', sql`length(${t.idempotencyKey}) BETWEEN 16 AND 200`),
+    check('idempotency_records_hash_format', sql`${t.requestHash} ~ '^[0-9a-f]{64}$'`),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Append-only audit (PRD §30, INV-032)
+// ---------------------------------------------------------------------------
+
+export const auditEvents = pgTable(
+  'audit_events',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    occurredAt: tstz('occurred_at').notNull().defaultNow(),
+    actorUserId: integer('actor_user_id').references(() => users.id, { onDelete: 'restrict' }),
+    actorFirebaseUid: text('actor_firebase_uid'),
+    action: text('action').notNull(),
+    result: text('result').notNull(),
+    entityType: text('entity_type').notNull(),
+    entityId: text('entity_id'),
+    warehouseId: integer('warehouse_id').references(() => warehouses.id, { onDelete: 'restrict' }),
+    reason: text('reason'),
+    requestId: text('request_id'),
+    oldData: jsonb('old_data'),
+    newData: jsonb('new_data'),
+  },
+  (t) => [
+    check('audit_events_result_valid', sql`${t.result} IN ('SUCCESS', 'FAILED', 'DENIED')`),
+    index('audit_events_occurred_at_idx').on(t.occurredAt),
+    index('audit_events_warehouse_idx').on(t.warehouseId),
+    index('audit_events_actor_idx').on(t.actorUserId),
+  ],
+);
+`),
+    check('receipt_lines_refs_not_blank', sql`(${t.batchRef} IS NULL OR length(btrim(${t.batchRef})) > 0) AND (${t.serialRef} IS NULL OR length(btrim(${t.serialRef})) > 0)`),
+    check(
+      'receipt_lines_outcomes_nonnegative',
+      sql`${t.acceptedQuantity} >= 0 AND ${t.rejectedQuantity} >= 0 AND ${t.damagedQuantity} >= 0 AND ${t.quarantineQuantity} >= 0`,
+    ),
+    check(
+      'receipt_lines_outcomes_finite',
+      sql`${t.acceptedQuantity} <> 'NaN'::numeric AND ${t.rejectedQuantity} <> 'NaN'::numeric AND ${t.damagedQuantity} <> 'NaN'::numeric AND ${t.quarantineQuantity} <> 'NaN'::numeric`,
+    ),
+    check(
+      'receipt_lines_outcomes_scale',
+      sql`scale(${t.acceptedQuantity}) <= 6 AND scale(${t.rejectedQuantity}) <= 6 AND scale(${t.damagedQuantity}) <= 6 AND scale(${t.quarantineQuantity}) <= 6`,
+    ),
+    index('receipt_lines_item_idx').on(t.itemId),
+    index('receipt_lines_receipt_idx').on(t.receiptId),
+  ],
+);
+
+export const supplierReturnHeaders = pgTable(
+  'supplier_return_headers',
+  {
+    id: id(),
+    receiptId: integer('receipt_id')
+      .notNull()
+      .references(() => receiptHeaders.id, { onDelete: 'restrict' }),
+    warehouseId: integer('warehouse_id')
+      .notNull()
+      .references(() => warehouses.id, { onDelete: 'restrict' }),
+    reason: text('reason'),
+    status: text('status').notNull().default('DRAFT'),
+    createdByUserId: integer('created_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+    updatedAt: tstz('updated_at').notNull().defaultNow(),
+    rowVersion: integer('row_version').notNull().default(1),
+    returnEffectiveAt: tstz('return_effective_at'),
+    postedByUserId: integer('posted_by_user_id').references(() => users.id, { onDelete: 'restrict' }),
+    postedAt: tstz('posted_at'),
+    transactionId: uuid('transaction_id')
+      .unique()
+      .references(() => inventoryTransactions.id, { onDelete: 'restrict' }),
+    cancelledByUserId: integer('cancelled_by_user_id').references(() => users.id, { onDelete: 'restrict' }),
+    cancelledAt: tstz('cancelled_at'),
+  },
+  (t) => [
+    check('supplier_return_headers_status_valid', sql`${t.status} IN ('DRAFT', 'POSTED', 'CANCELLED')`),
+    check(
+      'supplier_return_headers_posted_fields',
+      sql`(${t.status} = 'POSTED') = (${t.returnEffectiveAt} IS NOT NULL AND ${t.postedByUserId} IS NOT NULL AND ${t.postedAt} IS NOT NULL AND ${t.transactionId} IS NOT NULL)`,
+    ),
+    check(
+      'supplier_return_headers_cancelled_fields',
+      sql`${t.status} <> 'CANCELLED' OR (${t.cancelledByUserId} IS NOT NULL AND ${t.cancelledAt} IS NOT NULL)`,
+    ),
+    index('supplier_return_headers_warehouse_status_idx').on(t.warehouseId, t.status),
+    index('supplier_return_headers_receipt_idx').on(t.receiptId),
+  ],
+);
+
+export const supplierReturnLines = pgTable(
+  'supplier_return_lines',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    supplierReturnId: integer('supplier_return_id')
+      .notNull()
+      .references(() => supplierReturnHeaders.id, { onDelete: 'restrict' }),
+    receiptLineId: bigint('receipt_line_id', { mode: 'number' })
+      .notNull()
+      .references(() => receiptLines.id, { onDelete: 'restrict' }),
+    lineNo: integer('line_no').notNull(),
+    quantity: numeric('quantity').notNull(),
+    notes: text('notes'),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+    updatedAt: tstz('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    unique('supplier_return_lines_line_per_return').on(t.supplierReturnId, t.lineNo),
+    unique('supplier_return_lines_receipt_line_unique').on(t.supplierReturnId, t.receiptLineId),
+    check('supplier_return_lines_quantity_positive', sql`${t.quantity} > 0`),
+    check('supplier_return_lines_quantity_finite', sql`${t.quantity} <> 'NaN'::numeric`),
+    check('supplier_return_lines_quantity_scale', sql`scale(${t.quantity}) <= 6`),
+    check('supplier_return_lines_quantity_range', sql`${t.quantity} < 100000000000000`),
+    index('supplier_return_lines_return_idx').on(t.supplierReturnId),
+  ],
 );
 
 // ---------------------------------------------------------------------------
