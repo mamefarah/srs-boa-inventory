@@ -1,6 +1,6 @@
 # Business Rules
 
-> v2.2 control note: `docs/PRD.md`, `docs/M0_EVIDENCE_REGISTER.md` and `docs/M0_BLOCKER_MATRIX.md` are controlling where older rule wording conflicts.
+> v3.1 control note: `docs/PRD.md`, `docs/M0_EVIDENCE_REGISTER.md` and `docs/M0_BLOCKER_MATRIX.md` are controlling where older rule wording conflicts. Current federal property/stock procedures may be configured as documented operational fallback where regional detail is unavailable; source provenance and regional override must be preserved.
 
 Stable rule IDs are referenced by requirements, tests and code review.
 
@@ -44,7 +44,7 @@ Damage/expiry/quarantine/rejection are condition/control changes and do not auto
 Disposal is a separate approved transaction with evidence and terminal exit. Deletion/write-off/loss is a **different** approved transaction class and must not be represented as ordinary disposal.
 
 ## INV-014
-Physical count book quantity is hidden during the first blind count.
+The system must support blind first count as an optional internal control. Annual physical verification is mandatory, but blind-count mode is not treated as a statutory requirement unless a current applicable rule explicitly requires it.
 
 ## INV-015
 Physical-count variance does not change stock until an approved adjustment/correction transaction posts.
@@ -71,7 +71,7 @@ Item codes are unique Bureau-wide and cannot be reused.
 Every item has one authoritative base UOM; authoritative ledger and commitment quantities are stored in base UOM.
 
 ## INV-023
-Alternate-UOM posting requires an approved deterministic item conversion; otherwise it is prohibited.
+Alternate-UOM posting requires an approved deterministic item-specific conversion from a current regional/BoA source, applicable federal fallback, accepted manufacturer/supplier specification, or controlling project/technical specification; otherwise it is prohibited. No guessed conversion is allowed.
 
 ## INV-024
 Duplicate serial numbers are prohibited within their defined uniqueness scope.
@@ -86,7 +86,7 @@ FEFO is the default issue sequence for expiry-controlled stock; override require
 Funding/project source must be preserved when policy requires segregation.
 
 ## INV-028
-Opening balances require physical verification and approved migration-batch evidence.
+Opening balances require physical verification and approved migration-batch evidence, including the applicable hard-copy source/sign-off reference where required. System approval does not replace the official paper authorization.
 
 ## INV-029
 System administrators do not automatically receive inventory approval authority.
@@ -98,7 +98,7 @@ Authorization is enforced at server/database level, not by UI visibility.
 Application clients cannot directly INSERT/UPDATE/DELETE inventory_transactions, inventory_entries, balance projections, audit logs or closed-period control records.
 
 ## INV-032
-Every critical action creates an append-only audit event.
+Every critical electronic action creates an append-only audit event recording the authenticated system actor and timestamp. Paper preparer/checker/approver/recipient identities are separate business-document evidence and must not be conflated with the system actor.
 
 ## INV-033
 Authoritative timestamps use standard database timestamp types.
@@ -110,7 +110,7 @@ Ethiopian Calendar/Fiscal Year is a reporting/display dimension, not the sole st
 Offline/draft capture cannot silently post critical stock movements without server confirmation.
 
 ## INV-036
-Durable-item warehouse issue is distinct from the full fixed-asset lifecycle; internal custody/property handoff must be explicit where Bureau ownership continues. Fixed-asset monetary classification must be effective-dated/configurable until the current regional implementing directive is verified.
+Durable-item warehouse issue is distinct from the full fixed-asset lifecycle; internal custody/property handoff must be explicit where Bureau ownership continues. Fixed-asset monetary classification is effective-dated/configurable. Until a newer applicable regional rule is obtained, Federal Directive No. 1095/2025 may be used as the documented fallback (fixed asset >= Birr 10,000 and useful life >1 year; special fixed asset below Birr 10,000 and useful life >1 year), with federal provenance retained and regional override supported.
 
 ## INV-037
 Reservation/commitment is not a physical inventory movement.
@@ -144,3 +144,19 @@ Warehouse on-hand, logistics inventory and broader Bureau custody/property total
 
 ## INV-047
 Formal valuation method remains TO BE VALIDATED until Finance/Property policy is confirmed.
+
+
+## INV-048
+Where an official signed hard-copy document is required, BoA-IMS must retain a traceable document reference including type, number/reference, date, relevant paper actors/titles, and physical file reference as applicable.
+
+## INV-049
+Authenticated system actor identity and paper signatory/approver identity are separate facts. One must never be substituted for the other.
+
+## INV-050
+BoA-IMS does not implement or claim legal digital signatures. A system workflow action or `APPROVED` state is not itself a legal replacement for a handwritten government signature.
+
+## INV-051
+When current regional procedural detail is unavailable, a current official federal property/stock rule may be configured as the operational fallback only with explicit source provenance, effective-date/version information, and a path for later regional override. It must not be relabeled as regional law.
+
+## INV-052
+A business transaction may reference multiple official documents (for example Model 19/GRN, SRV, delivery note, inspection certificate, invoice, requisition or issue voucher). The system must not require false legal equivalence between differently named forms.
