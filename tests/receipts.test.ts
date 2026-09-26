@@ -411,7 +411,72 @@ describe('M4 receipt workflow', () => {
     assert.equal(r.body.data.lines[0].returnedRejectedQuantity, '0');
   });
 
-  describe('rejected supplier return', () => {
+  describe('M4 receipt concurrency and serial identity', () => {
+  it('serializes the same serial across warehouses so only one physical arrival can take custody', async () => {
+    const master = await admin.query(
+      `SELECT category_id,base_uom_id FROM items WHERE id=$1`,
+      [fx.itemId],
+    );
+    const item = await post('/api/items', 'steward-1', {
+      itemCode: 'M4-SERIAL-RACE',
+      name: 'M4 serial receipt race item',
+      categoryId: master.rows[0].category_id,
+      baseUomId: master.rows[0].base_uom_id,
+      assetControlType: 'SUPPLY',
+      isSerialTracked: true,
+      reason: 'M4 receipt serial concurrency acceptance test',
+    });
+    assert.equal(item.status, 201, JSON.stringify(item.body));
+
+    async function ready(uid: string, warehouseId: number, serial: string) {
+      const h = await post('/api/receipts', uid, {
+        warehouseId,
+        sourcePartyName: 'Serial race supplier',
+        sourceReference: `SER-DEL-${randomUUID()}`,
+      });
+      assert.equal(h.status, 201, JSON.stringify(h.body));
+      const l = await post(`/api/receipts/${h.body.data.id}/lines`, uid, {
+        itemId: item.body.data.id,
+        quantity: '1',
+        expectedQuantity: '1',
+        serialRef: serial,
+      });
+      assert.equal(l.status, 201, JSON.stringify(l.body));
+      await addDocument(h.body.data.id, uid, 'MODEL_19_GRN', `M19-SER-${randomUUID()}`);
+      const current = (await get(`/api/receipts/${h.body.data.id}`, uid)).body.data;
+      return submit(current, uid);
+    }
+
+    const serial = 'M4-SERIAL-ONE';
+    const [a, b] = await Promise.all([
+      ready('receipt-op-a', fx.warehouseA, serial),
+      ready('receipt-op-b', fx.warehouseB, serial),
+    ]);
+    const at = effective();
+    const [ra, rb] = await Promise.all([
+      arrive(a, 'receipt-op-a', key(), at),
+      arrive(b, 'receipt-op-b', key(), at),
+    ]);
+    assert.deepEqual([ra.status, rb.status].sort((x, y) => x - y), [201, 422]);
+    const failed = ra.status === 422 ? ra : rb;
+    assert.equal(failed.body.error.code, 'RECEIPT_INVALID');
+
+    const custody = await admin.query(
+      `SELECT trim_scale(coalesce(sum(signed_quantity),0))::text AS qty,
+              count(DISTINCT transaction_id)::int AS tx_count
+         FROM inventory_entries e
+         JOIN inventory_transactions t ON t.id=e.transaction_id
+        WHERE e.item_id=$1 AND e.serial_ref=$2
+          AND e.custody_scope IN ('WAREHOUSE','IN_TRANSIT','INTERNAL_CUSTODY')
+          AND t.transaction_type='RECEIPT_ARRIVAL'`,
+      [item.body.data.id, serial],
+    );
+    assert.equal(custody.rows[0].qty, '1');
+    assert.equal(custody.rows[0].tx_count, 1);
+  });
+});
+
+describe('rejected supplier return', () => {
     let supplierReturn: any;
 
     it('requires a hard-copy return/dispatch reference and posts only rejected stock', async () => {
