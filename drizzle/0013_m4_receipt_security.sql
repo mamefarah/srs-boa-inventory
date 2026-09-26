@@ -870,6 +870,18 @@ BEGIN
       WHEN i.is_expiry_tracked <> (l.expiry_date IS NOT NULL) THEN 'expiry tracking does not match item configuration'
       WHEN i.is_serial_tracked <> (l.serial_ref IS NOT NULL) THEN 'serial tracking does not match item configuration'
       WHEN i.is_serial_tracked AND l.quantity <> 1 THEN 'serial-numbered line quantity must equal 1'
+      WHEN l.accepted_quantity = 'NaN'::numeric OR l.accepted_quantity >= 'Infinity'::numeric OR l.accepted_quantity < 0
+        OR l.accepted_quantity <> round(l.accepted_quantity, u.decimal_places) THEN 'accepted quantity is invalid for the base UOM'
+      WHEN l.rejected_quantity = 'NaN'::numeric OR l.rejected_quantity >= 'Infinity'::numeric OR l.rejected_quantity < 0
+        OR l.rejected_quantity <> round(l.rejected_quantity, u.decimal_places) THEN 'rejected quantity is invalid for the base UOM'
+      WHEN l.damaged_quantity = 'NaN'::numeric OR l.damaged_quantity >= 'Infinity'::numeric OR l.damaged_quantity < 0
+        OR l.damaged_quantity <> round(l.damaged_quantity, u.decimal_places) THEN 'damaged quantity is invalid for the base UOM'
+      WHEN l.quarantine_quantity = 'NaN'::numeric OR l.quarantine_quantity >= 'Infinity'::numeric OR l.quarantine_quantity < 0
+        OR l.quarantine_quantity <> round(l.quarantine_quantity, u.decimal_places) THEN 'quarantine quantity is invalid for the base UOM'
+      WHEN i.is_serial_tracked AND (
+        l.accepted_quantity NOT IN (0,1) OR l.rejected_quantity NOT IN (0,1)
+        OR l.damaged_quantity NOT IN (0,1) OR l.quarantine_quantity NOT IN (0,1)
+      ) THEN 'serial inspection outcomes must be 0 or 1'
     END AS problem) x
    WHERE l.receipt_id = p_receipt.id AND x.problem IS NOT NULL
    ORDER BY l.line_no LIMIT 1;
@@ -1311,6 +1323,9 @@ BEGIN
      WHERE sl.supplier_return_id=p_return_id
   ) ORDER BY id FOR SHARE;
   PERFORM 1 FROM public.condition_codes WHERE code='REJECTED_PENDING_RETURN' AND is_active FOR SHARE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'BOA_SUPPLIER_RETURN_INVALID: REJECTED_PENDING_RETURN condition is not active' USING ERRCODE = 'BA022';
+  END IF;
 
   FOR v_line IN
     SELECT
@@ -1324,12 +1339,18 @@ BEGIN
       rl.expiry_date,
       rl.serial_ref,
       rl.funding_source_id,
-      rl.project_id
+      rl.project_id,
+      u.decimal_places
     FROM public.supplier_return_lines sl
     JOIN public.receipt_lines rl ON rl.id=sl.receipt_line_id
+    JOIN public.uoms u ON u.id=rl.base_uom_id
     WHERE sl.supplier_return_id=p_return_id
     ORDER BY sl.line_no
   LOOP
+    IF v_line.return_quantity = 'NaN'::numeric OR v_line.return_quantity >= 'Infinity'::numeric
+       OR v_line.return_quantity <= 0 OR v_line.return_quantity <> round(v_line.return_quantity, v_line.decimal_places) THEN
+      RAISE EXCEPTION 'BOA_QUANTITY_PRECISION: supplier-return quantity is invalid for the item base UOM' USING ERRCODE = 'BA008';
+    END IF;
     IF v_line.rejected_quantity <= 0 THEN
       RAISE EXCEPTION 'BOA_SUPPLIER_RETURN_INVALID: receipt line % has no rejected quantity', v_line.receipt_line_no USING ERRCODE = 'BA022';
     END IF;
