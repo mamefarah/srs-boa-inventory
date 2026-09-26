@@ -3236,6 +3236,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "expected_quantity": {
+          "name": "expected_quantity",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
         "warehouse_location_id": {
           "name": "warehouse_location_id",
           "type": "integer",
@@ -3513,6 +3519,22 @@
         "receipt_lines_outcomes_scale": {
           "name": "receipt_lines_outcomes_scale",
           "value": "scale(\"receipt_lines\".\"accepted_quantity\") <= 6 AND scale(\"receipt_lines\".\"rejected_quantity\") <= 6 AND scale(\"receipt_lines\".\"damaged_quantity\") <= 6 AND scale(\"receipt_lines\".\"quarantine_quantity\") <= 6"
+        },
+        "receipt_lines_expected_quantity_positive": {
+          "name": "receipt_lines_expected_quantity_positive",
+          "value": "\"receipt_lines\".\"expected_quantity\" IS NULL OR \"receipt_lines\".\"expected_quantity\" > 0"
+        },
+        "receipt_lines_expected_quantity_finite": {
+          "name": "receipt_lines_expected_quantity_finite",
+          "value": "\"receipt_lines\".\"expected_quantity\" IS NULL OR \"receipt_lines\".\"expected_quantity\" < 'Infinity'::numeric"
+        },
+        "receipt_lines_expected_quantity_scale": {
+          "name": "receipt_lines_expected_quantity_scale",
+          "value": "\"receipt_lines\".\"expected_quantity\" IS NULL OR scale(\"receipt_lines\".\"expected_quantity\") <= 6"
+        },
+        "receipt_lines_expected_quantity_range": {
+          "name": "receipt_lines_expected_quantity_range",
+          "value": "\"receipt_lines\".\"expected_quantity\" IS NULL OR \"receipt_lines\".\"expected_quantity\" < 100000000000000"
         }
       },
       "isRLSEnabled": false
