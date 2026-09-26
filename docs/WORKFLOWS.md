@@ -9,12 +9,14 @@ Request new item → search duplicates → specify standard description/base UOM
 Clean item master → physical verification → map warehouse/location/condition/batch/funding → obtain/record applicable hard-copy sign-off reference → import migration batch → technical maker-checker approval → post one OPENING_BALANCE inventory transaction with balancing OPENING_BALANCE_CONTRA entries → reconcile → lock batch.
 
 ## 3. Goods receipt
-Delivery arrives → create draft receipt → capture independent hard-copy document references (for example Model 19/GRN, SRV, delivery note, invoice, PO/contract and inspection certificate as applicable) → physical quantity check → post physical custody EXTERNAL → WAREHOUSE/PENDING_INSPECTION where procedure permits → inspection → accepted/partial/rejected decision → one inspection/reclassification transaction:
+Create draft receipt → capture independent hard-copy document references (for example Model 19/GRN, SRV, delivery note, invoice, PO/contract and inspection certificate as applicable) → record physical delivered quantity and optional source-authorized/expected quantity → derive matched/short/over-delivery variance without creating stock for documentary quantity → physical arrival posts custody EXTERNAL → WAREHOUSE/PENDING_INSPECTION → inspection → accepted/rejected/damaged/quarantine decision → one inspection/reclassification transaction:
 - PENDING_INSPECTION decreases;
 - accepted quantity moves to USABLE/authorized condition;
 - rejected quantity moves to REJECTED_PENDING_RETURN.
 
 Rejected stock stays traceable until supplier return/resolution posts REJECTED_PENDING_RETURN → EXTERNAL.
+
+Hard-copy document references may record the paper source unit plus preparer/checker/approver/recipient names and titles, approval date, physical file reference and remarks. These paper actors remain separate from authenticated system actors.
 
 Failure paths: duplicate delivery reference, unauthorized warehouse, missing batch/expiry/serial, accepted > inspected/delivered, failed inspection.
 
