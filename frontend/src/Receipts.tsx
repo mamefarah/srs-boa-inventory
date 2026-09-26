@@ -17,6 +17,10 @@ interface ReceiptLine {
   baseUomId: number;
   baseUomCode: string;
   quantity: string;
+  expectedQuantity: string | null;
+  shortQuantity: string | null;
+  overDeliveredQuantity: string | null;
+  deliveryVarianceStatus: 'NOT_ASSESSED' | 'MATCHED' | 'SHORT' | 'OVER_DELIVERED';
   warehouseLocationId: number | null;
   locationCode: string | null;
   batchRef: string | null;
@@ -370,9 +374,9 @@ function ReceiptLinesTable({ receipt, canPrepare, busy, onChanged }: { receipt: 
   const lines = receipt.lines ?? [];
   if (!lines.length) return <p>{t('receiptNoLines')}</p>;
   return (
-    <table className="data"><thead><tr><th>#</th><th>{t('item')}</th><th>{t('quantity')}</th><th>{t('location')}</th><th>{t('receiptTracking')}</th><th>{t('receiptInspectionOutcome')}</th>{receipt.status === 'DRAFT' && canPrepare && <th>{t('action')}</th>}</tr></thead>
+    <table className="data"><thead><tr><th>#</th><th>{t('item')}</th><th>{t('quantity')}</th><th>{t('receiptDeliveryVariance')}</th><th>{t('location')}</th><th>{t('receiptTracking')}</th><th>{t('receiptInspectionOutcome')}</th>{receipt.status === 'DRAFT' && canPrepare && <th>{t('action')}</th>}</tr></thead>
       <tbody>{lines.map((l) => <tr key={l.id}>
-        <td data-label="#">{l.lineNo}</td><td data-label={t('item')}>{l.itemCode} · {l.itemName}</td><td data-label={t('quantity')}><span className="qty">{l.quantity}</span> {l.baseUomCode}</td><td data-label={t('location')}>{l.locationCode ?? '—'}</td><td data-label={t('receiptTracking')}>{[l.batchRef,l.expiryDate,l.serialRef].filter(Boolean).join(' · ') || '—'}</td><td data-label={t('receiptInspectionOutcome')}>{t('receiptAccepted')} {l.acceptedQuantity} · {t('receiptRejected')} {l.rejectedQuantity} · {t('receiptDamaged')} {l.damagedQuantity} · {t('receiptQuarantine')} {l.quarantineQuantity}</td>
+        <td data-label="#">{l.lineNo}</td><td data-label={t('item')}>{l.itemCode} · {l.itemName}</td><td data-label={t('quantity')}><span className="qty">{l.quantity}</span> {l.baseUomCode}</td><td data-label={t('receiptDeliveryVariance')}>{l.expectedQuantity == null ? t('receiptVarianceNotAssessed') : <>{t('receiptExpectedQty')} <span className="qty">{l.expectedQuantity}</span> · {l.deliveryVarianceStatus === 'MATCHED' ? t('receiptVarianceMatched') : l.deliveryVarianceStatus === 'SHORT' ? `${t('receiptShort')} ${l.shortQuantity}` : `${t('receiptOver')} ${l.overDeliveredQuantity}`}</>}</td><td data-label={t('location')}>{l.locationCode ?? '—'}</td><td data-label={t('receiptTracking')}>{[l.batchRef,l.expiryDate,l.serialRef].filter(Boolean).join(' · ') || '—'}</td><td data-label={t('receiptInspectionOutcome')}>{t('receiptAccepted')} {l.acceptedQuantity} · {t('receiptRejected')} {l.rejectedQuantity} · {t('receiptDamaged')} {l.damagedQuantity} · {t('receiptQuarantine')} {l.quarantineQuantity}</td>
         {receipt.status === 'DRAFT' && canPrepare && <td data-label={t('action')}><button type="button" className="btn secondary" disabled={busy} onClick={() => void api(`/receipts/${receipt.id}/lines/${l.id}`, { method: 'DELETE' }).then(onChanged)}>{t('obRemove')}</button></td>}
       </tr>)}</tbody>
     </table>
@@ -384,7 +388,7 @@ function AddReceiptLine({ receipt, onAdded }: { receipt: Receipt; onAdded: () =>
   const [q, setQ] = useState('');
   const [matches, setMatches] = useState<Item[]>([]);
   const [item, setItem] = useState<Item | null>(null);
-  const [f, setF] = useState({ quantity: '', locationId: '', batchRef: '', expiryDate: '', serialRef: '', sourceLineRef: '' });
+  const [f, setF] = useState({ quantity: '', expectedQuantity: '', locationId: '', batchRef: '', expiryDate: '', serialRef: '', sourceLineRef: '' });
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => { void api<{ data: Location[] }>(`/warehouses/${receipt.warehouseId}/locations`).then((r) => setLocations(r.data.filter((l) => l.isActive))).catch((e) => setError(asError(e))); }, [receipt.warehouseId]);
@@ -395,10 +399,11 @@ function AddReceiptLine({ receipt, onAdded }: { receipt: Receipt; onAdded: () =>
     e.preventDefault(); if (!item) return; setBusy(true); setError(null);
     try {
       await api(`/receipts/${receipt.id}/lines`, { method: 'POST', body: {
-        itemId: item.id, quantity: f.quantity.trim(), warehouseLocationId: f.locationId ? Number(f.locationId) : null,
+        itemId: item.id, quantity: f.quantity.trim(), expectedQuantity: f.expectedQuantity.trim() || null,
+        warehouseLocationId: f.locationId ? Number(f.locationId) : null,
         batchRef: f.batchRef || null, expiryDate: f.expiryDate || null, serialRef: f.serialRef || null, sourceLineRef: f.sourceLineRef || null,
       }});
-      setQ(''); setMatches([]); setItem(null); setF({ quantity:'',locationId:'',batchRef:'',expiryDate:'',serialRef:'',sourceLineRef:'' }); onAdded();
+      setQ(''); setMatches([]); setItem(null); setF({ quantity:'',expectedQuantity:'',locationId:'',batchRef:'',expiryDate:'',serialRef:'',sourceLineRef:'' }); onAdded();
     } catch (e) { setError(asError(e)); } finally { setBusy(false); }
   };
   return (
@@ -411,6 +416,7 @@ function AddReceiptLine({ receipt, onAdded }: { receipt: Receipt; onAdded: () =>
         <p><strong>{item.itemCode} · {item.name}</strong> — {item.baseUomCode}</p>
         <fieldset disabled={busy}>
           <Field label="quantity"><input required inputMode="decimal" value={f.quantity} onChange={(e) => setF({ ...f, quantity: e.target.value })} /></Field>
+          <Field label="receiptExpectedQty"><input inputMode="decimal" value={f.expectedQuantity} onChange={(e) => setF({ ...f, expectedQuantity: e.target.value })} /></Field>
           <Field label="location"><select value={f.locationId} onChange={(e) => setF({ ...f, locationId: e.target.value })}><option value="">—</option>{locations.map((l) => <option key={l.id} value={l.id}>{l.code} · {l.name}</option>)}</select></Field>
           {item.isBatchTracked && <Field label="obBatchRef"><input required value={f.batchRef} onChange={(e) => setF({ ...f, batchRef: e.target.value })} /></Field>}
           {item.isExpiryTracked && <Field label="obExpiryDate"><input required type="date" value={f.expiryDate} onChange={(e) => setF({ ...f, expiryDate: e.target.value })} /></Field>}
