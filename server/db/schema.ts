@@ -773,6 +773,9 @@ export const receiptLines = pgTable(
       .notNull()
       .references(() => uoms.id, { onDelete: 'restrict' }),
     quantity: numeric('quantity').notNull(),
+    // Optional quantity authorized by the PO/contract/other source document.
+    // Delivery short/over variance is derived from this versus physical quantity.
+    expectedQuantity: numeric('expected_quantity'),
     warehouseLocationId: integer('warehouse_location_id').references(() => warehouseLocations.id, { onDelete: 'restrict' }),
     batchRef: text('batch_ref'),
     expiryDate: date('expiry_date', { mode: 'string' }),
