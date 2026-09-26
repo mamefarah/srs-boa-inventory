@@ -4,29 +4,39 @@ This repository is for the Somali Regional State Bureau of Agriculture multi-war
 
 ## Authority order
 
-1. Verified current Somali Region/Bureau official procedure and controlling source documents.
-2. Validated `docs/OFFICIAL_PROCESS_MAPPING.md` and validated M0 evidence.
+Use this order:
+
+1. Verified current controlling government law/procedure for the matter at issue.
+2. The controlled repository set in `docs/CONTROLLED_DOCUMENTS.md`, in its mandatory reading order:
+   - `docs/PRD.md` v3.1
+   - `docs/M0_EVIDENCE_REGISTER.md`
+   - `docs/M0_BLOCKER_MATRIX.md`
+   - `docs/OFFICIAL_PROCESS_MAPPING.md`
+   - `docs/M0_STATUS.md`
 3. `CLAUDE.md` (this file).
-4. `docs/PRD.md` / `docs/BUSINESS_RULES.md` / `docs/SECURITY.md` / accepted ADRs.
-5. Project `.claude/skills/boa-*` skills and project specialist agents (`.claude/agents/*`).
-6. Generic third-party engineering skills (e.g. the installed `addyosmani/agent-skills` pack).
+4. Subordinate project documents such as `BUSINESS_RULES.md`, `DATA_MODEL.md`, `WORKFLOWS.md`, `SECURITY.md`, `ROADMAP.md` and accepted ADRs.
+5. Project `.claude/skills/boa-*` skills and specialist agents.
+6. Generic third-party engineering skills.
 
-Validated official-process mapping is evidence-backed interpretation of actual government procedure, so it outranks internal product/design documents (PRD, business rules, ADRs) whenever the two disagree.
+A verified current Somali Regional/BoA/BoFED rule overrides a conflicting product fallback. Where current regional procedural detail is unavailable, PRD v3.1 permits the latest official federal property/stock rule to be used as a documented, configurable **operational fallback**. Preserve federal provenance and regional override; never relabel federal fallback as Somali Regional law.
 
-Generic third-party engineering skills (level 6) are always subordinate to every level above, including project `boa-*` skills and specialist agents (level 5). A generic skill never overrides project authority — see "CI/CD and Deployment Policy" below for the standing example (the `ci-cd-and-automation` skill's auto-merge/auto-deploy examples).
+Project/donor-specific rules remain project-specific and may override the generic operating baseline for stock governed by those instruments.
 
 ### Conflict resolution
 
-When lower-authority material conflicts with higher-authority material, follow the higher-authority source automatically and continue. Do not stop and ask merely because `CLAUDE.md`, the PRD, an ADR, a project skill or a generic skill disagree and precedence resolves it. Record a material override in the PR description when it is relevant to the change being made.
+When lower-authority material conflicts with higher-authority material, follow the higher-authority source automatically where the result is clear and preserves the structural ledger/security invariants.
 
-Escalate to the user only when:
-- two verified official/current government sources conflict with each other;
-- the controlling official source is ambiguous;
-- resolving the conflict would require inventing a government rule, signatory, threshold, form or approval authority;
-- a validated official-process finding appears to require deviating from the ledger immutability, direct-write prohibition, or RLS/authorization invariants in this file, `docs/SECURITY.md` or accepted ADRs — those are structural safety mechanisms, not competing business-rule content, so precedence-based auto-resolution never applies to them;
-- another human-only blocker listed in the Autonomous Execution Policy applies.
+Escalate only when:
+- two controlling/current sources conflict and precedence does not resolve the conflict;
+- the controlling source is materially ambiguous;
+- a project/donor-specific rule is missing and the feature would enforce a funding restriction;
+- an item-specific UOM conversion is missing;
+- no safe federal fallback/configuration boundary exists for a required policy choice;
+- credentials/secrets, paid resources, production deployment/migration or destructive production action require human authorization.
 
-Never invent an official government rule, form number, signatory, threshold or approval authority under any circumstances.
+Do not stop merely because a current regional detailed procedure has not been located when PRD v3.1 already defines a safe federal fallback/configuration rule.
+
+Never invent an official government rule, form number, signatory, project restriction or UOM conversion.
 
 ## Non-negotiable inventory rules
 
@@ -34,7 +44,7 @@ Never invent an official government rule, form number, signatory, threshold or a
 - `inventory_transactions` + `inventory_entries` are the authoritative physical ledger.
 - Reservation/commitment is not a physical inventory movement.
 - Custody/location, condition and commitment/allocation are separate concepts.
-- Every physical stock change must be a posted immutable transaction with traceable business-document evidence.
+- Every physical stock change must be a posted immutable transaction with traceable business-document evidence, including required hard-copy document references.
 - Posted ledger entries and completed business documents are immutable.
 - Corrections use safe direct reversal only when dependencies/period state permit; otherwise use compensating/current-period correction.
 - Internal warehouse transfers must conserve Bureau logistics inventory.
@@ -43,11 +53,15 @@ Never invent an official government rule, form number, signatory, threshold or a
 - Rejected stock remains REJECTED_PENDING_RETURN until returned/resolved.
 - Approved requisitions/transfers create/release/consume commitments according to rules.
 - Damage/expiry/quarantine/rejection are conditions, not automatic quantity losses.
-- Physical counts support blind count, variance review and approved adjustment.
+- Physical counts support annual verification, variance review and approved adjustment; blind-count mode is optional unless an applicable rule/configuration explicitly requires it.
 - Critical posting must be atomic, idempotent and concurrency-safe.
 - Closed inventory periods block ordinary backdated postings.
 - Funding/project source must be preserved where policy requires segregation.
 - Every item has one authoritative base UOM; ledger and commitment quantities use it.
+- Required signed government source documents remain hard copy for official filing/audit; the system records their references.
+- Authenticated system actor and paper signatory are separate facts.
+- BoA-IMS does not implement or claim legal digital signatures.
+- Federal fallback policy must retain federal provenance/effective dates and remain regionally overridable.
 
 ## Direct-write prohibition
 
@@ -92,7 +106,7 @@ Merge to `main` is the normal human gate for every change. Production deployment
 ## Engineering workflow
 
 For non-trivial work:
-1. Read relevant docs and business-rule IDs.
+1. Read `docs/CONTROLLED_DOCUMENTS.md` and the task-relevant controlled/subordinate docs and business-rule IDs.
 2. State assumptions and unresolved policy questions.
 3. Plan a small vertical slice.
 4. Add/update tests first where practical.
@@ -132,8 +146,9 @@ For normal technical choices, choose the safest reasonable option and continue. 
 Record reasonable assumptions in the PR/commit rather than asking about every minor choice.
 
 **Ask the user only when the blocker is genuinely human-only:**
-- An unknown official Somali Region/Bureau rule.
-- An official form/signatory/approval threshold that isn't documented or validated.
+- A policy question for which PRD v3.1 provides no safe fallback/configuration rule.
+- A project/donor-specific restriction that is required but not documented.
+- An item/package UOM conversion required for posting but not supported by approved evidence.
 - Credentials/secrets only the user can provide.
 - Creating a paid resource.
 - A destructive or irreversible production operation.
@@ -168,4 +183,4 @@ Having many skills installed does not mean loading all of them for every task.
 
 ## Definition of Done
 
-A stock-affecting feature is not done until UI, authorization, transaction/entries, commitment effect where applicable, audit event, failure handling, concurrency/idempotency, base-UOM handling, tests, report visibility and reversal/correction behavior are verified.
+A stock-affecting feature is not done until UI, authorization, transaction/entries, commitment effect where applicable, hard-copy evidence/reference handling where applicable, audit event, failure handling, concurrency/idempotency, base-UOM handling, tests, report visibility and reversal/correction behavior are verified.
