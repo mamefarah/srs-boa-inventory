@@ -74,14 +74,27 @@ All M4 stock posting follows ADR-0007:
 4. validate;
 5. post.
 
-### 6. Hard-copy document references
+### 6. Delivery quantity variance
+
+A receipt line may record an optional **source-authorized/expected quantity** from the PO, contract, transfer instruction, donation list or other source document.
+
+BoA-IMS derives:
+- short quantity = `max(expected - delivered, 0)`;
+- over-delivered quantity = `max(delivered - expected, 0)`;
+- matched when expected = delivered.
+
+The expected quantity and delivery variance are documentary/reconciliation controls only. They never create stock. The physical delivered quantity is the quantity that enters `PENDING_INSPECTION`.
+
+If no source-authorized quantity is available, variance status is `NOT_ASSESSED`; the system does not invent one.
+
+### 7. Hard-copy document references
 
 A reusable `document_references` table links hard-copy evidence to receipt/supplier-return entities.
 
 Minimum reference data includes:
 - document type/number/date;
 - source unit;
-- paper preparer/checker/approver/recipient names/titles when available;
+- paper preparer/checker/approver/recipient names/titles when available; these fields also support recording inspection-certificate participants/roles without making the system actor the legal signatory;
 - paper approval/signature date when applicable;
 - physical file reference;
 - remarks.
@@ -92,7 +105,7 @@ A receipt must have at least one meaningful source-document reference before arr
 
 No specific form label is hard-coded as legally exclusive: Model 19/GRN, SRV, delivery note, invoice, PO/contract and inspection certificate may coexist.
 
-### 7. Supplier return is a separate event
+### 8. Supplier return is a separate event
 
 Rejected stock remains `WAREHOUSE/REJECTED_PENDING_RETURN` until returned.
 
@@ -103,7 +116,7 @@ Supplier return posts:
 
 Return quantity may not exceed the inspected rejected quantity less prior posted returns.
 
-### 8. Neutral technical permissions
+### 9. Neutral technical permissions
 
 M4 adds technical capabilities:
 
@@ -115,13 +128,14 @@ M4 adds technical capabilities:
 
 They are system capabilities, not official government job titles or legal signatory authority.
 
-### 9. No universal workflow engine
+### 10. No universal workflow engine
 
 M4 reuses security, validation, locking, idempotency, ledger and audit primitives but keeps receipt/inspection/supplier-return posting functions explicit.
 
 ## Consequences
 
 - Pending deliveries cannot become ordinary issueable stock before inspection.
+- Short/over-delivery is visible without fabricating stock for undelivered quantity.
 - Rejected stock remains auditable until supplier return.
 - M4 works without scanned attachments or legal digital signatures.
 - Later M10 corrections can reference the immutable M4 transactions.
