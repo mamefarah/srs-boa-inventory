@@ -1,7 +1,7 @@
-# BoA-IMS Phase-0 Evidence Register — v2.2
+# BoA-IMS Phase-0 Evidence / Fallback Register — v3.1
 
-**Date:** 25 September 2026  
-**Status:** ACTIVE — controlling regional proclamation identified; detailed implementing-policy blockers remain.
+**Date:** 26 September 2026  
+**Status:** ACTIVE — regional legal baseline verified; current federal property/stock sources may serve as documented operational fallback where regional procedural detail is unavailable; regional overrides remain open.
 
 ---
 
@@ -12,7 +12,7 @@
 - **B — Regional institutional evidence:** current official regional source proving institutional mandate but not detailed procedure.
 - **C — Official/historical regional evidence:** genuine regional material whose current legal force is superseded, historical or not yet confirmed.
 - **D — External project-specific:** project requirement not shown to be general Bureau procedure.
-- **E — Federal reference:** federal rule/manual applicable to federal bodies only unless regional adoption/localization is confirmed.
+- **E — Federal fallback/reference:** current federal rule/manual is not relabeled as Somali Regional law, but under PRD v3.1 it may be configured as the BoA-IMS operational fallback where current regional procedural detail is unavailable; provenance and regional override must be retained.
 - **F — Non-authoritative reference:** generic/NGO/private/template material.
 
 ---
@@ -33,10 +33,12 @@
 | BOE-005 | BOE | 2025 Bureau Internal Audit reports | Model 19 actively checked; fixed-asset registration part of audit control | Confirms live use of Model 19 in audited program operations | Existing current Bureau audit evidence |
 | BOE-006 | BOE | 2025 Community Procurement Manual | GRN required as payment-support evidence | Confirms GRN terminology in Bureau project operations | Existing BOE |
 | BOE-007 | BOE | Regional Project Manager/Senior Coordinator Operational Handbook | Program-level fiduciary signatory role, not inventory transaction matrix | Limited role evidence only | Existing BOE |
-| FED-001 | E | Federal Stock Management Manual | Receiving, stock cards, issue, stocktaking, storage procedures | Comparison only | Historical/current public reference; not regional law |
-| FED-002 | E | Federal Government Property Administration Directive No. 1095/2025 | Current federal property reference | Comparison only | Federal scope |
-| FED-003 | E | Federal Public Procurement Directive No. 1073/2025 | Current federal procurement; electronic written-form recognition; delivery/inspection controls; e-procurement roles | Comparison only | Applies to federal entities, not Somali Regional BoA by its own scope clause |
-| FED-004 | E | Federal Public Procurement Manual, revised 2011 | Historical procurement/store receipt/inspection/issue workflow; GRN and custody ledger detail | Historical comparison only | Built around repealed Federal Proclamation 649/2009 and 2010 directive |
+| FED-001 | E | Federal Stock Management Manual | Receiving, stock cards, issue, stocktaking, storage procedures and standard form concepts | Operational fallback for detailed stock procedure when regional detail is unavailable; retain federal provenance | Official federal reference; not relabeled as regional law |
+| FED-002 | E | Federal Government Property Administration Directive No. 1095/2025 | Current federal property administration; defines fixed asset >= Birr 10,000 + useful life >1 year and special fixed asset below Birr 10,000 + useful life >1 year; provides current property controls | Primary federal operational fallback for property procedure/classification until a current regional override is obtained | Current federal directive |
+| FED-003 | E | Federal Public Procurement Directive No. 1073/2025 | Current federal procurement; delivery/inspection/electronic-document controls | Procurement/reference fallback where relevant; does not replace regional procurement law | Current federal directive |
+| FED-004 | E | Federal Public Procurement Manual, revised 2011 | Historical procurement/store receipt/inspection/issue workflow; GRN and custody-ledger detail | Historical comparison/form mapping only | Built around older federal framework |
+| FED-005 | E | Federal Public Procurement and Property Administration Proclamation No. 1333/2024 | Current federal procurement/property statutory framework | Federal reference/fallback provenance; does not replace REG-A-001 | Current federal proclamation |
+| FED-006 | E | Hazardous Property Management Manual, August 2026 | Current federal handling, safeguarding and disposition guidance for hazardous/out-of-service property | Operational fallback for CG-3 when no more specific regional/agriculture/environment/health rule exists | Current federal property manual |
 
 ---
 
@@ -110,204 +112,174 @@ Where a Regional State obligation under an international agreement conflicts wit
 
 ---
 
-## 4. Evidence conflict/reconciliation register
+## 4. Evidence conflict / reconciliation register
 
-| Topic | Evidence | Conflict/gap | Decision for v2.2 |
+| Topic | Evidence | v3.1 reconciliation |
+|---|---|---|
+| Fixed-asset threshold | REG-A-001 delegates value to directive; historical regional evidence uses Birr 1,000; BOE-004 uses Birr 2,000; FED-002 uses Birr 10,000 and >1 year, with special fixed asset below Birr 10,000 and >1 year | Keep all provenance. Configure FED-002 as the current operational fallback until a current regional directive is obtained. Never hard-code it as permanent regional law. |
+| GRN/Model 19 vs SRV | BOE evidence uses Model 19/GRN and also SRV | Relationship may remain administratively unresolved, but software design is resolved: capture independent multiple document references. Do not force legal equivalence. |
+| Approval/signature authority | BOE/historical evidence shows signatures/roles, but no consolidated current regional matrix | No longer blocks development. Use neutral technical permissions/maker-checker, capture actual hard-copy signatory/title/reference, and configure current Bureau mapping when obtained. |
+| Annual count | REG-A-001 requires at least annual verification; manuals support periodic/blind controls | Annual verification is mandatory capability. Blind count remains optional internal control unless separately required. |
+| Asset custody | REG-A-001 requires custodian/location; regional/federal guides provide form detail | Custodian/location/history are mandatory-capability fields; form labels remain configurable. |
+| Disposal/deletion | REG-A-001 distinguishes them; FED-002/FED-006 provide current federal detail | Keep separate workflows. Use federal detail as fallback, retain provenance, allow regional/sector override. |
+| Electronic records/signatures | Product decision keeps required signed originals in hard copy | CG-2 resolved by scope. No legal digital-signature feature. System records electronic workflow/audit plus hard-copy reference. |
+| Hazardous/expired inputs | FED-006 now available; regional/sector-specific rule may later be obtained | Use FED-006 as fallback, with quarantine/restricted issue and controlled disposition; regional/sector rule overrides. |
+| Funding/project restrictions | Regional law recognizes applicable international obligations; project manuals vary | Always capture attribution. Enforce substitution/segregation only from controlling project/financing evidence. |
+| UOM conversions | No universal approved schedule | Conversion is item-specific data. No guessed factor; use approved item/package/manufacturer/project evidence. |
+
+---
+
+## 5. v3.1 policy / configuration status
+
+| ID | Topic | Status | Treatment |
 |---|---|---|---|
-| Fixed-asset threshold | REG-A-001: value set by directive; REG-C-002 historical guide: Birr 1,000; BOE-004 current project FM manual: Birr 2,000 | Current controlling directive not yet obtained | Keep threshold versioned/configurable; BOE-004 may be interim project operational baseline, not universal law |
-| GRN/Model 19 vs SRV | BOE-001/004/005/006 use Model 19/GRN; BOE-002 uses SRV after inspection | Relationship unknown | HB-8 remains OPEN; do not merge labels |
-| Inspection committee | BOE-002 operational evidence; FED-003 current federal reference allows temporary committee when needed | Regional composition/trigger not located | Build generic multi-person inspection capability; configure actual rule later |
-| Annual count | REG-A-001 requires at least annual; BOE/historical manuals support periodic counts | Team composition/recount threshold not current-controlled | Annual frequency VERIFIED; team/recount details conditional |
-| Asset custody | REG-A-001 requires custodian/location; REG-C-002 supplies historical forms | Current form names/numbers not confirmed | Data fields verified; historical form labels remain configurable |
-| Disposal | REG-A-001 high-level; REG-C-002 historical detailed workflow | Current directive and thresholds unknown | M13 mechanism may be designed, production activation blocked |
-| Electronic records | FED-003 recognizes electronic written form for federal bodies | Regional equivalent not located | Hybrid paper+electronic evidence architecture; no electronic-only legal claim |
+| HB-1 | Disposal/deletion detailed authority | FEDERAL FALLBACK AVAILABLE / REGIONAL OVERRIDE OPEN | Build/operate separate workflows using current federal property procedure as fallback; capture hard-copy authority/evidence |
+| HB-2 | Fixed-asset monetary threshold | FEDERAL FALLBACK CONFIGURABLE | Use effective-dated FED-002 fallback (10,000 Birr + >1 year; special fixed asset below 10,000 + >1 year); regional override when obtained |
+| HB-3 | Funding/project restrictions | PROJECT-SPECIFIC | Capture source; enforce only from financing/PIM/FM evidence |
+| HB-4 | Approval/signature matrix | CONFIGURATION GAP — NOT DEVELOPMENT BLOCKER | Neutral technical permissions + hard-copy signatory capture; configure official title/routing when available |
+| HB-5 | Adjustment/variance authority | FEDERAL FALLBACK AVAILABLE | Build using federal workflow baseline + hard-copy approval/reference; regional override possible |
+| HB-6 | Transfer/discrepancy authority | FEDERAL FALLBACK AVAILABLE | Build conservation/in-transit mechanics + paper authority evidence; regional override possible |
+| HB-7 | Period close/reopen authority | CONFIGURATION GAP — NOT DEVELOPMENT BLOCKER | Build technical controls; capture paper authority/reference; configure final role mapping later |
+| HB-8 | GRN/Model 19 vs SRV | RESOLVED FOR SOFTWARE DESIGN | Store multiple independent document refs; no need to decide equivalence to build M4 |
+| CG-1 | UOM/package conversion | ITEM-SPECIFIC DATA REQUIREMENT | Base UOM remains authoritative; approved item conversion required |
+| CG-2 | Electronic-only / digital signature | RESOLVED BY PRODUCT SCOPE | Signed hard copy remains official supporting evidence; no legal digital-signature feature |
+| CG-3 | Hazardous/expired inputs | FEDERAL FALLBACK AVAILABLE | Use FED-006 unless a more specific regional/sector rule applies |
 
 ---
 
-## 5. Revised M0 blocker matrix
+## 6. Hybrid hard-copy / electronic evidence decision
 
-### HB-1 — Disposal/deletion detailed authority — HARD BLOCKER for M13 activation
+BoA-IMS is authoritative for electronic inventory state, ledger, workflow, reconciliation and system audit.
 
-**Known:** disposal/deletion concepts and accounting visibility are legally established by REG-A-001.  
-**Missing:** current regional implementing directive; committee composition; valuation process; permissible methods; thresholds; final authority; destruction witnesses; specialized hazardous-input rules.  
-**Blocks:** production disposal/deletion approval routing and terminal posting authorization.  
-**Does not block:** database case entities, document attachments, disabled workflow skeleton.
+Required official signed source documents remain in hard copy for government filing/audit.
 
-### HB-2 — Fixed-asset monetary threshold — CONDITIONAL BLOCKER
+The system shall capture the relevant hard-copy:
+- type;
+- number/reference;
+- date;
+- source/issuer;
+- preparer/checker/approver/recipient names and titles as applicable;
+- approval/signature date where applicable;
+- physical file reference;
+- business transaction linkage.
 
-**Known:** >1-year useful life requirement; threshold is set by directive.  
-**Conflicting evidence:** historical Birr 1,000 versus BOE operational Birr 2,000.  
-**Blocks:** universal production auto-classification.  
-**Does not block:** item-master fields, policy-version table, manual/explicit classification pending confirmation.
+System actor/timestamp are separate facts from paper signatory identity.
 
-### HB-3 — Funding/project attribution versus restriction — HARD BLOCKER for restrictive ATP/stock-substitution semantics
+Attachments/scans are optional unless a later approved policy makes them mandatory.
 
-**Known:** project/funding source is operationally recorded; international agreement may prevail.  
-**Missing:** whether identical stock can be consumed/transferred across funding sources/projects absent project-specific approval.  
-**Blocks:** restrictive ATP eligibility, automatic cross-source substitution, universal project-segregation constraints.
-
-### HB-4 — Consolidated approval/signature matrix — HARD BLOCKER for real approval routing
-
-**Known:** regional proclamation assigns accountability and allows directives; BOE documents reveal some roles.  
-**Missing:** transaction-by-transaction initiator/reviewer/approver/issuer/receiver/committee matrix and any value/condition thresholds.  
-**Blocks:** production approval mapping.
-
-### HB-5 — Stock adjustment/variance authority — HARD BLOCKER for M10 activation
-
-**Known:** physical verification required; deletion can result from shortage/loss.  
-**Missing:** investigation, approval, threshold and accounting procedure for stock corrections.  
-**Blocks:** production adjustment approval/posting except controlled migration/testing.
-
-### HB-6 — Warehouse transfer and discrepancy authority — HARD BLOCKER for final M7 routing
-
-**Known:** generic custody transfer is recognized; historical asset transfer forms exist.  
-**Missing:** current warehouse-to-warehouse dispatch/receipt authority, in-transit custody, shortage/damage investigation and resolution.  
-**Blocks:** final authority routing; not the conservation ledger shape.
-
-### HB-7 — Period-close/reopen authority — HARD BLOCKER for M11 production activation
-
-**Known:** fiscal reporting exists in Bureau operations.  
-**Missing:** who certifies closing balances, whether/when a period can reopen, correction method.  
-**Blocks:** real close/reopen permissions.
-
-### HB-8 — GRN/Model 19 versus SRV — HARD BLOCKER for final receipt document/UI mapping
-
-**Known:** Model 19/GRN is live Bureau evidence; SRV also appears in Bureau procurement procedure.  
-**Missing:** same form, sequential form, alternative terminology or different purpose.  
-**Blocks:** official form labels, one-screen-vs-two-document sequence and form-specific signatories.  
-**Does not block:** arrival/inspection/accepted/rejected ledger mechanics.
+A workflow state such as `APPROVED` is not a legal digital signature.
 
 ---
 
-## 6. Other open policy items that do not block core schema
+## 7. v3.1 decision register
 
-| Item | Safe current treatment |
-|---|---|
-| UOM/package conversion | One base UOM per item; disable mixed-UOM posting until approved conversion exists |
-| Record retention period | Retain indefinitely by default at system level; do not implement deletion schedule until official retention rule obtained |
-| Paper vs electronic originals | Support both; require document-reference and attachment capability |
-| E-signature | Support technical approval logs but do not claim legal replacement of paper signature |
-| Hazardous/expired inputs | Quarantine and block issue; specialized disposal disabled until sector rules obtained |
-| Exact stock-card/bin-card layout | Generate configurable ledger/card report; wait for current official form sample |
-| Recount threshold/team composition | Annual count mechanism works; thresholds/team rules configurable |
-| Valuation method | Capture quantity and cost evidence; do not hard-code FIFO/weighted average until BoFED confirms |
+### A — VERIFIED REGIONAL / safe to encode
 
----
-
-## 7. Revised Phase-0 decision register
-
-### A — VERIFIED / safe to encode
-
-- Somali Regional State property/procurement controlling proclamation is No. 196/2020.
+- Proclamation 196/2020 is the primary identified regional legal baseline.
 - Public-property lifecycle and custody must be traceable.
-- Fixed-asset useful life greater than one year is part of the legal definition; current monetary threshold comes from directive.
 - Property records require date, description, quantity and cost capability.
-- Fixed-asset custodian and location must be recordable.
-- Supplies not immediately consumed remain inventory with custodial responsibility.
+- Fixed-asset custodian/location must be recordable.
+- Supplies not immediately consumed remain controlled inventory.
 - At least annual physical verification is mandatory.
-- Disposal and deletion/write-off are separate processes.
-- Deleted property may include shortage, destruction, theft or other qualifying loss.
-- Disposal proceeds/deleted-property values require public-account linkage as prescribed.
-- Proclamation 82 is repealed; legacy manuals do not override Proclamation 196.
-- Project/international agreements can prevail when inconsistent with regional provisions.
+- Disposal and deletion/write-off/loss are distinct.
+- Donor/international obligations may prevail where applicable.
 
-### B — CONDITIONAL / mechanism safe, final rule configurable
+### B — FEDERAL FALLBACK / safe to configure with provenance
 
-- receipt/inspection workflow;
-- GRN/Model 19 support;
-- SRV support as a distinct configurable document type pending HB-8;
-- requisition and issue workflow;
-- internal custody/asset-register handoff;
-- generic multi-person inspection capability;
-- generic warehouse-transfer conservation model;
-- generic adjustment engine;
-- generic period close engine;
-- funding/project attribution;
-- electronic document attachments;
-- legacy asset-form field mapping.
+- detailed current property/stock procedures where regional detail is missing;
+- fixed-asset fallback classification from FED-002;
+- transfer/adjustment/disposal procedural mechanics;
+- hazardous-property controls from FED-006;
+- current stock/form workflow concepts.
 
-### C — BLOCKED / do not activate as final policy
+### C — BOA OPERATIONAL / safe where not contradicted
 
-- detailed disposal/deletion approval chain and thresholds;
-- automatic universal fixed-asset monetary threshold;
-- real Bureau signature/approval matrix;
-- stock-adjustment authority/thresholds;
-- warehouse-transfer discrepancy-resolution authority;
-- funding/project restriction semantics;
-- period close/reopen authority;
-- official GRN/SRV relationship;
-- UOM conversions without approved factors;
-- electronic-only substitution for legally signed paper forms;
-- hazardous-input destruction/disposal without sector rules.
+- Model 19/GRN live operational use;
+- SRV and inspection evidence;
+- stock cards/issue forms/annual verification used in project operations;
+- project FM/procurement controls.
 
-### D — OUTSIDE INITIAL INVENTORY SCOPE
+### D — PROJECT-SPECIFIC / do not generalize
 
-- tendering/bid evaluation;
-- accounts payable/payment processing;
-- general ledger and financial statements;
-- full depreciation accounting;
-- HR disciplinary/recovery proceedings;
-- environmental licensing for hazardous waste;
-- donor financial reporting beyond inventory source attribution.
+- funding-source segregation;
+- cross-project stock use restrictions;
+- donor-specific approval/disposal/reporting requirements.
+
+### E — ITEM-SPECIFIC DATA REQUIREMENT
+
+- package/base-UOM conversion factors;
+- batch/expiry/serial requirements based on item evidence.
+
+### F — RESOLVED BY PRODUCT SCOPE
+
+- no legal digital-signature feature;
+- signed hard copy remains official supporting evidence;
+- digital attachments are optional;
+- GRN/SRV relationship need not be legally resolved for the system because multiple references can coexist.
 
 ---
 
 ## 8. Evidence requests now prioritized
 
-Priority 1 — **Current Somali Regional property-administration implementing directive issued under Proclamation 196/2020.** This is now the single most valuable missing source. It should resolve or narrow fixed-asset threshold, disposal/deletion, valuation, custody and approval issues.
+Evidence collection continues to improve regional configuration, not to block general software development.
 
-Priority 2 — **Current BoA/BoFED official forms pack and signature/delegation matrix**: Model 19/GRN, SRV if used, inspection/acceptance, requisition, issue/Model 22, transfer, return, count, adjustment, disposal/deletion and asset handover.
+Priority 1 — current Somali Regional property-administration implementing directive under Proclamation 196/2020.
 
-Priority 3 — **Current warehouse-transfer and stock-adjustment procedures.**
+Priority 2 — current BoA/BoFED forms pack and delegation/authority matrix.
 
-Priority 4 — **Current fiscal close/reopen and records-retention rules.**
+Priority 3 — project/financing manuals that restrict stock use, transfer or disposal by funding source.
 
-Priority 5 — **Agricultural-input-specific expiry/hazardous disposal rules and approved UOM conversion tables.**
+Priority 4 — approved item/package conversion schedules/specifications.
 
-Priority 6 — **Project/financing agreements or project manuals that restrict stock use, transfer or disposal by funding source.**
+Priority 5 — any regional/sector hazardous-property rule that should override FED-006.
 
----
-
-## 9. Implementation gate after v2.2
-
-### Can proceed now
-
-- M1 foundation/security;
-- M2 item/warehouse master with versioned classification policy;
-- M3 opening-balance mechanics;
-- M4 receipt/inspection ledger mechanics with configurable document labels;
-- M5 generic requisition/approval engine without real role seeding;
-- M6 issue and internal-custody handoff;
-- M7 transfer conservation engine without final authority routing;
-- M8 return/condition mechanics;
-- M9 annual physical verification;
-- M10 generic adjustment mechanism but not production authority;
-- M11 technical period-close mechanism but not production certifier;
-- M12 batch/expiry/serial;
-- M14 reports;
-- security/audit controls throughout.
-
-### Must remain gated
-
-- M13 final disposal/deletion activation;
-- automatic fixed-asset classification using a universal monetary threshold;
-- real approval/signatory production configuration;
-- restrictive funding/project ATP semantics;
-- final GRN/SRV official form sequence;
-- automatic UOM conversions without approved factors;
-- hazardous-input terminal disposal;
-- production period-reopen authority.
+For every new source record:
+- title;
+- issuer;
+- document/reference number;
+- issue/effective date;
+- current/superseded status;
+- jurisdiction/scope;
+- relevant section/page;
+- rule supported;
+- policy topic affected;
+- whether it overrides a configured fallback.
 
 ---
 
-## 10. Required repository changes when approved
+## 9. Implementation gate under v3.1
 
-When this evidence update is committed to the project repository, the following files should be revised together to avoid contradictory documentation:
+### May proceed
 
-- `docs/PRD.md` -> v2.2;
+M4 through M16 may proceed milestone-by-milestone using:
+- verified regional rules;
+- current BoA operational evidence;
+- documented federal fallback where permitted by PRD v3.1;
+- project-specific evidence where applicable;
+- item-specific conversion evidence.
+
+### Must not be invented
+
+- project/donor stock restrictions;
+- item/package conversion factors;
+- unverified claims that federal fallback is regional law;
+- claims that system approval is a legal digital signature;
+- historical rewriting when a later regional policy differs.
+
+---
+
+## 10. Repository synchronization under v3.1
+
+The v3.1 governance update must keep these files consistent:
+
+- `docs/PRD.md`;
+- `docs/CONTROLLED_DOCUMENTS.md`;
 - `docs/M0_EVIDENCE_REGISTER.md`;
 - `docs/M0_BLOCKER_MATRIX.md`;
 - `docs/M0_STATUS.md`;
 - `docs/OFFICIAL_PROCESS_MAPPING.md`;
-- `docs/BUSINESS_RULES.md` where annual verification, disposal/deletion distinction and custody/location are encoded;
-- relevant ADRs if the fixed-asset threshold baseline or disposal data model changes.
+- `docs/BUSINESS_RULES.md`;
+- `docs/DATA_MODEL.md`;
+- `docs/WORKFLOWS.md`;
+- roadmap/development/readme/traceability documents;
+- ADR-0008.
