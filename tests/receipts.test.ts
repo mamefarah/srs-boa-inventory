@@ -115,6 +115,9 @@ describe('M4 database boundaries', () => {
   });
 
   it('prevents direct ledger posting and internal helper calls by the app role', async () => {
+    // PostgreSQL aborts a transaction after the first expected permission error, so
+    // exercise each denial in its own transaction. This proves both boundaries
+    // independently instead of asserting against an already-aborted transaction.
     await asApp('receipt-op-a', async (c) => {
       await assert.rejects(
         c.query(
@@ -125,6 +128,8 @@ describe('M4 database boundaries', () => {
         ),
         /permission denied/,
       );
+    });
+    await asApp('receipt-op-a', async (c) => {
       await assert.rejects(c.query(`SELECT boa_receipt_lock(1,1,ARRAY['RECEIVE_RECEIPTS'])`), /permission denied/);
     });
   });
@@ -150,7 +155,7 @@ describe('M4 receipt workflow', () => {
 
     const precision = await post(`/api/receipts/${receipt.id}/lines`, 'receipt-op-a', {
       itemId: fx.itemId,
-      quantity: '1.25',
+      quantity: '1.234',
     });
     assert.equal(precision.status, 409, JSON.stringify(precision.body));
     assert.equal(precision.body.error.code, 'QUANTITY_PRECISION');
