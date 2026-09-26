@@ -593,6 +593,9 @@ export const openingBalanceLines = pgTable(
       .notNull()
       .references(() => uoms.id, { onDelete: 'restrict' }),
     quantity: numeric('quantity').notNull(),
+    // Optional source-authorized/expected quantity. Short/over-delivery is derived
+    // from expected_quantity vs physically delivered quantity; it is not a stock leg.
+    expectedQuantity: numeric('expected_quantity'),
     warehouseLocationId: integer('warehouse_location_id').references(() => warehouseLocations.id, { onDelete: 'restrict' }),
     conditionCode: text('condition_code')
       .notNull()
@@ -794,6 +797,10 @@ export const receiptLines = pgTable(
     check('receipt_lines_quantity_finite', sql`${t.quantity} < 'Infinity'::numeric`),
     check('receipt_lines_quantity_scale', sql`scale(${t.quantity}) <= 6`),
     check('receipt_lines_quantity_range', sql`${t.quantity} < 100000000000000`),
+    check('receipt_lines_expected_quantity_positive', sql`${t.expectedQuantity} IS NULL OR ${t.expectedQuantity} > 0`),
+    check('receipt_lines_expected_quantity_finite', sql`${t.expectedQuantity} IS NULL OR ${t.expectedQuantity} < 'Infinity'::numeric`),
+    check('receipt_lines_expected_quantity_scale', sql`${t.expectedQuantity} IS NULL OR scale(${t.expectedQuantity}) <= 6`),
+    check('receipt_lines_expected_quantity_range', sql`${t.expectedQuantity} IS NULL OR ${t.expectedQuantity} < 100000000000000`),
     check('receipt_lines_cost_currency_pair', sql`(${t.unitCostAmount} IS NULL) = (${t.currencyCode} IS NULL)`),
     check('receipt_lines_cost_nonnegative', sql`${t.unitCostAmount} IS NULL OR (${t.unitCostAmount} >= 0 AND ${t.unitCostAmount} < 'Infinity'::numeric)`),
     check('receipt_lines_currency_format', sql`${t.currencyCode} IS NULL OR ${t.currencyCode} ~ '^[A-Z]{3}$'`),
