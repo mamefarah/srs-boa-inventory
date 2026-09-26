@@ -72,11 +72,16 @@ async function submit(receipt: { id: number; rowVersion: number }, uid = 'receip
   return r.body.data;
 }
 
-async function arrive(receipt: { id: number; rowVersion: number }, uid = 'receipt-op-a', idempotencyKey = key()) {
+async function arrive(
+  receipt: { id: number; rowVersion: number },
+  uid = 'receipt-op-a',
+  idempotencyKey = key(),
+  at = effective(),
+) {
   return post(
     `/api/receipts/${receipt.id}/arrive`,
     uid,
-    { rowVersion: receipt.rowVersion, effectiveAt: effective() },
+    { rowVersion: receipt.rowVersion, effectiveAt: at },
     { 'Idempotency-Key': idempotencyKey },
   );
 }
@@ -132,6 +137,7 @@ describe('M4 receipt workflow', () => {
   let arrivalTx: string;
   let inspectionTx: string;
   const arrivalKey = key();
+  const arrivalEffectiveAt = effective();
 
   it('creates a draft, rejects numeric JSON quantity, and never silently rounds base-UOM quantity', async () => {
     receipt = await draftReceipt();
@@ -167,7 +173,7 @@ describe('M4 receipt workflow', () => {
 
   it('submits without stock effect and refuses physical arrival until hard-copy evidence is referenced', async () => {
     receipt = await submit(receipt);
-    const noDoc = await arrive(receipt, 'receipt-op-a', arrivalKey);
+    const noDoc = await arrive(receipt, 'receipt-op-a', arrivalKey, arrivalEffectiveAt);
     assert.equal(noDoc.status, 422, JSON.stringify(noDoc.body));
     assert.equal(noDoc.body.error.code, 'RECEIPT_INVALID');
 
@@ -192,7 +198,8 @@ describe('M4 receipt workflow', () => {
   });
 
   it('posts arrival atomically as EXTERNAL -> WAREHOUSE/PENDING_INSPECTION and replays idempotently', async () => {
-    const first = await arrive(receipt, 'receipt-op-a', arrivalKey);
+    const originalRowVersion = receipt.rowVersion;
+    const first = await arrive(receipt, 'receipt-op-a', arrivalKey, arrivalEffectiveAt);
     assert.equal(first.status, 201, JSON.stringify(first.body));
     assert.equal(first.body.data.status, 'ARRIVED');
     arrivalTx = first.body.data.transactionId;
@@ -210,11 +217,21 @@ describe('M4 receipt workflow', () => {
     const replay = await post(
       `/api/receipts/${receipt.id}/arrive`,
       'receipt-op-a',
-      { rowVersion: receipt.rowVersion, effectiveAt: first.request?._data?.effectiveAt ?? effective() },
+      { rowVersion: originalRowVersion, effectiveAt: arrivalEffectiveAt },
       { 'Idempotency-Key': arrivalKey },
     );
-    // The rowVersion/effectiveAt are part of the request hash. A changed request must conflict.
-    assert.equal(replay.status, 409);
+    assert.equal(replay.status, 200, JSON.stringify(replay.body));
+    assert.equal(replay.body.replayed, true);
+    assert.equal(replay.body.data.transactionId, arrivalTx);
+
+    const conflict = await post(
+      `/api/receipts/${receipt.id}/arrive`,
+      'receipt-op-a',
+      { rowVersion: originalRowVersion, effectiveAt: effective() },
+      { 'Idempotency-Key': arrivalKey },
+    );
+    assert.equal(conflict.status, 409);
+    assert.equal(conflict.body.error.code, 'IDEMPOTENCY_KEY_CONFLICT');
 
     receipt = (await get(`/api/receipts/${receipt.id}`, 'receipt-op-a')).body.data;
     assert.equal(receipt.status, 'ARRIVED');
