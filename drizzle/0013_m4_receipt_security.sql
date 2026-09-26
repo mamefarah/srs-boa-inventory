@@ -521,6 +521,7 @@ CREATE TRIGGER receipt_lines_no_truncate
 CREATE OR REPLACE FUNCTION boa_guard_document_reference()
 RETURNS trigger
 LANGUAGE plpgsql
+SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
