@@ -536,7 +536,7 @@ function UomForm({
           <input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
         <Field label="decimalPlaces">
-          <input type="number" min={0} max={6} value={decimalPlaces} onChange={(e) => setDecimalPlaces(e.target.value)} />
+          <input type="number" required min={0} max={6} step={1} value={decimalPlaces} onChange={(e) => setDecimalPlaces(e.target.value)} />
         </Field>
         {canManage && (
           <Field label="reason">
