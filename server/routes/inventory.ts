@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { auditScopeDenial, principalOf, requirePermission, resolveWarehouseScope, type WarehouseScope } from '../authz/authorize.ts';
 import { PERMISSIONS } from '../authz/permissions.ts';
 import { withUserContext, type Db } from '../db/client.ts';
-import { auditEvents, inventoryEntries, inventoryTransactions, items, uoms, warehouses } from '../db/schema.ts';
+import { auditEvents, conditionCodes, inventoryEntries, inventoryTransactions, items, uoms, warehouses } from '../db/schema.ts';
 import type { Logger } from '../logger.ts';
 import { idParam, limitParam, offsetParam } from '../http/validation.ts';
 import type { RouteDeps } from './deps.ts';
@@ -77,6 +77,7 @@ export function inventoryRoutes({ db, logger, authenticated }: RouteDeps) {
               baseUomCode: uoms.code,
               warehouseLocationId: inventoryEntries.warehouseLocationId,
               conditionCode: inventoryEntries.conditionCode,
+              isIssuable: conditionCodes.isIssuable,
               // Exact value in minimal form (trim_scale drops only trailing zeros; never rounds).
               onHandQuantity: sql<string>`trim_scale(${total})::text`,
             })
@@ -84,6 +85,7 @@ export function inventoryRoutes({ db, logger, authenticated }: RouteDeps) {
             .innerJoin(items, eq(items.id, inventoryEntries.itemId))
             .innerJoin(uoms, eq(uoms.id, inventoryEntries.baseUomId))
             .innerJoin(warehouses, eq(warehouses.id, inventoryEntries.warehouseId))
+            .innerJoin(conditionCodes, eq(conditionCodes.code, inventoryEntries.conditionCode))
             .where(
               and(
                 eq(inventoryEntries.custodyScope, 'WAREHOUSE'),
@@ -100,6 +102,7 @@ export function inventoryRoutes({ db, logger, authenticated }: RouteDeps) {
               uoms.code,
               inventoryEntries.warehouseLocationId,
               inventoryEntries.conditionCode,
+              conditionCodes.isIssuable,
             )
             .having(sql`${total} <> 0`)
             .orderBy(asc(warehouses.code), asc(items.itemCode), asc(inventoryEntries.conditionCode), asc(inventoryEntries.warehouseLocationId))

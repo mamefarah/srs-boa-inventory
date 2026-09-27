@@ -1,6 +1,6 @@
 {
-  "id": "1ffba959-be51-4bab-b486-e6fe010b1ccf",
-  "prevId": "6b749e1b-1901-42c0-b588-b5c6f9f3c14a",
+  "id": "3f6ab144-a816-46c7-9728-6a580aa4e013",
+  "prevId": "1ffba959-be51-4bab-b486-e6fe010b1ccf",
   "version": "7",
   "dialect": "postgresql",
   "tables": {

@@ -256,7 +256,8 @@ describe('opening balance: workflow', () => {
     const outOfScope = await post(`/api/opening-balances/${batch.id}/approve`, 'ob-approver-b', { rowVersion: batch.rowVersion, approvalReference: 'SIGNOFF-001' });
     assert.equal(outOfScope.status, 404);
     const shortRef = await post(`/api/opening-balances/${batch.id}/approve`, 'ob-approver-a', { rowVersion: batch.rowVersion, approvalReference: 'AB' });
-    assert.equal(shortRef.status, 422);
+    assert.equal(shortRef.status, 400);
+    assert.equal(shortRef.body.error.code, 'VALIDATION_FAILED');
     const stale = await post(`/api/opening-balances/${batch.id}/approve`, 'ob-approver-a', { rowVersion: batch.rowVersion - 1, approvalReference: 'SIGNOFF-001' });
     assert.equal(stale.status, 409);
     const a = await post(`/api/opening-balances/${batch.id}/approve`, 'ob-approver-a', { rowVersion: batch.rowVersion, approvalReference: 'SIGNOFF-001' });

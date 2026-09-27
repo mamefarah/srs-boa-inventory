@@ -14,16 +14,16 @@
 | M2 Item master/UOM | MERGED (PR #11) | Complete |
 | M3 Opening balance | MERGED (PR #12) | Complete |
 | Local developer tooling | MERGED (PR #13) | Windows/local dev helpers present on main |
-| **M4 Receipt + inspection** | **IMPLEMENTED / IN REVIEW (draft PR #15)** | `claude/m4-receipt-inspection`; automated checks/REDTEAM hardening in progress |
+| **M4 Receipt + inspection** | **IMPLEMENTED / IN REVIEW (draft PR #15)** | `claude/m4-receipt-inspection`, merged forward onto updated `main` (PR #16); automated checks/REDTEAM hardening in progress |
 | M5–M16 | Planned | One milestone branch at a time |
 
 ## Current main baseline
 
-Current `main` baseline used for M4:
+Current `main` baseline used for M4 (after merging PR #16 into this branch):
 
-`cae6fa648478681724cb51564f120e73ea6c387d`
+`0e23056a78f051c583905087d2b62a47fc944e8e`
 
-This includes PR #14 (PRD v3.1 governance synchronization), M3 PR #12 and developer tooling PR #13.
+This includes PR #14 (PRD v3.1 governance synchronization), M3 PR #12, developer tooling PR #13, and PR #16 (post-M3 hardening: audit-attribution RLS, `is_issuable` on `/api/stock`, CORS `PATCH`, `approvalReference` validation alignment). Migration `0012_m4_receipts.sql` and `0013_m4_receipt_security.sql` were renumbered to `0013`/`0014` to make room for PR #16's `0012_m3_audit_attribution_hardening.sql`, which merged to `main` first.
 
 ## Migrations through M4 branch
 
@@ -41,8 +41,9 @@ This includes PR #14 (PRD v3.1 governance synchronization), M3 PR #12 and develo
 | `drizzle/0009_m3_opening_balance_security.sql` | opening permissions/RLS/guards/transitions/posting/reconciliation |
 | `drizzle/0010_m3_redteam_checks.sql` | contributor register and finite unit-cost control |
 | `drizzle/0011_m3_redteam_hardening.sql` | maker-checker, lock order, tracking/funding/SoD/PUBLIC fixes |
-| `drizzle/0012_m4_receipts.sql` | receipt/document-reference/supplier-return schema |
-| `drizzle/0013_m4_receipt_security.sql` | M4 permissions/RLS/guards/audit/transitions/posting/reconciliation |
+| `drizzle/0012_m3_audit_attribution_hardening.sql` | binds `audit_events.actor_user_id` to the RLS session identity (PR #16, post-M3 hardening) |
+| `drizzle/0013_m4_receipts.sql` | receipt/document-reference/supplier-return schema |
+| `drizzle/0014_m4_receipt_security.sql` | M4 permissions/RLS/guards/audit/transitions/posting/reconciliation |
 
 The staging/AI-Studio migration history is not the canonical upgrade path; canonical migrations above govern.
 

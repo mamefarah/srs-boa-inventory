@@ -593,9 +593,6 @@ export const openingBalanceLines = pgTable(
       .notNull()
       .references(() => uoms.id, { onDelete: 'restrict' }),
     quantity: numeric('quantity').notNull(),
-    // Optional source-authorized/expected quantity. Short/over-delivery is derived
-    // from expected_quantity vs physically delivered quantity; it is not a stock leg.
-    expectedQuantity: numeric('expected_quantity'),
     warehouseLocationId: integer('warehouse_location_id').references(() => warehouseLocations.id, { onDelete: 'restrict' }),
     conditionCode: text('condition_code')
       .notNull()

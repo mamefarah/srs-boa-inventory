@@ -18,7 +18,7 @@ import {
 } from '../db/schema.ts';
 import { mapDbError } from '../http/db-errors.ts';
 import { HttpError } from '../http/errors.ts';
-import { idParam, limitParam, offsetParam, reasonField } from '../http/validation.ts';
+import { idParam, INVISIBLE_RE, limitParam, offsetParam, reasonField } from '../http/validation.ts';
 import { claimIdempotencyKey, completeIdempotencyKey, IDEMPOTENCY_KEY_RE, requestHash } from '../idempotency/idempotency.ts';
 import type { RouteDeps } from './deps.ts';
 
@@ -32,7 +32,6 @@ import type { RouteDeps } from './deps.ts';
  * ledger is written solely by boa_ob_post.
  */
 
-const text = (max: number) => z.string().trim().min(1).max(max);
 // Omitted → undefined (unchanged on PATCH); empty string or null → null (cleared).
 const optionalText = (max: number) =>
   z.string().trim().max(max).nullable().optional().transform((v) => (v === undefined ? undefined : v ? v : null));
@@ -102,8 +101,18 @@ const updateLineBody = z
 const importBody = z.object({ lines: z.array(createLineBody).min(1).max(500) }).strict();
 const transitionBody = z.object({ rowVersion, reason: z.string().trim().max(500).optional() }).strict();
 const reasonedTransitionBody = z.object({ rowVersion, reason: reasonField }).strict();
+/**
+ * At least 3 visible characters, matching the database's boa_ref_ok check (drizzle/0011)
+ * so a too-short reference fails fast as 400 VALIDATION_FAILED instead of round-tripping
+ * to the database for a 422.
+ */
+const approvalReferenceField = z
+  .string()
+  .trim()
+  .max(200)
+  .refine((v) => v.replace(INVISIBLE_RE, '').replace(/\s/gu, '').length >= 3, 'approvalReference must contain at least 3 visible characters');
 const approveBody = z
-  .object({ rowVersion, approvalReference: text(200), reason: z.string().trim().max(500).optional() })
+  .object({ rowVersion, approvalReference: approvalReferenceField, reason: z.string().trim().max(500).optional() })
   .strict();
 const postBody = z.object({ rowVersion }).strict();
 
