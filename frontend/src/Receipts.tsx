@@ -132,6 +132,21 @@ const STATUS: Record<ReceiptStatus, { icon: string; label: MessageKey }> = {
   CANCELLED: { icon: '✖', label: 'receiptStatusCancelled' },
 };
 
+// documentType is free-form text at the API (PRD §10 configurable equivalents); this maps
+// the initial known codes to a plain-language label and falls back to the raw code for any
+// other value, so a document type this list hasn't caught up with is still shown, not hidden.
+const DOCUMENT_TYPE_LABELS: Record<string, MessageKey> = {
+  MODEL_19_GRN: 'receiptDocModel19',
+  STORES_RECEIPT_VOUCHER: 'receiptDocSrv',
+  DELIVERY_NOTE: 'receiptDocDeliveryNote',
+  INVOICE: 'receiptDocInvoice',
+  PO_CONTRACT: 'receiptDocPo',
+  INSPECTION_CERTIFICATE: 'receiptDocInspection',
+  SUPPLIER_RETURN: 'receiptDocSupplierReturn',
+  OTHER: 'receiptDocOther',
+};
+const documentTypeLabel = (code: string) => (DOCUMENT_TYPE_LABELS[code] ? t(DOCUMENT_TYPE_LABELS[code]) : code);
+
 const asError = (e: unknown) => (e instanceof ApiError ? e : new ApiError(0, 'NETWORK', String(e)));
 const fmt = (iso?: string | null) => (iso ? new Date(iso).toLocaleString() : '—');
 const receiptNo = (id: number) => `RCV-${String(id).padStart(6, '0')}`;
@@ -343,7 +358,7 @@ function DocumentTable({ documents }: { documents: DocumentReference[] }) {
   return (
     <table className="data"><thead><tr><th scope="col">{t('receiptDocumentType')}</th><th scope="col">{t('receiptDocumentNo')}</th><th scope="col">{t('receiptDocumentDate')}</th><th scope="col">{t('receiptSourceUnit')}</th><th scope="col">{t('receiptPaperActors')}</th><th scope="col">{t('receiptPhysicalFile')}</th></tr></thead>
       <tbody>{documents.map((d) => <tr key={d.id}>
-        <td data-label={t('receiptDocumentType')}>{d.documentType}</td>
+        <td data-label={t('receiptDocumentType')}>{documentTypeLabel(d.documentType)}</td>
         <td data-label={t('receiptDocumentNo')}>{d.documentNumber}</td>
         <td data-label={t('receiptDocumentDate')}>{d.documentDate}</td>
         <td data-label={t('receiptSourceUnit')}>{d.sourceUnit ?? '—'}</td>
@@ -394,7 +409,7 @@ function DocumentForm({ path, onAdded }: { path: string; onAdded: () => void }) 
       <h4>{t('receiptAddDocument')}</h4><p className="hint">{t('receiptPaperHint')}</p><ErrorBox error={error} />
       <fieldset disabled={busy}>
         <Field label="receiptDocumentType"><select value={f.documentType} onChange={(e) => setF({ ...f, documentType: e.target.value })}>
-          <option value="MODEL_19_GRN">{t('receiptDocModel19')}</option><option value="STORES_RECEIPT_VOUCHER">{t('receiptDocSrv')}</option><option value="DELIVERY_NOTE">{t('receiptDocDeliveryNote')}</option><option value="INVOICE">{t('receiptDocInvoice')}</option><option value="PO_CONTRACT">{t('receiptDocPo')}</option><option value="INSPECTION_CERTIFICATE">{t('receiptDocInspection')}</option><option value="SUPPLIER_RETURN">{t('receiptDocSupplierReturn')}</option><option value="OTHER">{t('receiptDocOther')}</option>
+          {Object.entries(DOCUMENT_TYPE_LABELS).map(([code, label]) => <option key={code} value={code}>{t(label)}</option>)}
         </select></Field>
         <Field label="receiptDocumentNo"><input required maxLength={200} value={f.documentNumber} onChange={(e) => setF({ ...f, documentNumber: e.target.value })} /></Field>
         <Field label="receiptDocumentDate"><input required type="date" value={f.documentDate} onChange={(e) => setF({ ...f, documentDate: e.target.value })} /></Field>
