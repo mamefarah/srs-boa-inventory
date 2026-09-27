@@ -5,7 +5,9 @@ const processes: ChildProcess[] = [
   spawn(
     process.execPath,
     ['--watch', '--env-file=.env.development.local', '--import', 'tsx', 'server/index.ts'],
-    { stdio: 'inherit', env: process.env },
+    // The API port is pinned to 3000 regardless of an ambient PORT (the frontend's Vite
+    // proxy target in frontend/vite.config.ts is hardcoded to http://localhost:3000).
+    { stdio: 'inherit', env: { ...process.env, PORT: '3000' } },
   ),
   spawn(
     process.execPath,
