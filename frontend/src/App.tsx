@@ -139,7 +139,7 @@ function Workspace({ principal }: { principal: Principal }) {
           {active === 'reference' && <ReferenceView canManage={principal.permissions.includes('MANAGE_MASTER_REFERENCE')} />}
           {active === 'opening' && <OpeningBalancesView principal={principal} />}
           {active === 'receipts' && <ReceiptsView principal={principal} />}
-          {active === 'warehouses' && <WarehousesView />}
+          {active === 'warehouses' && <WarehousesView canManageAccess={principal.permissions.includes('MANAGE_WAREHOUSE_ACCESS')} />}
           {active === 'policies' && <PoliciesView />}
           {active === 'audit' && <AuditView />}
         </>
@@ -225,9 +225,12 @@ const StockView = () => (
 );
 
 type WarehouseRow = { code: string; name: string; isActive: boolean };
-const WarehousesView = () => (
+// SYSTEM_ADMIN (MANAGE_WAREHOUSE_ACCESS) can never hold warehouse scope (INV-029; ADR-0004
+// H2 forbids combining access-administration with WAREHOUSE_SCOPE_ALL), so it reads the
+// unscoped admin directory instead of the scope-filtered operational endpoint.
+const WarehousesView = ({ canManageAccess }: { canManageAccess: boolean }) => (
   <DataView<WarehouseRow>
-    path="/warehouses"
+    path={canManageAccess ? '/admin/warehouses' : '/warehouses'}
     columns={[
       { key: 'code', label: 'code', render: (r) => r.code },
       { key: 'name', label: 'name', render: (r) => r.name },
