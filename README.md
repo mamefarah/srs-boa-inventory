@@ -4,7 +4,7 @@ A centralized, auditable inventory-control system for the **Somali Regional Stat
 
 ## Status
 
-**M1 Foundation/Security, M2 Item Master/UOM and M3 Opening Balance are merged. M4 Receipt + Inspection is next.** Opening balance is the first implemented immutable stock-posting workflow. No production deployment is authorized. See `docs/DEVELOPMENT_STATE.md`.
+**M1 Foundation/Security, M2 Item Master/UOM, M3 Opening Balance and M4 Receipt + Inspection are merged. M5 Requisition + Approval + Optional Commitment is next.** Opening balance and receipt/inspection are the first implemented immutable stock-posting workflows. No production deployment is authorized. See `docs/DEVELOPMENT_STATE.md`.
 
 ## Core principles
 
@@ -89,4 +89,4 @@ Use `npm run dev:server` or `npm run dev:web` to start only one side. `npm ci` i
 
 Controlled documents (`docs/CONTROLLED_DOCUMENTS.md`) govern. The v3.1 baseline preserves a hybrid evidence model: hard-copy official evidence + electronic inventory/workflow/audit. Work on one milestone branch at a time; merging to `main`, production deployment and production database changes are separate human gates (see `CLAUDE.md`).
 
-The next milestone after this governance synchronization is **M4 Receipt + Inspection** on a fresh branch from updated `main`.
+The next milestone is **M5 Requisition + Approval + Optional Commitment** on a fresh branch from updated `main`.

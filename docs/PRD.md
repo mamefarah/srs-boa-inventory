@@ -1706,7 +1706,7 @@ Continues in parallel as evidence enrichment and regional-override collection, b
 **COMPLETE**
 
 ### M4 — Receipt + Inspection
-**NEXT**
+**COMPLETE**
 - no digital-signature work;
 - attachment upload optional;
 - hard-copy document-reference model required;
@@ -1714,6 +1714,7 @@ Continues in parallel as evidence enrichment and regional-override collection, b
 - pending-inspection/accept/reject mechanics.
 
 ### M5 — Requisition + Approval + Optional Commitment
+**NEXT**
 - paper requisition/approval references;
 - technical approval workflow;
 - commitment/ATP.

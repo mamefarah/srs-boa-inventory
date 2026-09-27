@@ -14,16 +14,18 @@
 | M2 Item master/UOM | MERGED (PR #11) | Complete |
 | M3 Opening balance | MERGED (PR #12) | Complete |
 | Local developer tooling | MERGED (PR #13) | Windows/local dev helpers present on main |
-| **M4 Receipt + inspection** | **IMPLEMENTED / IN REVIEW (draft PR #15)** | `claude/m4-receipt-inspection`, merged forward onto updated `main` (PR #16); automated checks/REDTEAM hardening in progress |
-| M5–M16 | Planned | One milestone branch at a time |
+| M4 Receipt + inspection | MERGED (PR #15) | Complete |
+| Warehouse-admin directory fix | MERGED (PR #17) | Local dev port fix + `SYSTEM_ADMIN` warehouse-tab lockout fix (INV-029) |
+| **M5 Requisition + approval + optional commitment** | **STARTING** | One milestone branch at a time |
+| M6–M16 | Planned | One milestone branch at a time |
 
 ## Current main baseline
 
-Current `main` baseline used for M4 (after merging PR #16 into this branch):
+Current `main` baseline for M5 (start new milestone work from this commit):
 
-`0e23056a78f051c583905087d2b62a47fc944e8e`
+`55ccaedcaaf0767ed32c182e874819c17b872304`
 
-This includes PR #14 (PRD v3.1 governance synchronization), M3 PR #12, developer tooling PR #13, and PR #16 (post-M3 hardening: audit-attribution RLS, `is_issuable` on `/api/stock`, CORS `PATCH`, `approvalReference` validation alignment). Migration `0012_m4_receipts.sql` and `0013_m4_receipt_security.sql` were renumbered to `0013`/`0014` to make room for PR #16's `0012_m3_audit_attribution_hardening.sql`, which merged to `main` first.
+This includes PR #14 (PRD v3.1 governance synchronization), M3 PR #12, developer tooling PR #13, PR #16 (post-M3 hardening: audit-attribution RLS, `is_issuable` on `/api/stock`, CORS `PATCH`, `approvalReference` validation alignment), PR #15 (M4 Receipt + Inspection, merged in full including its own REDTEAM fixes), and PR #17 (local dev port pinning + the `SYSTEM_ADMIN` warehouse-directory fix below). Migration `0012_m4_receipts.sql` and `0013_m4_receipt_security.sql` were renumbered to `0013`/`0014` to make room for PR #16's `0012_m3_audit_attribution_hardening.sql`, which merged to `main` first.
 
 ## Migrations through M4 branch
 
@@ -154,9 +156,9 @@ Use `docs/M0_BLOCKER_MATRIX.md` v3.1:
 - HB-8 is resolved for software design through multiple document references;
 - CG-2 is resolved by project scope (no legal digital-signature feature).
 
-## M4 branch status
+## M4 completion summary (PR #15, merged)
 
-Draft PR #15 currently implements:
+PR #15 implemented:
 1. reusable hard-copy document references;
 2. receipt/delivery header and lines;
 3. Model 19/GRN plus multiple supporting document references;
@@ -177,6 +179,12 @@ REDTEAM fixes made during review include:
 - concurrent same-serial arrival across warehouses tested under the shared serial lock;
 - delivery short/over variance represented without inventing stock.
 
-### Next milestone
+## Post-M4 fix (PR #17, merged)
 
-Do **not** start M5 until PR #15 is reviewed and merged. After M4 merge, create a fresh M5 branch from updated `main`.
+Found and fixed while bringing a local dev environment up to date and manually clicking through the app as a freshly bootstrapped `SYSTEM_ADMIN`:
+- `scripts/dev.ts` pinned the API child's `PORT` to 3000 explicitly; an ambient `PORT` env var was silently overriding it and breaking Vite's hardcoded `/api` proxy target.
+- Added `GET /api/admin/warehouses`, gated on `MANAGE_WAREHOUSE_ACCESS` rather than warehouse scope, returning the Bureau-wide warehouse directory (id/code/name/isActive only). `SYSTEM_ADMIN` can never satisfy `resolveWarehouseScope()` on the operational `GET /api/warehouses` (INV-029; ADR-0004 H2 forbids combining access-administration with `WAREHOUSE_SCOPE_ALL`), which previously left no way for an admin to discover a warehouse id to grant access to. The operational endpoint's scoped behavior is unchanged for every other role.
+
+## Next milestone
+
+M5 Requisition + Approval + Optional Commitment starts from updated `main` (`55ccaed...`, see baseline above), on a fresh milestone branch, per `docs/ROADMAP.md`.
