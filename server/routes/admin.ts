@@ -5,7 +5,7 @@ import { safeAudit } from '../auth/authenticate.ts';
 import { principalOf, requirePermission } from '../authz/authorize.ts';
 import { PERMISSIONS } from '../authz/permissions.ts';
 import { withUserContext, type Db } from '../db/client.ts';
-import { roles, userRoles, users, userWarehouseAccess } from '../db/schema.ts';
+import { roles, userRoles, users, userWarehouseAccess, warehouses } from '../db/schema.ts';
 import { mapDbError } from '../http/db-errors.ts';
 import { HttpError } from '../http/errors.ts';
 import { idParam, reasonField } from '../http/validation.ts';
@@ -80,6 +80,23 @@ export function adminRoutes({ db, logger, authenticated }: RouteDeps) {
   router.get('/roles', ...authenticated, requirePermission(db, logger, PERMISSIONS.READ_USERS), async (_req, res, next) => {
     try {
       res.json({ data: await db.select().from(roles).orderBy(asc(roles.code)) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // GET /api/admin/warehouses — the Bureau-wide warehouse directory (id/code/name/isActive
+  // only, no stock/ledger data), gated by the access-administration permission rather than
+  // warehouse scope. MANAGE_WAREHOUSE_ACCESS holders must be able to look up a warehouse to
+  // grant it, and SYSTEM_ADMIN can never hold warehouse scope itself (INV-029; separation of
+  // duties forbids combining access-administration with WAREHOUSE_SCOPE_ALL, ADR-0004 H2).
+  router.get('/warehouses', ...authenticated, requirePermission(db, logger, PERMISSIONS.MANAGE_WAREHOUSE_ACCESS), async (_req, res, next) => {
+    try {
+      const rows = await db
+        .select({ id: warehouses.id, code: warehouses.code, name: warehouses.name, isActive: warehouses.isActive })
+        .from(warehouses)
+        .orderBy(asc(warehouses.code));
+      res.json({ data: rows });
     } catch (err) {
       next(err);
     }

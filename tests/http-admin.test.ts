@@ -179,3 +179,24 @@ describe('administrator takeover and separation-of-duties controls (REDTEAM H1â€
     assert.ok(!emails.includes('admin-1@example.invalid'));
   });
 });
+
+describe('admin warehouse directory (GET /api/admin/warehouses)', () => {
+  it('MANAGE_WAREHOUSE_ACCESS holders see every warehouse, with no scope of their own', async () => {
+    const r = await request(app).get('/api/admin/warehouses').set(bearer('admin-1'));
+    assert.equal(r.status, 200);
+    const codes = r.body.data.map((w: { code: string }) => w.code);
+    assert.ok(codes.includes('TWH-A'));
+    assert.ok(codes.includes('TWH-B'));
+    // The same identity is refused by the scope-filtered operational endpoint (INV-029).
+    const scoped = await request(app).get('/api/warehouses').set(bearer('admin-1'));
+    assert.equal(scoped.status, 403);
+    assert.equal(scoped.body.error.code, 'NO_WAREHOUSE_SCOPE');
+  });
+
+  it('a caller without MANAGE_WAREHOUSE_ACCESS is denied, even with warehouse scope', async () => {
+    const r = await request(app).get('/api/admin/warehouses').set(bearer('operator-a'));
+    assert.equal(r.status, 403);
+    assert.equal(r.body.error.code, 'PERMISSION_DENIED');
+    assert.match(r.body.error.message, /MANAGE_WAREHOUSE_ACCESS/);
+  });
+});
