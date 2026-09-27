@@ -16,6 +16,7 @@ import { inventoryRoutes } from './routes/inventory.ts';
 import { itemRoutes } from './routes/items.ts';
 import { masterRoutes } from './routes/master.ts';
 import { openingBalanceRoutes } from './routes/opening-balances.ts';
+import { receiptRoutes } from './routes/receipts.ts';
 import { sessionRoutes } from './routes/session.ts';
 
 export interface AppDeps {
@@ -62,6 +63,7 @@ export function createApp({ config, db, verifier, logger }: AppDeps): Express {
   app.use('/api', masterRoutes(deps));
   app.use('/api', itemRoutes(deps));
   app.use('/api', openingBalanceRoutes(deps));
+  app.use('/api', receiptRoutes(deps));
   app.use('/api/admin', adminRoutes(deps));
   app.use('/api', notFoundApi);
 

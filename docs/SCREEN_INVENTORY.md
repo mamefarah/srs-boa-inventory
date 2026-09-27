@@ -34,8 +34,10 @@
 - Receipt list
 - New receipt
 - Receipt detail
+- Delivered quantity plus optional source-authorized/expected quantity and derived short/over-delivery variance
 - Hard-copy document references (Model 19/GRN, SRV, delivery note, invoice, PO/contract, inspection certificate as applicable)
-- Inspection/acceptance
+- Full paper workflow fields: source unit, preparer/checker/approver/recipient names and titles, approval date, physical file reference and remarks
+- Inspection/acceptance, including quantity outcomes and quality/type notes
 - Rejected delivery follow-up
 - Supplier return
 

@@ -160,3 +160,7 @@ When current regional procedural detail is unavailable, a current official feder
 
 ## INV-052
 A business transaction may reference multiple official documents (for example Model 19/GRN, SRV, delivery note, inspection certificate, invoice, requisition or issue voucher). The system must not require false legal equivalence between differently named forms.
+
+
+## INV-053
+When a receipt line records a source-authorized/expected quantity, BoA-IMS derives delivery variance from the physical delivered quantity. Short quantity = max(expected - delivered, 0); over-delivered quantity = max(delivered - expected, 0). The expected quantity and the variance are documentary controls only; only physically delivered quantity can enter inventory custody.

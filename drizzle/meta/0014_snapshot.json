@@ -1,6 +1,6 @@
 {
-  "id": "6b749e1b-1901-42c0-b588-b5c6f9f3c14a",
-  "prevId": "2f577e23-6b2b-4dc4-b0e0-5c217b798adc",
+  "id": "3f6ab144-a816-46c7-9728-6a580aa4e013",
+  "prevId": "1ffba959-be51-4bab-b486-e6fe010b1ccf",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -14,15 +14,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "audit_events_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "9223372036854775807",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "occurred_at": {
@@ -111,9 +111,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "audit_events_warehouse_idx": {
           "name": "audit_events_warehouse_idx",
@@ -126,9 +126,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "audit_events_actor_idx": {
           "name": "audit_events_actor_idx",
@@ -141,37 +141,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "audit_events_actor_user_id_users_id_fk": {
           "name": "audit_events_actor_user_id_users_id_fk",
           "tableFrom": "audit_events",
+          "tableTo": "users",
           "columnsFrom": [
             "actor_user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "audit_events_warehouse_id_warehouses_id_fk": {
           "name": "audit_events_warehouse_id_warehouses_id_fk",
           "tableFrom": "audit_events",
+          "tableTo": "warehouses",
           "columnsFrom": [
             "warehouse_id"
           ],
-          "tableTo": "warehouses",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -234,15 +234,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "custodians_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "custodian_type": {
@@ -289,28 +289,28 @@
         "custodians_user_id_users_id_fk": {
           "name": "custodians_user_id_users_id_fk",
           "tableFrom": "custodians",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "custodians_directorate_id_directorates_id_fk": {
           "name": "custodians_directorate_id_directorates_id_fk",
           "tableFrom": "custodians",
+          "tableTo": "directorates",
           "columnsFrom": [
             "directorate_id"
           ],
-          "tableTo": "directorates",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -334,15 +334,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "directorates_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "code": {
@@ -378,14 +378,223 @@
       "uniqueConstraints": {
         "directorates_code_unique": {
           "name": "directorates_code_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "code"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.document_references": {
+      "name": "document_references",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "document_references_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "entity_type": {
+          "name": "entity_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entity_id": {
+          "name": "entity_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "document_type": {
+          "name": "document_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "document_number": {
+          "name": "document_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "document_date": {
+          "name": "document_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_unit": {
+          "name": "source_unit",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "prepared_by_name": {
+          "name": "prepared_by_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "prepared_by_title": {
+          "name": "prepared_by_title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "checked_by_name": {
+          "name": "checked_by_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "checked_by_title": {
+          "name": "checked_by_title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "approved_by_name": {
+          "name": "approved_by_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "approved_by_title": {
+          "name": "approved_by_title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recipient_name": {
+          "name": "recipient_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recipient_title": {
+          "name": "recipient_title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "approval_date": {
+          "name": "approval_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "physical_file_ref": {
+          "name": "physical_file_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "remarks": {
+          "name": "remarks",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by_user_id": {
+          "name": "created_by_user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "document_references_entity_idx": {
+          "name": "document_references_entity_idx",
+          "columns": [
+            {
+              "expression": "entity_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "entity_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "document_references_created_by_user_id_users_id_fk": {
+          "name": "document_references_created_by_user_id_users_id_fk",
+          "tableFrom": "document_references",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "document_references_entity_type_number_unique": {
+          "name": "document_references_entity_type_number_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "entity_type",
+            "entity_id",
+            "document_type",
+            "document_number"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "document_references_entity_type_valid": {
+          "name": "document_references_entity_type_valid",
+          "value": "\"document_references\".\"entity_type\" IN ('RECEIPT', 'SUPPLIER_RETURN')"
+        },
+        "document_references_entity_id_not_blank": {
+          "name": "document_references_entity_id_not_blank",
+          "value": "length(btrim(\"document_references\".\"entity_id\")) > 0"
+        },
+        "document_references_document_type_not_blank": {
+          "name": "document_references_document_type_not_blank",
+          "value": "length(btrim(\"document_references\".\"document_type\")) > 0"
+        },
+        "document_references_document_number_not_blank": {
+          "name": "document_references_document_number_not_blank",
+          "value": "length(btrim(\"document_references\".\"document_number\")) > 0"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.funding_sources": {
@@ -398,15 +607,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "funding_sources_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "code": {
@@ -435,10 +644,10 @@
       "uniqueConstraints": {
         "funding_sources_code_unique": {
           "name": "funding_sources_code_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "code"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -455,15 +664,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "idempotency_records_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "9223372036854775807",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "idempotency_key": {
@@ -528,38 +737,38 @@
         "idempotency_records_actor_user_id_users_id_fk": {
           "name": "idempotency_records_actor_user_id_users_id_fk",
           "tableFrom": "idempotency_records",
+          "tableTo": "users",
           "columnsFrom": [
             "actor_user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "idempotency_records_transaction_id_inventory_transactions_id_fk": {
           "name": "idempotency_records_transaction_id_inventory_transactions_id_fk",
           "tableFrom": "idempotency_records",
+          "tableTo": "inventory_transactions",
           "columnsFrom": [
             "transaction_id"
           ],
-          "tableTo": "inventory_transactions",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "idempotency_records_idempotency_key_unique": {
           "name": "idempotency_records_idempotency_key_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "idempotency_key"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -589,15 +798,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "inventory_entries_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "9223372036854775807",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "transaction_id": {
@@ -734,9 +943,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "inventory_entries_warehouse_idx": {
           "name": "inventory_entries_warehouse_idx",
@@ -749,9 +958,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "inventory_entries_transaction_idx": {
           "name": "inventory_entries_transaction_idx",
@@ -764,130 +973,130 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "inventory_entries_transaction_id_inventory_transactions_id_fk": {
           "name": "inventory_entries_transaction_id_inventory_transactions_id_fk",
           "tableFrom": "inventory_entries",
+          "tableTo": "inventory_transactions",
           "columnsFrom": [
             "transaction_id"
           ],
-          "tableTo": "inventory_transactions",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "inventory_entries_warehouse_id_warehouses_id_fk": {
           "name": "inventory_entries_warehouse_id_warehouses_id_fk",
           "tableFrom": "inventory_entries",
+          "tableTo": "warehouses",
           "columnsFrom": [
             "warehouse_id"
           ],
-          "tableTo": "warehouses",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "inventory_entries_custodian_id_custodians_id_fk": {
           "name": "inventory_entries_custodian_id_custodians_id_fk",
           "tableFrom": "inventory_entries",
+          "tableTo": "custodians",
           "columnsFrom": [
             "custodian_id"
           ],
-          "tableTo": "custodians",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "inventory_entries_condition_code_condition_codes_code_fk": {
           "name": "inventory_entries_condition_code_condition_codes_code_fk",
           "tableFrom": "inventory_entries",
+          "tableTo": "condition_codes",
           "columnsFrom": [
             "condition_code"
           ],
-          "tableTo": "condition_codes",
           "columnsTo": [
             "code"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "inventory_entries_funding_source_id_funding_sources_id_fk": {
           "name": "inventory_entries_funding_source_id_funding_sources_id_fk",
           "tableFrom": "inventory_entries",
+          "tableTo": "funding_sources",
           "columnsFrom": [
             "funding_source_id"
           ],
-          "tableTo": "funding_sources",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "inventory_entries_project_id_projects_id_fk": {
           "name": "inventory_entries_project_id_projects_id_fk",
           "tableFrom": "inventory_entries",
+          "tableTo": "projects",
           "columnsFrom": [
             "project_id"
           ],
-          "tableTo": "projects",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "inventory_entries_item_base_uom_fk": {
           "name": "inventory_entries_item_base_uom_fk",
           "tableFrom": "inventory_entries",
+          "tableTo": "items",
           "columnsFrom": [
             "item_id",
             "base_uom_id"
           ],
-          "tableTo": "items",
           "columnsTo": [
             "id",
             "base_uom_id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "inventory_entries_location_in_warehouse_fk": {
           "name": "inventory_entries_location_in_warehouse_fk",
           "tableFrom": "inventory_entries",
+          "tableTo": "warehouse_locations",
           "columnsFrom": [
             "warehouse_location_id",
             "warehouse_id"
           ],
-          "tableTo": "warehouse_locations",
           "columnsTo": [
             "id",
             "warehouse_id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "inventory_entries_line_per_transaction": {
           "name": "inventory_entries_line_per_transaction",
+          "nullsNotDistinct": false,
           "columns": [
             "transaction_id",
             "line_no"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -1038,10 +1247,10 @@
             }
           ],
           "isUnique": true,
-          "with": {},
-          "method": "btree",
           "where": "\"inventory_transactions\".\"reversal_of_transaction_id\" IS NOT NULL",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         },
         "inventory_transactions_effective_at_idx": {
           "name": "inventory_transactions_effective_at_idx",
@@ -1054,9 +1263,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "inventory_transactions_document_idx": {
           "name": "inventory_transactions_document_idx",
@@ -1075,60 +1284,60 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "inventory_transactions_posted_by_user_id_users_id_fk": {
           "name": "inventory_transactions_posted_by_user_id_users_id_fk",
           "tableFrom": "inventory_transactions",
+          "tableTo": "users",
           "columnsFrom": [
             "posted_by_user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "inventory_transactions_reversal_of_fk": {
           "name": "inventory_transactions_reversal_of_fk",
           "tableFrom": "inventory_transactions",
+          "tableTo": "inventory_transactions",
           "columnsFrom": [
             "reversal_of_transaction_id"
           ],
-          "tableTo": "inventory_transactions",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "inventory_transactions_correction_of_fk": {
           "name": "inventory_transactions_correction_of_fk",
           "tableFrom": "inventory_transactions",
+          "tableTo": "inventory_transactions",
           "columnsFrom": [
             "correction_of_transaction_id"
           ],
-          "tableTo": "inventory_transactions",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "inventory_transactions_idempotency_key_unique": {
           "name": "inventory_transactions_idempotency_key_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "idempotency_key"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -1154,15 +1363,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "item_categories_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "code": {
@@ -1223,25 +1432,25 @@
         "item_categories_parent_fk": {
           "name": "item_categories_parent_fk",
           "tableFrom": "item_categories",
+          "tableTo": "item_categories",
           "columnsFrom": [
             "parent_id"
           ],
-          "tableTo": "item_categories",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "item_categories_code_unique": {
           "name": "item_categories_code_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "code"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -1271,15 +1480,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "item_uom_conversions_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "item_id": {
@@ -1358,38 +1567,38 @@
             }
           ],
           "isUnique": true,
-          "with": {},
-          "method": "btree",
           "where": "\"item_uom_conversions\".\"status\" = 'ACTIVE'",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
         "item_uom_conversions_item_id_items_id_fk": {
           "name": "item_uom_conversions_item_id_items_id_fk",
           "tableFrom": "item_uom_conversions",
+          "tableTo": "items",
           "columnsFrom": [
             "item_id"
           ],
-          "tableTo": "items",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "item_uom_conversions_uom_id_uoms_id_fk": {
           "name": "item_uom_conversions_uom_id_uoms_id_fk",
           "tableFrom": "item_uom_conversions",
+          "tableTo": "uoms",
           "columnsFrom": [
             "uom_id"
           ],
-          "tableTo": "uoms",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1425,15 +1634,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "items_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "item_code": {
@@ -1454,8 +1663,8 @@
           "primaryKey": false,
           "notNull": false,
           "generated": {
-            "type": "stored",
-            "as": "boa_item_name_key(name)"
+            "as": "boa_item_name_key(name)",
+            "type": "stored"
           }
         },
         "description": {
@@ -1582,9 +1791,9 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "items_category_idx": {
           "name": "items_category_idx",
@@ -1597,81 +1806,81 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "items_category_id_item_categories_id_fk": {
           "name": "items_category_id_item_categories_id_fk",
           "tableFrom": "items",
+          "tableTo": "item_categories",
           "columnsFrom": [
             "category_id"
           ],
-          "tableTo": "item_categories",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "items_base_uom_id_uoms_id_fk": {
           "name": "items_base_uom_id_uoms_id_fk",
           "tableFrom": "items",
+          "tableTo": "uoms",
           "columnsFrom": [
             "base_uom_id"
           ],
-          "tableTo": "uoms",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "items_created_by_user_id_users_id_fk": {
           "name": "items_created_by_user_id_users_id_fk",
           "tableFrom": "items",
+          "tableTo": "users",
           "columnsFrom": [
             "created_by_user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "items_updated_by_user_id_users_id_fk": {
           "name": "items_updated_by_user_id_users_id_fk",
           "tableFrom": "items",
+          "tableTo": "users",
           "columnsFrom": [
             "updated_by_user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "items_item_code_unique": {
           "name": "items_item_code_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "item_code"
-          ],
-          "nullsNotDistinct": false
+          ]
         },
         "items_id_base_uom": {
           "name": "items_id_base_uom",
+          "nullsNotDistinct": false,
           "columns": [
             "id",
             "base_uom_id"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -1725,15 +1934,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "opening_balance_batches_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "warehouse_id": {
@@ -1873,112 +2082,112 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "opening_balance_batches_warehouse_id_warehouses_id_fk": {
           "name": "opening_balance_batches_warehouse_id_warehouses_id_fk",
           "tableFrom": "opening_balance_batches",
+          "tableTo": "warehouses",
           "columnsFrom": [
             "warehouse_id"
           ],
-          "tableTo": "warehouses",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "opening_balance_batches_created_by_user_id_users_id_fk": {
           "name": "opening_balance_batches_created_by_user_id_users_id_fk",
           "tableFrom": "opening_balance_batches",
+          "tableTo": "users",
           "columnsFrom": [
             "created_by_user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "opening_balance_batches_submitted_by_user_id_users_id_fk": {
           "name": "opening_balance_batches_submitted_by_user_id_users_id_fk",
           "tableFrom": "opening_balance_batches",
+          "tableTo": "users",
           "columnsFrom": [
             "submitted_by_user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "opening_balance_batches_approved_by_user_id_users_id_fk": {
           "name": "opening_balance_batches_approved_by_user_id_users_id_fk",
           "tableFrom": "opening_balance_batches",
+          "tableTo": "users",
           "columnsFrom": [
             "approved_by_user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "opening_balance_batches_posted_by_user_id_users_id_fk": {
           "name": "opening_balance_batches_posted_by_user_id_users_id_fk",
           "tableFrom": "opening_balance_batches",
+          "tableTo": "users",
           "columnsFrom": [
             "posted_by_user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "opening_balance_batches_transaction_id_inventory_transactions_id_fk": {
           "name": "opening_balance_batches_transaction_id_inventory_transactions_id_fk",
           "tableFrom": "opening_balance_batches",
+          "tableTo": "inventory_transactions",
           "columnsFrom": [
             "transaction_id"
           ],
-          "tableTo": "inventory_transactions",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "opening_balance_batches_cancelled_by_user_id_users_id_fk": {
           "name": "opening_balance_batches_cancelled_by_user_id_users_id_fk",
           "tableFrom": "opening_balance_batches",
+          "tableTo": "users",
           "columnsFrom": [
             "cancelled_by_user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "opening_balance_batches_transaction_id_unique": {
           "name": "opening_balance_batches_transaction_id_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "transaction_id"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -2045,28 +2254,28 @@
         "opening_balance_contributors_batch_id_opening_balance_batches_id_fk": {
           "name": "opening_balance_contributors_batch_id_opening_balance_batches_id_fk",
           "tableFrom": "opening_balance_contributors",
+          "tableTo": "opening_balance_batches",
           "columnsFrom": [
             "batch_id"
           ],
-          "tableTo": "opening_balance_batches",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "opening_balance_contributors_user_id_users_id_fk": {
           "name": "opening_balance_contributors_user_id_users_id_fk",
           "tableFrom": "opening_balance_contributors",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -2093,15 +2302,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "opening_balance_lines_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "9223372036854775807",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "batch_id": {
@@ -2228,113 +2437,113 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "opening_balance_lines_batch_id_opening_balance_batches_id_fk": {
           "name": "opening_balance_lines_batch_id_opening_balance_batches_id_fk",
           "tableFrom": "opening_balance_lines",
+          "tableTo": "opening_balance_batches",
           "columnsFrom": [
             "batch_id"
           ],
-          "tableTo": "opening_balance_batches",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "opening_balance_lines_item_id_items_id_fk": {
           "name": "opening_balance_lines_item_id_items_id_fk",
           "tableFrom": "opening_balance_lines",
+          "tableTo": "items",
           "columnsFrom": [
             "item_id"
           ],
-          "tableTo": "items",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "opening_balance_lines_base_uom_id_uoms_id_fk": {
           "name": "opening_balance_lines_base_uom_id_uoms_id_fk",
           "tableFrom": "opening_balance_lines",
+          "tableTo": "uoms",
           "columnsFrom": [
             "base_uom_id"
           ],
-          "tableTo": "uoms",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "opening_balance_lines_warehouse_location_id_warehouse_locations_id_fk": {
           "name": "opening_balance_lines_warehouse_location_id_warehouse_locations_id_fk",
           "tableFrom": "opening_balance_lines",
+          "tableTo": "warehouse_locations",
           "columnsFrom": [
             "warehouse_location_id"
           ],
-          "tableTo": "warehouse_locations",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "opening_balance_lines_condition_code_condition_codes_code_fk": {
           "name": "opening_balance_lines_condition_code_condition_codes_code_fk",
           "tableFrom": "opening_balance_lines",
+          "tableTo": "condition_codes",
           "columnsFrom": [
             "condition_code"
           ],
-          "tableTo": "condition_codes",
           "columnsTo": [
             "code"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "opening_balance_lines_funding_source_id_funding_sources_id_fk": {
           "name": "opening_balance_lines_funding_source_id_funding_sources_id_fk",
           "tableFrom": "opening_balance_lines",
+          "tableTo": "funding_sources",
           "columnsFrom": [
             "funding_source_id"
           ],
-          "tableTo": "funding_sources",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "opening_balance_lines_project_id_projects_id_fk": {
           "name": "opening_balance_lines_project_id_projects_id_fk",
           "tableFrom": "opening_balance_lines",
+          "tableTo": "projects",
           "columnsFrom": [
             "project_id"
           ],
-          "tableTo": "projects",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "opening_balance_lines_line_per_batch": {
           "name": "opening_balance_lines_line_per_batch",
+          "nullsNotDistinct": false,
           "columns": [
             "batch_id",
             "line_no"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -2384,15 +2593,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "permissions_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "code": {
@@ -2420,10 +2629,10 @@
       "uniqueConstraints": {
         "permissions_code_unique": {
           "name": "permissions_code_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "code"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -2440,15 +2649,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "policy_versions_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "policy_key": {
@@ -2533,10 +2742,10 @@
             }
           ],
           "isUnique": true,
-          "with": {},
-          "method": "btree",
           "where": "\"policy_versions\".\"status\" = 'ACTIVE'",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -2544,11 +2753,11 @@
       "uniqueConstraints": {
         "policy_versions_key_version": {
           "name": "policy_versions_key_version",
+          "nullsNotDistinct": false,
           "columns": [
             "policy_key",
             "version"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -2582,15 +2791,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "projects_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "code": {
@@ -2624,29 +2833,710 @@
         "projects_funding_source_id_funding_sources_id_fk": {
           "name": "projects_funding_source_id_funding_sources_id_fk",
           "tableFrom": "projects",
+          "tableTo": "funding_sources",
           "columnsFrom": [
             "funding_source_id"
           ],
-          "tableTo": "funding_sources",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "projects_code_unique": {
           "name": "projects_code_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "code"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.receipt_headers": {
+      "name": "receipt_headers",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "receipt_headers_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "2147483647",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "warehouse_id": {
+          "name": "warehouse_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_party_name": {
+          "name": "source_party_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_reference": {
+          "name": "source_reference",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'DRAFT'"
+        },
+        "created_by_user_id": {
+          "name": "created_by_user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "row_version": {
+          "name": "row_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "submitted_by_user_id": {
+          "name": "submitted_by_user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "submitted_at": {
+          "name": "submitted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "arrival_effective_at": {
+          "name": "arrival_effective_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "arrived_by_user_id": {
+          "name": "arrived_by_user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "arrived_at": {
+          "name": "arrived_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "arrival_transaction_id": {
+          "name": "arrival_transaction_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "inspection_effective_at": {
+          "name": "inspection_effective_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "inspected_by_user_id": {
+          "name": "inspected_by_user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "inspected_at": {
+          "name": "inspected_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "inspection_transaction_id": {
+          "name": "inspection_transaction_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cancelled_by_user_id": {
+          "name": "cancelled_by_user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cancelled_at": {
+          "name": "cancelled_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "receipt_headers_warehouse_status_idx": {
+          "name": "receipt_headers_warehouse_status_idx",
+          "columns": [
+            {
+              "expression": "warehouse_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "receipt_headers_warehouse_id_warehouses_id_fk": {
+          "name": "receipt_headers_warehouse_id_warehouses_id_fk",
+          "tableFrom": "receipt_headers",
+          "tableTo": "warehouses",
+          "columnsFrom": [
+            "warehouse_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "receipt_headers_created_by_user_id_users_id_fk": {
+          "name": "receipt_headers_created_by_user_id_users_id_fk",
+          "tableFrom": "receipt_headers",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "receipt_headers_submitted_by_user_id_users_id_fk": {
+          "name": "receipt_headers_submitted_by_user_id_users_id_fk",
+          "tableFrom": "receipt_headers",
+          "tableTo": "users",
+          "columnsFrom": [
+            "submitted_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "receipt_headers_arrived_by_user_id_users_id_fk": {
+          "name": "receipt_headers_arrived_by_user_id_users_id_fk",
+          "tableFrom": "receipt_headers",
+          "tableTo": "users",
+          "columnsFrom": [
+            "arrived_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "receipt_headers_arrival_transaction_id_inventory_transactions_id_fk": {
+          "name": "receipt_headers_arrival_transaction_id_inventory_transactions_id_fk",
+          "tableFrom": "receipt_headers",
+          "tableTo": "inventory_transactions",
+          "columnsFrom": [
+            "arrival_transaction_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "receipt_headers_inspected_by_user_id_users_id_fk": {
+          "name": "receipt_headers_inspected_by_user_id_users_id_fk",
+          "tableFrom": "receipt_headers",
+          "tableTo": "users",
+          "columnsFrom": [
+            "inspected_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "receipt_headers_inspection_transaction_id_inventory_transactions_id_fk": {
+          "name": "receipt_headers_inspection_transaction_id_inventory_transactions_id_fk",
+          "tableFrom": "receipt_headers",
+          "tableTo": "inventory_transactions",
+          "columnsFrom": [
+            "inspection_transaction_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "receipt_headers_cancelled_by_user_id_users_id_fk": {
+          "name": "receipt_headers_cancelled_by_user_id_users_id_fk",
+          "tableFrom": "receipt_headers",
+          "tableTo": "users",
+          "columnsFrom": [
+            "cancelled_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "receipt_headers_arrival_transaction_id_unique": {
+          "name": "receipt_headers_arrival_transaction_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "arrival_transaction_id"
+          ]
+        },
+        "receipt_headers_inspection_transaction_id_unique": {
+          "name": "receipt_headers_inspection_transaction_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "inspection_transaction_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "receipt_headers_source_party_not_blank": {
+          "name": "receipt_headers_source_party_not_blank",
+          "value": "length(btrim(\"receipt_headers\".\"source_party_name\")) > 0"
+        },
+        "receipt_headers_status_valid": {
+          "name": "receipt_headers_status_valid",
+          "value": "\"receipt_headers\".\"status\" IN ('DRAFT', 'SUBMITTED', 'ARRIVED', 'INSPECTED', 'CANCELLED')"
+        },
+        "receipt_headers_submitted_fields": {
+          "name": "receipt_headers_submitted_fields",
+          "value": "\"receipt_headers\".\"status\" NOT IN ('SUBMITTED', 'ARRIVED', 'INSPECTED') OR (\"receipt_headers\".\"submitted_by_user_id\" IS NOT NULL AND \"receipt_headers\".\"submitted_at\" IS NOT NULL)"
+        },
+        "receipt_headers_arrival_fields": {
+          "name": "receipt_headers_arrival_fields",
+          "value": "\"receipt_headers\".\"status\" NOT IN ('ARRIVED', 'INSPECTED') OR (\"receipt_headers\".\"arrival_effective_at\" IS NOT NULL AND \"receipt_headers\".\"arrived_by_user_id\" IS NOT NULL AND \"receipt_headers\".\"arrived_at\" IS NOT NULL AND \"receipt_headers\".\"arrival_transaction_id\" IS NOT NULL)"
+        },
+        "receipt_headers_inspection_fields": {
+          "name": "receipt_headers_inspection_fields",
+          "value": "(\"receipt_headers\".\"status\" = 'INSPECTED') = (\"receipt_headers\".\"inspection_effective_at\" IS NOT NULL AND \"receipt_headers\".\"inspected_by_user_id\" IS NOT NULL AND \"receipt_headers\".\"inspected_at\" IS NOT NULL AND \"receipt_headers\".\"inspection_transaction_id\" IS NOT NULL)"
+        },
+        "receipt_headers_cancelled_fields": {
+          "name": "receipt_headers_cancelled_fields",
+          "value": "\"receipt_headers\".\"status\" <> 'CANCELLED' OR (\"receipt_headers\".\"cancelled_by_user_id\" IS NOT NULL AND \"receipt_headers\".\"cancelled_at\" IS NOT NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.receipt_lines": {
+      "name": "receipt_lines",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "receipt_lines_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "receipt_id": {
+          "name": "receipt_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "line_no": {
+          "name": "line_no",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "base_uom_id": {
+          "name": "base_uom_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expected_quantity": {
+          "name": "expected_quantity",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "warehouse_location_id": {
+          "name": "warehouse_location_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "batch_ref": {
+          "name": "batch_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expiry_date": {
+          "name": "expiry_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "serial_ref": {
+          "name": "serial_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "funding_source_id": {
+          "name": "funding_source_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "unit_cost_amount": {
+          "name": "unit_cost_amount",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "currency_code": {
+          "name": "currency_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_line_ref": {
+          "name": "source_line_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "accepted_quantity": {
+          "name": "accepted_quantity",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "rejected_quantity": {
+          "name": "rejected_quantity",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "damaged_quantity": {
+          "name": "damaged_quantity",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "quarantine_quantity": {
+          "name": "quarantine_quantity",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "inspection_notes": {
+          "name": "inspection_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "receipt_lines_item_idx": {
+          "name": "receipt_lines_item_idx",
+          "columns": [
+            {
+              "expression": "item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "receipt_lines_receipt_idx": {
+          "name": "receipt_lines_receipt_idx",
+          "columns": [
+            {
+              "expression": "receipt_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "receipt_lines_receipt_id_receipt_headers_id_fk": {
+          "name": "receipt_lines_receipt_id_receipt_headers_id_fk",
+          "tableFrom": "receipt_lines",
+          "tableTo": "receipt_headers",
+          "columnsFrom": [
+            "receipt_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "receipt_lines_item_id_items_id_fk": {
+          "name": "receipt_lines_item_id_items_id_fk",
+          "tableFrom": "receipt_lines",
+          "tableTo": "items",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "receipt_lines_base_uom_id_uoms_id_fk": {
+          "name": "receipt_lines_base_uom_id_uoms_id_fk",
+          "tableFrom": "receipt_lines",
+          "tableTo": "uoms",
+          "columnsFrom": [
+            "base_uom_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "receipt_lines_warehouse_location_id_warehouse_locations_id_fk": {
+          "name": "receipt_lines_warehouse_location_id_warehouse_locations_id_fk",
+          "tableFrom": "receipt_lines",
+          "tableTo": "warehouse_locations",
+          "columnsFrom": [
+            "warehouse_location_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "receipt_lines_funding_source_id_funding_sources_id_fk": {
+          "name": "receipt_lines_funding_source_id_funding_sources_id_fk",
+          "tableFrom": "receipt_lines",
+          "tableTo": "funding_sources",
+          "columnsFrom": [
+            "funding_source_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "receipt_lines_project_id_projects_id_fk": {
+          "name": "receipt_lines_project_id_projects_id_fk",
+          "tableFrom": "receipt_lines",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "receipt_lines_line_per_receipt": {
+          "name": "receipt_lines_line_per_receipt",
+          "nullsNotDistinct": false,
+          "columns": [
+            "receipt_id",
+            "line_no"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "receipt_lines_quantity_positive": {
+          "name": "receipt_lines_quantity_positive",
+          "value": "\"receipt_lines\".\"quantity\" > 0"
+        },
+        "receipt_lines_quantity_finite": {
+          "name": "receipt_lines_quantity_finite",
+          "value": "\"receipt_lines\".\"quantity\" < 'Infinity'::numeric"
+        },
+        "receipt_lines_quantity_scale": {
+          "name": "receipt_lines_quantity_scale",
+          "value": "scale(\"receipt_lines\".\"quantity\") <= 6"
+        },
+        "receipt_lines_quantity_range": {
+          "name": "receipt_lines_quantity_range",
+          "value": "\"receipt_lines\".\"quantity\" < 100000000000000"
+        },
+        "receipt_lines_cost_currency_pair": {
+          "name": "receipt_lines_cost_currency_pair",
+          "value": "(\"receipt_lines\".\"unit_cost_amount\" IS NULL) = (\"receipt_lines\".\"currency_code\" IS NULL)"
+        },
+        "receipt_lines_cost_nonnegative": {
+          "name": "receipt_lines_cost_nonnegative",
+          "value": "\"receipt_lines\".\"unit_cost_amount\" IS NULL OR (\"receipt_lines\".\"unit_cost_amount\" >= 0 AND \"receipt_lines\".\"unit_cost_amount\" < 'Infinity'::numeric)"
+        },
+        "receipt_lines_currency_format": {
+          "name": "receipt_lines_currency_format",
+          "value": "\"receipt_lines\".\"currency_code\" IS NULL OR \"receipt_lines\".\"currency_code\" ~ '^[A-Z]{3}$'"
+        },
+        "receipt_lines_refs_not_blank": {
+          "name": "receipt_lines_refs_not_blank",
+          "value": "(\"receipt_lines\".\"batch_ref\" IS NULL OR length(btrim(\"receipt_lines\".\"batch_ref\")) > 0) AND (\"receipt_lines\".\"serial_ref\" IS NULL OR length(btrim(\"receipt_lines\".\"serial_ref\")) > 0)"
+        },
+        "receipt_lines_outcomes_nonnegative": {
+          "name": "receipt_lines_outcomes_nonnegative",
+          "value": "\"receipt_lines\".\"accepted_quantity\" >= 0 AND \"receipt_lines\".\"rejected_quantity\" >= 0 AND \"receipt_lines\".\"damaged_quantity\" >= 0 AND \"receipt_lines\".\"quarantine_quantity\" >= 0"
+        },
+        "receipt_lines_outcomes_finite": {
+          "name": "receipt_lines_outcomes_finite",
+          "value": "\"receipt_lines\".\"accepted_quantity\" < 'Infinity'::numeric AND \"receipt_lines\".\"rejected_quantity\" < 'Infinity'::numeric AND \"receipt_lines\".\"damaged_quantity\" < 'Infinity'::numeric AND \"receipt_lines\".\"quarantine_quantity\" < 'Infinity'::numeric"
+        },
+        "receipt_lines_outcomes_scale": {
+          "name": "receipt_lines_outcomes_scale",
+          "value": "scale(\"receipt_lines\".\"accepted_quantity\") <= 6 AND scale(\"receipt_lines\".\"rejected_quantity\") <= 6 AND scale(\"receipt_lines\".\"damaged_quantity\") <= 6 AND scale(\"receipt_lines\".\"quarantine_quantity\") <= 6"
+        },
+        "receipt_lines_expected_quantity_positive": {
+          "name": "receipt_lines_expected_quantity_positive",
+          "value": "\"receipt_lines\".\"expected_quantity\" IS NULL OR \"receipt_lines\".\"expected_quantity\" > 0"
+        },
+        "receipt_lines_expected_quantity_finite": {
+          "name": "receipt_lines_expected_quantity_finite",
+          "value": "\"receipt_lines\".\"expected_quantity\" IS NULL OR \"receipt_lines\".\"expected_quantity\" < 'Infinity'::numeric"
+        },
+        "receipt_lines_expected_quantity_scale": {
+          "name": "receipt_lines_expected_quantity_scale",
+          "value": "\"receipt_lines\".\"expected_quantity\" IS NULL OR scale(\"receipt_lines\".\"expected_quantity\") <= 6"
+        },
+        "receipt_lines_expected_quantity_range": {
+          "name": "receipt_lines_expected_quantity_range",
+          "value": "\"receipt_lines\".\"expected_quantity\" IS NULL OR \"receipt_lines\".\"expected_quantity\" < 100000000000000"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.role_permissions": {
@@ -2671,28 +3561,28 @@
         "role_permissions_role_id_roles_id_fk": {
           "name": "role_permissions_role_id_roles_id_fk",
           "tableFrom": "role_permissions",
+          "tableTo": "roles",
           "columnsFrom": [
             "role_id"
           ],
-          "tableTo": "roles",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "role_permissions_permission_id_permissions_id_fk": {
           "name": "role_permissions_permission_id_permissions_id_fk",
           "tableFrom": "role_permissions",
+          "tableTo": "permissions",
           "columnsFrom": [
             "permission_id"
           ],
-          "tableTo": "permissions",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -2719,15 +3609,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "roles_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "code": {
@@ -2755,14 +3645,420 @@
       "uniqueConstraints": {
         "roles_code_unique": {
           "name": "roles_code_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "code"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.supplier_return_headers": {
+      "name": "supplier_return_headers",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "supplier_return_headers_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "2147483647",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "receipt_id": {
+          "name": "receipt_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "warehouse_id": {
+          "name": "warehouse_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'DRAFT'"
+        },
+        "created_by_user_id": {
+          "name": "created_by_user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "row_version": {
+          "name": "row_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "return_effective_at": {
+          "name": "return_effective_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "posted_by_user_id": {
+          "name": "posted_by_user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "posted_at": {
+          "name": "posted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "transaction_id": {
+          "name": "transaction_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cancelled_by_user_id": {
+          "name": "cancelled_by_user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cancelled_at": {
+          "name": "cancelled_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "supplier_return_headers_warehouse_status_idx": {
+          "name": "supplier_return_headers_warehouse_status_idx",
+          "columns": [
+            {
+              "expression": "warehouse_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "supplier_return_headers_receipt_idx": {
+          "name": "supplier_return_headers_receipt_idx",
+          "columns": [
+            {
+              "expression": "receipt_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "supplier_return_headers_receipt_id_receipt_headers_id_fk": {
+          "name": "supplier_return_headers_receipt_id_receipt_headers_id_fk",
+          "tableFrom": "supplier_return_headers",
+          "tableTo": "receipt_headers",
+          "columnsFrom": [
+            "receipt_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "supplier_return_headers_warehouse_id_warehouses_id_fk": {
+          "name": "supplier_return_headers_warehouse_id_warehouses_id_fk",
+          "tableFrom": "supplier_return_headers",
+          "tableTo": "warehouses",
+          "columnsFrom": [
+            "warehouse_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "supplier_return_headers_created_by_user_id_users_id_fk": {
+          "name": "supplier_return_headers_created_by_user_id_users_id_fk",
+          "tableFrom": "supplier_return_headers",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "supplier_return_headers_posted_by_user_id_users_id_fk": {
+          "name": "supplier_return_headers_posted_by_user_id_users_id_fk",
+          "tableFrom": "supplier_return_headers",
+          "tableTo": "users",
+          "columnsFrom": [
+            "posted_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "supplier_return_headers_transaction_id_inventory_transactions_id_fk": {
+          "name": "supplier_return_headers_transaction_id_inventory_transactions_id_fk",
+          "tableFrom": "supplier_return_headers",
+          "tableTo": "inventory_transactions",
+          "columnsFrom": [
+            "transaction_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "supplier_return_headers_cancelled_by_user_id_users_id_fk": {
+          "name": "supplier_return_headers_cancelled_by_user_id_users_id_fk",
+          "tableFrom": "supplier_return_headers",
+          "tableTo": "users",
+          "columnsFrom": [
+            "cancelled_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "supplier_return_headers_transaction_id_unique": {
+          "name": "supplier_return_headers_transaction_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "transaction_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "supplier_return_headers_status_valid": {
+          "name": "supplier_return_headers_status_valid",
+          "value": "\"supplier_return_headers\".\"status\" IN ('DRAFT', 'POSTED', 'CANCELLED')"
+        },
+        "supplier_return_headers_posted_fields": {
+          "name": "supplier_return_headers_posted_fields",
+          "value": "(\"supplier_return_headers\".\"status\" = 'POSTED') = (\"supplier_return_headers\".\"return_effective_at\" IS NOT NULL AND \"supplier_return_headers\".\"posted_by_user_id\" IS NOT NULL AND \"supplier_return_headers\".\"posted_at\" IS NOT NULL AND \"supplier_return_headers\".\"transaction_id\" IS NOT NULL)"
+        },
+        "supplier_return_headers_cancelled_fields": {
+          "name": "supplier_return_headers_cancelled_fields",
+          "value": "\"supplier_return_headers\".\"status\" <> 'CANCELLED' OR (\"supplier_return_headers\".\"cancelled_by_user_id\" IS NOT NULL AND \"supplier_return_headers\".\"cancelled_at\" IS NOT NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.supplier_return_lines": {
+      "name": "supplier_return_lines",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "supplier_return_lines_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "supplier_return_id": {
+          "name": "supplier_return_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "receipt_line_id": {
+          "name": "receipt_line_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "line_no": {
+          "name": "line_no",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "supplier_return_lines_return_idx": {
+          "name": "supplier_return_lines_return_idx",
+          "columns": [
+            {
+              "expression": "supplier_return_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "supplier_return_lines_supplier_return_id_supplier_return_headers_id_fk": {
+          "name": "supplier_return_lines_supplier_return_id_supplier_return_headers_id_fk",
+          "tableFrom": "supplier_return_lines",
+          "tableTo": "supplier_return_headers",
+          "columnsFrom": [
+            "supplier_return_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "supplier_return_lines_receipt_line_id_receipt_lines_id_fk": {
+          "name": "supplier_return_lines_receipt_line_id_receipt_lines_id_fk",
+          "tableFrom": "supplier_return_lines",
+          "tableTo": "receipt_lines",
+          "columnsFrom": [
+            "receipt_line_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "supplier_return_lines_line_per_return": {
+          "name": "supplier_return_lines_line_per_return",
+          "nullsNotDistinct": false,
+          "columns": [
+            "supplier_return_id",
+            "line_no"
+          ]
+        },
+        "supplier_return_lines_receipt_line_unique": {
+          "name": "supplier_return_lines_receipt_line_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "supplier_return_id",
+            "receipt_line_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "supplier_return_lines_quantity_positive": {
+          "name": "supplier_return_lines_quantity_positive",
+          "value": "\"supplier_return_lines\".\"quantity\" > 0"
+        },
+        "supplier_return_lines_quantity_finite": {
+          "name": "supplier_return_lines_quantity_finite",
+          "value": "\"supplier_return_lines\".\"quantity\" < 'Infinity'::numeric"
+        },
+        "supplier_return_lines_quantity_scale": {
+          "name": "supplier_return_lines_quantity_scale",
+          "value": "scale(\"supplier_return_lines\".\"quantity\") <= 6"
+        },
+        "supplier_return_lines_quantity_range": {
+          "name": "supplier_return_lines_quantity_range",
+          "value": "\"supplier_return_lines\".\"quantity\" < 100000000000000"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.uoms": {
@@ -2775,15 +4071,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "uoms_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "code": {
@@ -2846,10 +4142,10 @@
       "uniqueConstraints": {
         "uoms_code_unique": {
           "name": "uoms_code_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "code"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -2904,41 +4200,41 @@
         "user_roles_user_id_users_id_fk": {
           "name": "user_roles_user_id_users_id_fk",
           "tableFrom": "user_roles",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "user_roles_role_id_roles_id_fk": {
           "name": "user_roles_role_id_roles_id_fk",
           "tableFrom": "user_roles",
+          "tableTo": "roles",
           "columnsFrom": [
             "role_id"
           ],
-          "tableTo": "roles",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "user_roles_granted_by_user_id_users_id_fk": {
           "name": "user_roles_granted_by_user_id_users_id_fk",
           "tableFrom": "user_roles",
+          "tableTo": "users",
           "columnsFrom": [
             "granted_by_user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -2995,41 +4291,41 @@
         "user_warehouse_access_user_id_users_id_fk": {
           "name": "user_warehouse_access_user_id_users_id_fk",
           "tableFrom": "user_warehouse_access",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "user_warehouse_access_warehouse_id_warehouses_id_fk": {
           "name": "user_warehouse_access_warehouse_id_warehouses_id_fk",
           "tableFrom": "user_warehouse_access",
+          "tableTo": "warehouses",
           "columnsFrom": [
             "warehouse_id"
           ],
-          "tableTo": "warehouses",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         },
         "user_warehouse_access_granted_by_user_id_users_id_fk": {
           "name": "user_warehouse_access_granted_by_user_id_users_id_fk",
           "tableFrom": "user_warehouse_access",
+          "tableTo": "users",
           "columnsFrom": [
             "granted_by_user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -3061,15 +4357,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "users_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "firebase_uid": {
@@ -3124,15 +4420,15 @@
           "columns": [
             {
               "expression": "lower(\"email\")",
-              "isExpression": true,
               "asc": true,
+              "isExpression": true,
               "nulls": "last"
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -3140,10 +4436,10 @@
       "uniqueConstraints": {
         "users_firebase_uid_unique": {
           "name": "users_firebase_uid_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "firebase_uid"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -3169,15 +4465,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "warehouse_locations_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "warehouse_id": {
@@ -3218,34 +4514,34 @@
         "warehouse_locations_warehouse_id_warehouses_id_fk": {
           "name": "warehouse_locations_warehouse_id_warehouses_id_fk",
           "tableFrom": "warehouse_locations",
+          "tableTo": "warehouses",
           "columnsFrom": [
             "warehouse_id"
           ],
-          "tableTo": "warehouses",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "warehouse_locations_code_per_warehouse": {
           "name": "warehouse_locations_code_per_warehouse",
+          "nullsNotDistinct": false,
           "columns": [
             "warehouse_id",
             "code"
-          ],
-          "nullsNotDistinct": false
+          ]
         },
         "warehouse_locations_id_warehouse": {
           "name": "warehouse_locations_id_warehouse",
+          "nullsNotDistinct": false,
           "columns": [
             "id",
             "warehouse_id"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -3262,15 +4558,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "warehouses_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "code": {
@@ -3317,25 +4613,25 @@
         "warehouses_operating_directorate_id_directorates_id_fk": {
           "name": "warehouses_operating_directorate_id_directorates_id_fk",
           "tableFrom": "warehouses",
+          "tableTo": "directorates",
           "columnsFrom": [
             "operating_directorate_id"
           ],
-          "tableTo": "directorates",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "warehouses_code_unique": {
           "name": "warehouses_code_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "code"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -3345,10 +4641,10 @@
   },
   "enums": {},
   "schemas": {},
-  "views": {},
   "sequences": {},
   "roles": {},
   "policies": {},
+  "views": {},
   "_meta": {
     "columns": {},
     "schemas": {},
