@@ -25,7 +25,7 @@ export const ALLOWED_ORIGIN = 'https://boa-ims.test.example';
 export function buildTestApp(pool: pg.Pool) {
   const db: Db = createDb(pool);
   const app = createApp({
-    config: { corsAllowedOrigins: [ALLOWED_ORIGIN], trustProxyHops: 0, serveWeb: false, rateLimitPerMinute: 100_000 },
+    config: { corsAllowedOrigins: [ALLOWED_ORIGIN], trustProxyHops: 0, serveWeb: false, rateLimitPerMinute: 100_000, requisitionCommitmentEnabled: true },
     db,
     verifier: createTestVerifier(),
     logger: createLogger('silent'),
@@ -64,6 +64,10 @@ export const USERS = {
   receiptInspectorA: { uid: 'receipt-inspector-a', roles: ['RECEIPT_INSPECTOR'], warehouses: ['TWH-A'], active: true },
   receiptInspectorB: { uid: 'receipt-inspector-b', roles: ['RECEIPT_INSPECTOR'], warehouses: ['TWH-B'], active: true },
   receiptBothA: { uid: 'receipt-both-a', roles: ['RECEIPT_OPERATOR', 'RECEIPT_INSPECTOR'], warehouses: ['TWH-A'], active: true },
+  // M5 requisitions (technical roles; no Bureau approval authority implied: HB-4).
+  reqApproverA: { uid: 'req-approver-a', roles: ['REQUISITION_APPROVER'], warehouses: ['TWH-A'], active: true },
+  reqApproverB: { uid: 'req-approver-b', roles: ['REQUISITION_APPROVER'], warehouses: ['TWH-B'], active: true },
+  reqBothA: { uid: 'req-both-a', roles: ['REQUESTER', 'REQUISITION_APPROVER'], warehouses: ['TWH-A'], active: true },
 } as const;
 
 export interface Fixture {

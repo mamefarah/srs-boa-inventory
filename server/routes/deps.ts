@@ -11,4 +11,6 @@ export interface RouteDeps {
   auditThrottle: AuditThrottle;
   /** authenticate() chain: verified token → active application user. */
   authenticated: RequestHandler[];
+  /** PRD §23.4: whether deciding a requisition may reserve stock as a commitment. */
+  requisitionCommitmentEnabled: boolean;
 }

@@ -17,10 +17,11 @@ import { itemRoutes } from './routes/items.ts';
 import { masterRoutes } from './routes/master.ts';
 import { openingBalanceRoutes } from './routes/opening-balances.ts';
 import { receiptRoutes } from './routes/receipts.ts';
+import { requisitionRoutes } from './routes/requisitions.ts';
 import { sessionRoutes } from './routes/session.ts';
 
 export interface AppDeps {
-  config: Pick<AppConfig, 'corsAllowedOrigins' | 'trustProxyHops' | 'serveWeb' | 'rateLimitPerMinute'>;
+  config: Pick<AppConfig, 'corsAllowedOrigins' | 'trustProxyHops' | 'serveWeb' | 'rateLimitPerMinute' | 'requisitionCommitmentEnabled'>;
   db: Db;
   verifier: TokenVerifier;
   logger: Logger;
@@ -57,13 +58,21 @@ export function createApp({ config, db, verifier, logger }: AppDeps): Express {
   });
 
   const auditThrottle = new AuditThrottle();
-  const deps: RouteDeps = { db, verifier, logger, auditThrottle, authenticated: authenticate(verifier, db, logger, auditThrottle) };
+  const deps: RouteDeps = {
+    db,
+    verifier,
+    logger,
+    auditThrottle,
+    authenticated: authenticate(verifier, db, logger, auditThrottle),
+    requisitionCommitmentEnabled: config.requisitionCommitmentEnabled,
+  };
   app.use('/api', sessionRoutes(deps));
   app.use('/api', inventoryRoutes(deps));
   app.use('/api', masterRoutes(deps));
   app.use('/api', itemRoutes(deps));
   app.use('/api', openingBalanceRoutes(deps));
   app.use('/api', receiptRoutes(deps));
+  app.use('/api', requisitionRoutes(deps));
   app.use('/api/admin', adminRoutes(deps));
   app.use('/api', notFoundApi);
 
