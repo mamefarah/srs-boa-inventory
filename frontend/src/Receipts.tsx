@@ -186,7 +186,7 @@ function ReceiptList({ canPrepare, onOpen, onNew }: { canPrepare: boolean; onOpe
       {rows?.length === 0 && <p>{t('empty')}</p>}
       {!!rows?.length && (
         <table className="data">
-          <thead><tr><th>{t('receipt')}</th><th>{t('warehouse')}</th><th>{t('receiptSupplier')}</th><th>{t('status')}</th><th>{t('receiptLines')}</th><th>{t('receiptCreatedBy')}</th></tr></thead>
+          <thead><tr><th scope="col">{t('receipt')}</th><th scope="col">{t('warehouse')}</th><th scope="col">{t('receiptSupplier')}</th><th scope="col">{t('status')}</th><th scope="col">{t('receiptLines')}</th><th scope="col">{t('receiptCreatedBy')}</th></tr></thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.id}>
@@ -328,7 +328,7 @@ function ReceiptDetail({ id, can, onClose, onOpenReturn }: { id: number; can: Ca
             onOpenReturn(r.data.id);
           })}>{t('supplierReturnNew')}</button>}
           {!!receipt.supplierReturns?.length && (
-            <table className="data"><thead><tr><th>{t('supplierReturn')}</th><th>{t('status')}</th><th>{t('reason')}</th></tr></thead>
+            <table className="data"><thead><tr><th scope="col">{t('supplierReturn')}</th><th scope="col">{t('status')}</th><th scope="col">{t('reason')}</th></tr></thead>
               <tbody>{receipt.supplierReturns.map((r) => <tr key={r.id}><td data-label={t('supplierReturn')}><button type="button" className="linklike" onClick={() => onOpenReturn(r.id)}>RET-{String(r.id).padStart(6, '0')}</button></td><td data-label={t('status')}>{r.status}</td><td data-label={t('reason')}>{r.reason ?? '—'}</td></tr>)}</tbody>
             </table>
           )}
@@ -341,7 +341,7 @@ function ReceiptDetail({ id, can, onClose, onOpenReturn }: { id: number; can: Ca
 function DocumentTable({ documents }: { documents: DocumentReference[] }) {
   if (!documents.length) return <p>{t('receiptNoDocuments')}</p>;
   return (
-    <table className="data"><thead><tr><th>{t('receiptDocumentType')}</th><th>{t('receiptDocumentNo')}</th><th>{t('receiptDocumentDate')}</th><th>{t('receiptSourceUnit')}</th><th>{t('receiptPaperActors')}</th><th>{t('receiptPhysicalFile')}</th></tr></thead>
+    <table className="data"><thead><tr><th scope="col">{t('receiptDocumentType')}</th><th scope="col">{t('receiptDocumentNo')}</th><th scope="col">{t('receiptDocumentDate')}</th><th scope="col">{t('receiptSourceUnit')}</th><th scope="col">{t('receiptPaperActors')}</th><th scope="col">{t('receiptPhysicalFile')}</th></tr></thead>
       <tbody>{documents.map((d) => <tr key={d.id}>
         <td data-label={t('receiptDocumentType')}>{d.documentType}</td>
         <td data-label={t('receiptDocumentNo')}>{d.documentNumber}</td>
@@ -420,7 +420,7 @@ function ReceiptLinesTable({ receipt, canPrepare, busy, onChanged }: { receipt: 
   const lines = receipt.lines ?? [];
   if (!lines.length) return <p>{t('receiptNoLines')}</p>;
   return (
-    <table className="data"><thead><tr><th>#</th><th>{t('item')}</th><th>{t('quantity')}</th><th>{t('receiptDeliveryVariance')}</th><th>{t('receiptAttribution')}</th><th>{t('location')}</th><th>{t('receiptTracking')}</th><th>{t('receiptInspectionOutcome')}</th>{receipt.status === 'DRAFT' && canPrepare && <th>{t('action')}</th>}</tr></thead>
+    <table className="data"><thead><tr><th scope="col">#</th><th scope="col">{t('item')}</th><th scope="col">{t('quantity')}</th><th scope="col">{t('receiptDeliveryVariance')}</th><th scope="col">{t('receiptAttribution')}</th><th scope="col">{t('location')}</th><th scope="col">{t('receiptTracking')}</th><th scope="col">{t('receiptInspectionOutcome')}</th>{receipt.status === 'DRAFT' && canPrepare && <th scope="col">{t('action')}</th>}</tr></thead>
       <tbody>{lines.map((l) => <tr key={l.id}>
         <td data-label="#">{l.lineNo}</td><td data-label={t('item')}>{l.itemCode} · {l.itemName}</td><td data-label={t('quantity')}><span className="qty">{l.quantity}</span> {l.baseUomCode}</td><td data-label={t('receiptDeliveryVariance')}>{l.expectedQuantity == null ? t('receiptVarianceNotAssessed') : <>{t('receiptExpectedQty')} <span className="qty">{l.expectedQuantity}</span> · {l.deliveryVarianceStatus === 'MATCHED' ? t('receiptVarianceMatched') : l.deliveryVarianceStatus === 'SHORT' ? `${t('receiptShort')} ${l.shortQuantity}` : `${t('receiptOver')} ${l.overDeliveredQuantity}`}</>}</td><td data-label={t('receiptAttribution')}>{[
           l.fundingSourceCode && `${l.fundingSourceCode}`,
@@ -484,7 +484,7 @@ function AddReceiptLine({ receipt, onAdded }: { receipt: Receipt; onAdded: () =>
       <h4>{t('receiptAddLine')}</h4><ErrorBox error={error} />
       {!item ? <>
         <div className="toolbar"><input aria-label={t('obFindItem')} value={q} onChange={(e) => setQ(e.target.value)} /><button type="button" className="btn secondary" disabled={!q.trim()} onClick={() => void search()}>{t('search')}</button></div>
-        {!!matches.length && <table className="data"><tbody>{matches.map((m) => <tr key={m.id}><td>{m.itemCode} · {m.name}</td><td>{m.baseUomCode}</td><td><button type="button" className="btn secondary" onClick={() => setItem(m)}>{t('receiptSelect')}</button></td></tr>)}</tbody></table>}
+        {!!matches.length && <table className="data"><tbody>{matches.map((m) => <tr key={m.id}><td data-label={t('item')}>{m.itemCode} · {m.name}</td><td data-label={t('uom')}>{m.baseUomCode}</td><td data-label={t('action')}><button type="button" className="btn secondary" onClick={() => setItem(m)}>{t('receiptSelect')}</button></td></tr>)}</tbody></table>}
       </> : <>
         <p><strong>{item.itemCode} · {item.name}</strong> — {item.baseUomCode}</p>
         <fieldset disabled={busy}>
@@ -572,7 +572,7 @@ function SupplierReturnDetail({ id, can, onClose }: { id: number; can: Can; onCl
       {ret.status === 'DRAFT' && can.returnRejected && <DocumentForm path={`/supplier-returns/${id}/documents`} onAdded={() => void load()} />}
 
       <h3>{t('supplierReturnLines')}</h3>
-      {!ret.lines.length ? <p>{t('receiptNoLines')}</p> : <table className="data"><thead><tr><th>{t('item')}</th><th>{t('quantity')}</th><th>{t('receiptRejected')}</th></tr></thead><tbody>{ret.lines.map((l) => <tr key={l.id}><td>{l.itemCode} · {l.itemName}</td><td>{l.quantity}</td><td>{l.rejectedQuantity}</td></tr>)}</tbody></table>}
+      {!ret.lines.length ? <p>{t('receiptNoLines')}</p> : <table className="data"><thead><tr><th scope="col">{t('item')}</th><th scope="col">{t('quantity')}</th><th scope="col">{t('receiptRejected')}</th></tr></thead><tbody>{ret.lines.map((l) => <tr key={l.id}><td data-label={t('item')}>{l.itemCode} · {l.itemName}</td><td data-label={t('quantity')}>{l.quantity}</td><td data-label={t('receiptRejected')}>{l.rejectedQuantity}</td></tr>)}</tbody></table>}
       {ret.status === 'DRAFT' && can.returnRejected && <SupplierReturnLineForm id={id} receipt={receipt} onAdded={() => void load()} />}
 
       {ret.status === 'DRAFT' && can.returnRejected && <div className="form">
