@@ -22,6 +22,10 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error', 'silent']).default('info'),
   RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(10).max(100_000).default(300),
   BOA_TEST_AUTH: z.string().optional(),
+  // Requisition commitments are optional/configurable (PRD §23.4, BUSINESS_RULES.md): a
+  // decided requisition never reserves stock unless this is explicitly turned on. Safe
+  // default is OFF pending a Bureau operational decision to enable reservation tracking.
+  REQUISITION_COMMITMENT_ENABLED: z.enum(['true', 'false']).default('false'),
 });
 
 export interface AppConfig {
@@ -42,6 +46,7 @@ export interface AppConfig {
   serveWeb: boolean;
   logLevel: 'debug' | 'info' | 'warn' | 'error' | 'silent';
   rateLimitPerMinute: number;
+  requisitionCommitmentEnabled: boolean;
 }
 
 export class ConfigError extends Error {}
@@ -105,5 +110,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     serveWeb: e.SERVE_WEB === 'true',
     logLevel: e.LOG_LEVEL,
     rateLimitPerMinute: e.RATE_LIMIT_PER_MINUTE,
+    requisitionCommitmentEnabled: e.REQUISITION_COMMITMENT_ENABLED === 'true',
   };
 }

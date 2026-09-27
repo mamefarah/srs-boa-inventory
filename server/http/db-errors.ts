@@ -71,6 +71,12 @@ const CHECK_MESSAGES: Record<string, string> = {
   supplier_return_lines_quantity_finite: 'Supplier-return quantity must be finite',
   supplier_return_lines_quantity_scale: 'Supplier-return quantity may have at most 6 decimal places and is never rounded',
   supplier_return_lines_quantity_range: 'Supplier-return quantity is too large',
+  requisitions_purpose_not_blank: 'Purpose/activity is required',
+  requisition_lines_requested_quantity_positive: 'Requested quantity must be greater than zero',
+  requisition_lines_requested_quantity_finite: 'Requested quantity must be a finite number',
+  requisition_lines_requested_quantity_scale: 'Requested quantity may have at most 6 decimal places and is never rounded',
+  requisition_lines_requested_quantity_range: 'Requested quantity is too large',
+  requisition_lines_approved_quantity_valid: 'Approved quantity must be between zero and the requested quantity',
 };
 
 /**
@@ -127,6 +133,10 @@ export function mapDbError(err: unknown): unknown {
       return new HttpError(422, 'SUPPLIER_RETURN_INVALID', controlMessage(e, 'The supplier return is not valid for this action'));
     case 'BA023':
       return new HttpError(409, 'REJECTED_STOCK_CONFLICT', controlMessage(e, 'The requested supplier return exceeds rejected stock remaining'));
+    case 'BA024':
+      return new HttpError(422, 'REQUISITION_INVALID', controlMessage(e, 'The requisition is not valid for this action'));
+    case 'BA025':
+      return new HttpError(409, 'INSUFFICIENT_AVAILABLE_TO_PROMISE', controlMessage(e, 'The approved quantity exceeds available-to-promise stock'));
     case '23505': {
       const known = e.constraint ? UNIQUE_CODES[e.constraint] : undefined;
       return known ? new HttpError(409, known[0], known[1]) : new HttpError(409, 'DUPLICATE', 'A record with these values already exists');

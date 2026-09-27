@@ -88,7 +88,7 @@ describe('clean migration', () => {
 
   it('seeds only neutral technical roles and grants WAREHOUSE_SCOPE_ALL to no role except WAREHOUSE_SCOPE_GLOBAL', async () => {
     const roles = await admin.query('SELECT code FROM roles ORDER BY code');
-    assert.deepEqual(roles.rows.map((x) => x.code).sort(), ['GENERIC_APPROVER', 'MASTER_DATA_STEWARD', 'OPENING_BALANCE_APPROVER', 'OPENING_BALANCE_PREPARER', 'RECEIPT_INSPECTOR', 'RECEIPT_OPERATOR', 'REQUESTER', 'SYSTEM_ADMIN', 'SYSTEM_AUDITOR', 'WAREHOUSE_OPERATOR', 'WAREHOUSE_SCOPE_GLOBAL']);
+    assert.deepEqual(roles.rows.map((x) => x.code).sort(), ['GENERIC_APPROVER', 'MASTER_DATA_STEWARD', 'OPENING_BALANCE_APPROVER', 'OPENING_BALANCE_PREPARER', 'RECEIPT_INSPECTOR', 'RECEIPT_OPERATOR', 'REQUESTER', 'REQUISITION_APPROVER', 'SYSTEM_ADMIN', 'SYSTEM_AUDITOR', 'WAREHOUSE_OPERATOR', 'WAREHOUSE_SCOPE_GLOBAL']);
     const r = await admin.query(`SELECT r.code FROM role_permissions rp JOIN roles r ON r.id = rp.role_id JOIN permissions p ON p.id = rp.permission_id WHERE p.code = 'WAREHOUSE_SCOPE_ALL'`);
     assert.deepEqual(r.rows.map((x) => x.code), ['WAREHOUSE_SCOPE_GLOBAL']);
   });

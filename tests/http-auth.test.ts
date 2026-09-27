@@ -47,7 +47,7 @@ describe('authentication', () => {
 
   it('production app (Firebase verifier) rejects mock tokens with 401', async () => {
     const prodApp = createApp({
-      config: { corsAllowedOrigins: [], trustProxyHops: 0, serveWeb: false, rateLimitPerMinute: 100_000 },
+      config: { corsAllowedOrigins: [], trustProxyHops: 0, serveWeb: false, rateLimitPerMinute: 100_000, requisitionCommitmentEnabled: true },
       db: createDb(pool),
       verifier: createFirebaseVerifier('boa-ims-offline-test-project'),
       logger: createLogger('silent'),
@@ -183,7 +183,7 @@ describe('abuse controls (REDTEAM M7)', () => {
 
   it('rate limiting returns 429 beyond the per-minute limit', async () => {
     const limited = createApp({
-      config: { corsAllowedOrigins: [], trustProxyHops: 0, serveWeb: false, rateLimitPerMinute: 10 },
+      config: { corsAllowedOrigins: [], trustProxyHops: 0, serveWeb: false, rateLimitPerMinute: 10, requisitionCommitmentEnabled: true },
       db: createDb(pool),
       verifier: createFirebaseVerifier('boa-ims-offline-test-project'),
       logger: createLogger('silent'),

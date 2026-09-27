@@ -892,6 +892,165 @@ export const supplierReturnLines = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// M5 Requisition + approval + optional commitment (PRD §23; WORKFLOWS.md §4)
+// ---------------------------------------------------------------------------
+
+export const REQUISITION_STATUSES = ['DRAFT', 'SUBMITTED', 'DECIDED', 'CANCELLED'] as const;
+
+export const requisitions = pgTable(
+  'requisitions',
+  {
+    id: id(),
+    warehouseId: integer('warehouse_id')
+      .notNull()
+      .references(() => warehouses.id, { onDelete: 'restrict' }),
+    purpose: text('purpose').notNull(),
+    intendedRecipient: text('intended_recipient'),
+    // Paper Model 20 / Stores Requisition number (PRD §23.1-23.2).
+    sourceEvidenceRef: text('source_evidence_ref'),
+    status: text('status').notNull().default('DRAFT'),
+    createdByUserId: integer('created_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+    updatedAt: tstz('updated_at').notNull().defaultNow(),
+    rowVersion: integer('row_version').notNull().default(1),
+    submittedByUserId: integer('submitted_by_user_id').references(() => users.id, { onDelete: 'restrict' }),
+    submittedAt: tstz('submitted_at'),
+    decidedByUserId: integer('decided_by_user_id').references(() => users.id, { onDelete: 'restrict' }),
+    decidedAt: tstz('decided_at'),
+    decisionOutcome: text('decision_outcome'),
+    // External authorization sign-off document reference (approval authority: HB-4).
+    approvalReference: text('approval_reference'),
+    decisionNotes: text('decision_notes'),
+    cancelledByUserId: integer('cancelled_by_user_id').references(() => users.id, { onDelete: 'restrict' }),
+    cancelledAt: tstz('cancelled_at'),
+  },
+  (t) => [
+    check('requisitions_purpose_not_blank', sql`length(btrim(${t.purpose})) > 0`),
+    check('requisitions_status_valid', sql`${t.status} IN ('DRAFT', 'SUBMITTED', 'DECIDED', 'CANCELLED')`),
+    check('requisitions_decision_outcome_valid', sql`${t.decisionOutcome} IS NULL OR ${t.decisionOutcome} IN ('APPROVED', 'PARTIALLY_APPROVED', 'REJECTED')`),
+    check(
+      'requisitions_submitted_fields',
+      sql`${t.status} NOT IN ('SUBMITTED', 'DECIDED') OR (${t.submittedByUserId} IS NOT NULL AND ${t.submittedAt} IS NOT NULL AND length(btrim(coalesce(${t.sourceEvidenceRef}, ''))) > 0)`,
+    ),
+    check(
+      'requisitions_decided_fields',
+      sql`${t.status} <> 'DECIDED' OR (${t.decidedByUserId} IS NOT NULL AND ${t.decidedAt} IS NOT NULL AND ${t.decisionOutcome} IS NOT NULL AND length(btrim(coalesce(${t.approvalReference}, ''))) > 0)`,
+    ),
+    check(
+      'requisitions_cancelled_fields',
+      sql`${t.status} <> 'CANCELLED' OR (${t.cancelledByUserId} IS NOT NULL AND ${t.cancelledAt} IS NOT NULL)`,
+    ),
+    // Maker-checker: the decider neither created nor submitted the requisition.
+    check(
+      'requisitions_maker_checker',
+      sql`${t.decidedByUserId} IS NULL OR (${t.decidedByUserId} <> ${t.createdByUserId} AND ${t.decidedByUserId} IS DISTINCT FROM ${t.submittedByUserId})`,
+    ),
+    index('requisitions_warehouse_status_idx').on(t.warehouseId, t.status),
+  ],
+);
+
+export const requisitionLines = pgTable(
+  'requisition_lines',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    requisitionId: integer('requisition_id')
+      .notNull()
+      .references(() => requisitions.id, { onDelete: 'restrict' }),
+    lineNo: integer('line_no').notNull(),
+    itemId: integer('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'restrict' }),
+    baseUomId: integer('base_uom_id')
+      .notNull()
+      .references(() => uoms.id, { onDelete: 'restrict' }),
+    requestedQuantity: numeric('requested_quantity').notNull(),
+    // Populated only once the requisition is DECIDED (PRD §23.3).
+    approvedQuantity: numeric('approved_quantity'),
+    warehouseLocationId: integer('warehouse_location_id').references(() => warehouseLocations.id, { onDelete: 'restrict' }),
+    fundingSourceId: integer('funding_source_id').references(() => fundingSources.id, { onDelete: 'restrict' }),
+    projectId: integer('project_id').references(() => projects.id, { onDelete: 'restrict' }),
+    notes: text('notes'),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+    updatedAt: tstz('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    unique('requisition_lines_line_per_requisition').on(t.requisitionId, t.lineNo),
+    check('requisition_lines_requested_quantity_positive', sql`${t.requestedQuantity} > 0`),
+    check('requisition_lines_requested_quantity_finite', sql`${t.requestedQuantity} < 'Infinity'::numeric`),
+    check('requisition_lines_requested_quantity_scale', sql`scale(${t.requestedQuantity}) <= 6`),
+    check('requisition_lines_requested_quantity_range', sql`${t.requestedQuantity} < 100000000000000`),
+    check(
+      'requisition_lines_approved_quantity_valid',
+      sql`${t.approvedQuantity} IS NULL OR (${t.approvedQuantity} >= 0 AND ${t.approvedQuantity} <= ${t.requestedQuantity} AND ${t.approvedQuantity} < 'Infinity'::numeric AND scale(${t.approvedQuantity}) <= 6)`,
+    ),
+    index('requisition_lines_item_idx').on(t.itemId),
+  ],
+);
+
+export const INVENTORY_COMMITMENT_TYPES = ['REQUISITION'] as const;
+export const INVENTORY_COMMITMENT_STATUSES = ['ACTIVE', 'PARTIALLY_FULFILLED', 'FULFILLED', 'RELEASED', 'EXPIRED', 'CANCELLED'] as const;
+
+/**
+ * Reservation only: reduces available-to-promise but never posts an inventory_entries row
+ * (BUSINESS_RULES.md: commitments are not a physical inventory movement). `commitment_type`
+ * widens to include TRANSFER in M7, alongside a transfer_line_id column (DATA_MODEL.md).
+ */
+export const inventoryCommitments = pgTable(
+  'inventory_commitments',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    commitmentType: text('commitment_type').notNull(),
+    requisitionLineId: bigint('requisition_line_id', { mode: 'number' })
+      .references(() => requisitionLines.id, { onDelete: 'restrict' })
+      .unique(),
+    itemId: integer('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'restrict' }),
+    warehouseId: integer('warehouse_id')
+      .notNull()
+      .references(() => warehouses.id, { onDelete: 'restrict' }),
+    warehouseLocationId: integer('warehouse_location_id').references(() => warehouseLocations.id, { onDelete: 'restrict' }),
+    conditionCode: text('condition_code')
+      .notNull()
+      .default('USABLE')
+      .references(() => conditionCodes.code, { onDelete: 'restrict' }),
+    batchRef: text('batch_ref'),
+    expiryDate: date('expiry_date', { mode: 'string' }),
+    serialRef: text('serial_ref'),
+    fundingSourceId: integer('funding_source_id').references(() => fundingSources.id, { onDelete: 'restrict' }),
+    projectId: integer('project_id').references(() => projects.id, { onDelete: 'restrict' }),
+    quantityBaseUom: numeric('quantity_base_uom').notNull(),
+    quantityFulfilled: numeric('quantity_fulfilled').notNull().default('0'),
+    status: text('status').notNull().default('ACTIVE'),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+    expiresAt: tstz('expires_at'),
+    releasedByUserId: integer('released_by_user_id').references(() => users.id, { onDelete: 'restrict' }),
+    releasedAt: tstz('released_at'),
+    releaseReason: text('release_reason'),
+  },
+  (t) => [
+    check('inventory_commitments_type_valid', sql`${t.commitmentType} IN ('REQUISITION')`),
+    check('inventory_commitments_status_valid', sql`${t.status} IN ('ACTIVE', 'PARTIALLY_FULFILLED', 'FULFILLED', 'RELEASED', 'EXPIRED', 'CANCELLED')`),
+    check('inventory_commitments_requisition_link', sql`${t.commitmentType} <> 'REQUISITION' OR ${t.requisitionLineId} IS NOT NULL`),
+    check('inventory_commitments_quantity_positive', sql`${t.quantityBaseUom} > 0`),
+    check('inventory_commitments_quantity_finite', sql`${t.quantityBaseUom} < 'Infinity'::numeric`),
+    check('inventory_commitments_quantity_scale', sql`scale(${t.quantityBaseUom}) <= 6`),
+    check('inventory_commitments_quantity_range', sql`${t.quantityBaseUom} < 100000000000000`),
+    check(
+      'inventory_commitments_fulfilled_valid',
+      sql`${t.quantityFulfilled} >= 0 AND ${t.quantityFulfilled} <= ${t.quantityBaseUom} AND ${t.quantityFulfilled} < 'Infinity'::numeric AND scale(${t.quantityFulfilled}) <= 6`,
+    ),
+    check(
+      'inventory_commitments_released_fields',
+      sql`${t.status} <> 'RELEASED' OR (${t.releasedByUserId} IS NOT NULL AND ${t.releasedAt} IS NOT NULL)`,
+    ),
+    index('inventory_commitments_warehouse_item_idx').on(t.warehouseId, t.itemId, t.status),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // Idempotency (PRD §31, INV-008)
 // ---------------------------------------------------------------------------
 
