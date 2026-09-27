@@ -86,7 +86,8 @@ Required signed source documents remain hard copy for official government filing
 - M1 Foundation/Security — merged.
 - M2 Item Master/UOM — merged.
 - M3 Opening Balance — merged.
-- M4 Receipt + Inspection — next.
+- M4 Receipt + Inspection — merged (PR #15).
+- M5 Requisition + Approval + Optional Commitment — next.
 
 ## Controlled-document precedence
 

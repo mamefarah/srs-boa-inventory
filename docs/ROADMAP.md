@@ -58,7 +58,7 @@ Implemented:
 - idempotency;
 - concurrency hardening.
 
-## M4 — Receipt + Inspection — NEXT
+## M4 — Receipt + Inspection — COMPLETE
 
 Build:
 - reusable hard-copy document-reference model;
@@ -73,7 +73,7 @@ Build:
 
 No legal digital-signature feature. Digital attachment upload is optional and does not block M4.
 
-## M5 — Requisition + Approval + Optional Commitment
+## M5 — Requisition + Approval + Optional Commitment — NEXT
 
 Build:
 - requisition;
