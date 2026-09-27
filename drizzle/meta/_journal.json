@@ -85,6 +85,13 @@
       "when": 1790384023058,
       "tag": "0011_m3_redteam_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790465636984,
+      "tag": "0012_m3_audit_attribution_hardening",
+      "breakpoints": true
     }
   ]
 }

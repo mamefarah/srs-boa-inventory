@@ -33,7 +33,7 @@ export function corsAllowlist(allowed: readonly string[]): RequestHandler {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Vary', 'Origin');
       res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Idempotency-Key');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE');
       res.setHeader('Access-Control-Max-Age', '600');
       res.setHeader('Access-Control-Expose-Headers', 'X-Request-Id');
     }
