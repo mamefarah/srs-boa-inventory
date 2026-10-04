@@ -1,4 +1,4 @@
-# Test Plan — v3.1
+# Test Plan — v4.0
 
 ## Quality layers
 
@@ -145,3 +145,23 @@ Applicable workflows must test:
 Test 360–430px mobile widths, tablet and desktop. Verify keyboard access, visible focus, labels, error recovery, empty/loading states and no color-only status. Verify on-hand, committed and available-to-promise are not visually conflated.
 
 Where hard-copy evidence is required, verify the evidence/reference panel clearly distinguishes document number/date/paper actors/physical file reference from the authenticated system user and system timestamps.
+
+## Offline and mobile acceptance (v4.0, PRD Part A section 10)
+
+Planned with milestone M-M. Each scenario is an automated test where possible plus a field test, and must pass on a reference Android phone and a reference iPhone installed to the Home Screen (a failure on one platform blocks the pilot for that platform only).
+
+1. Capture offline, close and reopen the app, sync: nothing lost.
+2. Interrupt the connection mid-sync, retry: no duplicates.
+3. Same command sent twice: one result, replayed.
+4. Offline-created document with several commands: ordered sync and correct id mapping.
+5. Server rejects (period closed, item inactive, precision, permission): REJECTED with reason, item stays visible.
+6. Document changed by someone else while offline: conflict shown, not overwritten.
+7. User deactivated while offline: sync refused, no data accepted.
+8. Session expires while offline: queue kept, sign-in prompt, resume.
+9. Phone clock wrong: server uses received time; captured time kept as evidence.
+10. App update with items still queued: queue migrates or is refused with a clear message.
+11. Storage pressure: warning shown; no silent loss.
+12. Two phones in one warehouse: no double issue against one commitment.
+13. Real store with real connectivity gaps (field test, not simulated).
+
+Pilot acceptance additions: zero lost captured items; zero duplicate postings; every rejected item resolved or discarded with a reason; the unposted-physical-events report reconciles to zero or to documented exceptions.

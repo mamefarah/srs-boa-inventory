@@ -8,7 +8,7 @@ Use this order:
 
 1. Verified current controlling government law/procedure for the matter at issue.
 2. The controlled repository set in `docs/CONTROLLED_DOCUMENTS.md`, in its mandatory reading order:
-   - `docs/PRD.md` v3.1
+   - `docs/PRD.md` v4.0 (Part A v4.0 amendment prevails over Part B v3.1 baseline on conflict)
    - `docs/M0_EVIDENCE_REGISTER.md`
    - `docs/M0_BLOCKER_MATRIX.md`
    - `docs/OFFICIAL_PROCESS_MAPPING.md`
@@ -18,7 +18,7 @@ Use this order:
 5. Project `.claude/skills/boa-*` skills and specialist agents.
 6. Generic third-party engineering skills.
 
-A verified current Somali Regional/BoA/BoFED rule overrides a conflicting product fallback. Where current regional procedural detail is unavailable, PRD v3.1 permits the latest official federal property/stock rule to be used as a documented, configurable **operational fallback**. Preserve federal provenance and regional override; never relabel federal fallback as Somali Regional law.
+A verified current Somali Regional/BoA/BoFED rule overrides a conflicting product fallback. Where current regional procedural detail is unavailable, PRD v4.0 (v3.1 baseline) permits the latest official federal property/stock rule to be used as a documented, configurable **operational fallback**. Preserve federal provenance and regional override; never relabel federal fallback as Somali Regional law.
 
 Project/donor-specific rules remain project-specific and may override the generic operating baseline for stock governed by those instruments.
 
@@ -34,7 +34,7 @@ Escalate only when:
 - no safe federal fallback/configuration boundary exists for a required policy choice;
 - credentials/secrets, paid resources, production deployment/migration or destructive production action require human authorization.
 
-Do not stop merely because a current regional detailed procedure has not been located when PRD v3.1 already defines a safe federal fallback/configuration rule.
+Do not stop merely because a current regional detailed procedure has not been located when PRD v4.0 already defines a safe federal fallback/configuration rule.
 
 Never invent an official government rule, form number, signatory, project restriction or UOM conversion.
 
@@ -62,6 +62,7 @@ Never invent an official government rule, form number, signatory, project restri
 - Authenticated system actor and paper signatory are separate facts.
 - BoA-IMS does not implement or claim legal digital signatures.
 - Federal fallback policy must retain federal provenance/effective dates and remain regionally overridable.
+- Offline capture on a phone never changes stock. Only a server-accepted command does; queued commands carry a client idempotency key, rejected commands stay visible, client time is evidence and server time is authority, and a deactivated user's queue is refused (PRD v4.0 INV-M01 to INV-M08).
 
 ## Direct-write prohibition
 
@@ -146,7 +147,7 @@ For normal technical choices, choose the safest reasonable option and continue. 
 Record reasonable assumptions in the PR/commit rather than asking about every minor choice.
 
 **Ask the user only when the blocker is genuinely human-only:**
-- A policy question for which PRD v3.1 provides no safe fallback/configuration rule.
+- A policy question for which PRD v4.0 provides no safe fallback/configuration rule.
 - A project/donor-specific restriction that is required but not documented.
 - An item/package UOM conversion required for posting but not supported by approved evidence.
 - Credentials/secrets only the user can provide.

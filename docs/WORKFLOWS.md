@@ -1,4 +1,4 @@
-# BoA-IMS Workflow Design — v3.1
+# BoA-IMS Workflow Design — v4.0
 
 Every workflow specifies state, authenticated system actor, hard-copy evidence/reference where applicable, validations, physical ledger effect, commitment effect, failure path and audit evidence. `PRD.md` v3.1 and the M0 controlled documents override older workflow assumptions. System approval is not a legal digital signature.
 
@@ -101,3 +101,21 @@ For workflows requiring official paper authorization/evidence:
 5. do not treat system approval as a legal digital signature;
 6. permit multiple document references on one business transaction;
 7. use current federal procedure as a documented fallback only where regional detail is unavailable, preserving provenance and regional override.
+
+## v4.0 channel and offline class (PRD Part A section 3.3)
+
+Each workflow is assigned a channel and one offline class. Class A: capture and queue (true regardless of connectivity). Class B: capture and queue only when protected by data synced beforehand (an approved commitment); otherwise online-only. Class C: online-only.
+
+| Workflow | Channel | Offline class |
+|---|---|---|
+| Item master, opening balance | Admin web | C |
+| Goods receipt, inspection, supplier return | Storekeeper app | A |
+| Requisition and approval | Admin web (app reads approved requisitions for its warehouse) | C |
+| Issue | Storekeeper app | B |
+| Transfer dispatch / destination receipt | Storekeeper app | B / A |
+| Return, condition change | App capture, admin web review | A |
+| Physical count entry / variance review | App / admin web | A / C |
+| Adjustment, period close/reopen, disposal and write-off | Admin web | C |
+| Reports | Admin web | C |
+
+Offline issue or dispatch is possible only where requisition commitments are enabled (`REQUISITION_COMMITMENT_ENABLED`, default off), because the synced commitment is what protects the quantity (PRD section 5.7, O5). A command the server refuses after the goods have physically moved goes to NEEDS REVIEW and the exception queue, not silently to the ledger (PRD section 5.8). The server remains the source of truth for every state transition.

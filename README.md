@@ -87,6 +87,6 @@ Use `npm run dev:server` or `npm run dev:web` to start only one side. `npm ci` i
 
 ## Development rule
 
-Controlled documents (`docs/CONTROLLED_DOCUMENTS.md`) govern. The v3.1 baseline preserves a hybrid evidence model: hard-copy official evidence + electronic inventory/workflow/audit. Work on one milestone branch at a time; merging to `main`, production deployment and production database changes are separate human gates (see `CLAUDE.md`).
+Controlled documents (`docs/CONTROLLED_DOCUMENTS.md`) govern. The v4.0 baseline (v3.1 plus the mobile/offline amendment) preserves a hybrid evidence model: hard-copy official evidence + electronic inventory/workflow/audit. Work on one milestone branch at a time; merging to `main`, production deployment and production database changes are separate human gates (see `CLAUDE.md`).
 
 The next milestone is **M6 Issue + Custody Handoff** on a fresh branch from updated `main`.

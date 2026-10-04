@@ -1,4 +1,4 @@
-# Roles, Permissions and Segregation of Duties — v3.1
+# Roles, Permissions and Segregation of Duties — v4.0
 
 ## Roles
 
@@ -70,3 +70,17 @@ Where staffing prevents ideal segregation, document compensating controls such a
 - The authenticated system user performing a workflow transition is recorded separately.
 - A system `APPROVED` action is not a legal digital signature and does not replace the handwritten government approval.
 - Where current regional title/routing detail is unavailable, technical roles remain neutral and configurable. Current federal procedure may guide the operating workflow, but federal provenance must be retained and the official regional mapping may later override it.
+
+## v4.0 channel mapping (PRD Part A section 3.2)
+
+Roles stay software capabilities, not official titles. v4.0 only assigns each role a primary client.
+
+| Person | Client | Notes |
+|---|---|---|
+| Storekeeper | Storekeeper app (personal Android phone or iPhone, offline-capable) | Receipts, inspection capture, issues, transfers, returns, count entry, stock view. |
+| General Service case team | Admin web | The owner's term; official name and duties are not yet mapped (PRD O1). Review of phone-captured documents, exception queue, count and adjustment review. |
+| Directorate head | Admin web | Approval authority to be set from the regional approval matrix (PRD O1). |
+| Requester | Admin web | Channel proposed in PRD O2; not yet confirmed. |
+| System administrator, auditor | Admin web | As before. |
+
+Offline capture does not widen permissions. The server checks authorisation and warehouse scope at sync time using the user's rights at that moment (SYN-6). A deactivated user's queued commands are refused (INV-M08). Resolver of NEEDS REVIEW items is undecided (PRD O6) and must not be assumed.

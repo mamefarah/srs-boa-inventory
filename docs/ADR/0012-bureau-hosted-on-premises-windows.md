@@ -6,7 +6,7 @@
 
 **Amends:** ADR-0003 hosting direction (PostgreSQL such as Cloud SQL was an example, not a decision).
 
-**Controls:** PRD v3.1 security requirements, DEPLOYMENT.md release gates, CLAUDE.md "Security", ADR-0004, ADR-0007.
+**Controls:** PRD v4.0 (v3.1 baseline) security requirements, DEPLOYMENT.md release gates, CLAUDE.md "Security", ADR-0004, ADR-0007.
 
 ## Context (owner answers, 4 Oct 2026)
 - Hosted on a Bureau computer.
@@ -61,3 +61,14 @@ Whoever administers the computer can in principle alter the database. The ledger
 3. Domain name and certificate source; who administers the machine.
 4. Whether a second machine (standby or backup target) is available.
 5. Whether the earlier approval of migrations 0017 and 0018 covers applying all migrations 0000–0018 to a fresh local database.
+
+## Addendum (4 October 2026): impact of PRD v4.0
+
+PRD v4.0 adds an installable web app on storekeepers' personal Android phones and iPhones. That tightens one hosting requirement:
+
+- The address phones use must serve HTTPS with a certificate that phones already trust. Installability and service workers need a secure context, and personal phones are not expected to have a private certificate authority installed. A private CA is therefore not a viable option for the phone-facing address. This is to be verified on real devices.
+- A publicly trusted certificate usually needs a public DNS name and a validation method the Bureau can operate. Whether that is possible with the chosen remote-access option (A, B or C) is a new input to that decision.
+- The database TLS choice (local CA or loopback exemption) concerns the connection between the API and PostgreSQL on the server and is unaffected.
+- Reliable inbound access from many towns becomes a service dependency for storekeepers, even though offline capture reduces the immediate impact of outages.
+
+The decision status is unchanged: this ADR remains Proposed.

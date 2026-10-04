@@ -1,4 +1,4 @@
-# Implementation Roadmap — v3.1
+# Implementation Roadmap — v4.0
 
 Security, authorization, warehouse scope, RLS, concurrency, idempotency, hard-copy evidence linkage and negative tests are cross-cutting requirements in every applicable milestone.
 
@@ -86,6 +86,24 @@ Build:
 Delivered in M5: requisition draft/submit/decide/return/cancel, commitment on decision (when enabled) and release on cancellation. Consuming a commitment (`quantity_fulfilled`, partial fulfilment) arrives with the M6 issue posting. See ADR-0010.
 
 Project restrictions are enforced only from controlling project evidence.
+
+## M-M — Mobile Foundation (installable storekeeper web app, offline sync) — PLANNED (v4.0)
+
+Inserted after M5 and before M6. Not started. Gated by the pending decisions in PRD Part A section 13 and by ADRs 0013 to 0015 (Proposed).
+
+Build:
+- installable app shell (manifest, service worker) that starts without a network, on Android Chrome and iPhone Safari (Home Screen);
+- local store for the signed-in storekeeper's warehouse-scoped snapshot, drafts and command queue;
+- sync engine with per-command results and the sync outcomes in PRD Part A section 5.4;
+- API-1 to API-8 (idempotent creates and transitions, sync entry point, capture metadata, snapshots, per-user rate limiting, minimum client version, exception store);
+- mobile sign-in persistence and device/session security (SEC-M1 to SEC-M9);
+- BYOD acceptable-use and privacy notice (Bureau/legal);
+- retrofit M4 receipts as the first end-to-end offline slice (screens already exist);
+- admin web: exception queue and unposted-physical-events report.
+
+Entry gate: an iPhone and Android proof of concept for install, sign-in and offline storage persistence. Exit: offline scenarios 1 to 12 in PRD Part A section 10 pass on a reference Android phone and a reference iPhone.
+
+Every workflow from M6 onward states its offline class (A, B or C) and its behaviour for each sync outcome.
 
 ## M6 — Issue + Custody Handoff
 
@@ -223,7 +241,7 @@ Prepare:
 
 Before substantial real-stock use, complete at least:
 
-M1 → M10 + basic reports/audit + backup/restore.
+M1 → M10 + M-M (offline storekeeper app, v4.0) + basic reports/audit + backup/restore.
 
 M11 is strongly recommended before fiscal-period operational reliance.
 
