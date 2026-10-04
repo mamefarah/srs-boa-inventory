@@ -101,7 +101,7 @@ Build:
 - retrofit M4 receipts as the first end-to-end offline slice (screens already exist);
 - admin web: exception queue and unposted-physical-events report.
 
-Entry gate: an iPhone and Android proof of concept for install, sign-in and offline storage persistence. The PoC is built (`poc/offline-pwa/`, not part of the product); automated Chromium checks pass, but real-device results on an iPhone and an Android phone, and a real Firebase sign-in test (O9), are still pending. Exit: offline scenarios 1 to 12 in PRD Part A section 10 pass on a reference Android phone and a reference iPhone.
+Entry gate: an iPhone and Android proof of concept for install, sign-in and offline storage persistence. The PoC is built (`poc/offline-pwa/`, not part of the product); automated Chromium checks pass, but real-device results on an iPhone and an Android phone, and a real Firebase sign-in test (O9), are still pending. A manual GitHub Pages workflow (static mode) can host the PoC for phone testing; it is not a product deployment. Exit: offline scenarios 1 to 12 in PRD Part A section 10 pass on a reference Android phone and a reference iPhone.
 
 Every workflow from M6 onward states its offline class (A, B or C) and its behaviour for each sync outcome.
 

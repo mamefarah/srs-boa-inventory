@@ -71,8 +71,8 @@ export function createPocServer({ token = process.env.POC_TOKEN ?? '' } = {}) {
     try {
       if (url.pathname.startsWith('/api/poc/')) {
         if (token && req.headers['x-poc-token'] !== token) return json(res, 401, { error: 'token required' });
-        if (url.pathname === '/api/poc/ping') return json(res, 200, { ok: true, serverTime: new Date().toISOString() });
-        if (url.pathname === '/api/poc/state') return json(res, 200, { serverTime: new Date().toISOString(), distinctCommands: applied.size, counters: ack });
+        if (url.pathname === '/api/poc/ping') return json(res, 200, { ok: true, serverTime: new Date().toISOString(), mode: 'node' });
+        if (url.pathname === '/api/poc/state') return json(res, 200, { serverTime: new Date().toISOString(), distinctCommands: applied.size, counters: ack, mode: 'node' });
         if (url.pathname === '/api/poc/reports' && req.method === 'GET') return json(res, 200, { reports });
         if (url.pathname === '/api/poc/report' && req.method === 'POST') {
           const body = await readBody(req);
