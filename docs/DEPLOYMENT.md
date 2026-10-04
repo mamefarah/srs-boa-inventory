@@ -18,6 +18,19 @@ Production must be separate from development.
 
 Final vendor/region/hosting decisions remain subject to Bureau policy and data-governance review.
 
+## Supabase hosting (proposed — see ADR-0011, not yet accepted)
+
+If the Bureau approves Supabase as the PostgreSQL host:
+
+1. Create a **new** project for BoA-IMS in a Bureau-approved region (never reuse another system's project). Creating it is a paid resource and needs explicit owner authorization.
+2. **Turn the Data API off** in the dashboard. BoA-IMS connects only through its own API server.
+3. Apply migrations over the **direct connection** as the migration owner with `scripts/migrate.ts` (production additionally requires explicit approval and `CONFIRM_PRODUCTION_MIGRATION`).
+4. Run `psql -f scripts/supabase/hardening.sql`, then `psql -f scripts/supabase/verify.sql`. Sections 1–3 must return zero rows; section 4 is informational (18 master/access tables rely on grants, not RLS).
+5. Run the API as a `boa_ims_app` member login (not `postgres`), over TLS (`SQL_SSL=require`; supply Supabase's root certificate through `NODE_EXTRA_CA_CERTS` if the connection is rejected), using the direct connection or the pooler's session mode.
+6. Run the Supabase security and performance advisors and record the result in the release evidence. Verify backup and point-in-time recovery before any production use.
+
+Never put Supabase `service_role`/secret keys in the repository, the web bundle or CI.
+
 ## Release gates
 
 No production release unless:
