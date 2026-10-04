@@ -48,6 +48,7 @@ Start M6 from updated `main`. At the time of writing, `main` includes PR #19 (M5
 | `drizzle/0015_m5_requisitions.sql` | requisition, requisition-line and inventory-commitment schema |
 | `drizzle/0016_m5_requisition_security.sql` | M5 permissions/roles, RLS, guards, audit, workflow functions (`boa_requisition_*`), maker-checker, ATP check |
 | `drizzle/0017_m5_decision_integrity_and_atp_read.sql` | exactly-one-decision-per-line enforcement in `boa_requisition_decide`; `READ_STOCK` read access to commitments in warehouse scope |
+| `drizzle/0018_m5_decide_hardening.sql` | approved quantity honours base-UOM decimals; decision payload shape validated before casting; PUBLIC execute revoked on the four `boa_requisition_*` workflow functions |
 
 The staging/AI-Studio migration history is not the canonical upgrade path; canonical migrations above govern.
 
@@ -140,6 +141,7 @@ Current examples:
 | Non-warehouse ledger-leg visibility for IN_TRANSIT/EXTERNAL/contra | M7 |
 | Item aliases/alternate names | future master-data follow-up |
 | M3 browser/mobile verification is not documented as completed in PR #12 | before pilot / re-verify during later end-to-end testing |
+| Stock readers can read whole commitment rows (incl. cancel reasons, funding/project columns); items with commitments but zero stock are not shown on the stock page | M5 follow-up (needs a policy decision) |
 | ATP does not segregate by funding source/project/location (PRD §19.4; needs controlling project evidence) | before enabling commitments for donor-funded stock |
 | Requisition line edits have no optimistic version check (last write wins between two preparers) | M5 follow-up |
 | Deciding re-validates every line's item/location/funding as active, so a requisition containing a since-deactivated item can only be cancelled, not rejected | M5 follow-up |
