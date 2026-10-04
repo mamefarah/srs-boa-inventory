@@ -3,7 +3,7 @@ import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { auditScopeDenial, principalOf, requirePermission, resolveWarehouseScope, type WarehouseScope } from '../authz/authorize.ts';
 import { PERMISSIONS } from '../authz/permissions.ts';
-import { withUserContext, type Db } from '../db/client.ts';
+import { withUserContext, type Db, type Tx } from '../db/client.ts';
 import { auditEvents, conditionCodes, inventoryEntries, inventoryTransactions, items, uoms, warehouses } from '../db/schema.ts';
 import type { Logger } from '../logger.ts';
 import { idParam, limitParam, offsetParam } from '../http/validation.ts';
@@ -22,11 +22,49 @@ function warehouseFilter(scope: WarehouseScope, column: typeof inventoryEntries.
 }
 
 /**
+ * Per-(warehouse, item) available-to-promise for the items on a stock page, in the same
+ * transaction/RLS context as the page: usable on-hand in WAREHOUSE custody minus
+ * ACTIVE/PARTIALLY_FULFILLED commitments (PRD §19.2; mirrors boa_requisition_decide).
+ * Existing commitments always count, even if new commitments are currently switched off.
+ */
+async function availabilityFor(tx: Tx, rows: Array<{ warehouseId: number | null; itemId: number }>) {
+  // Stock rows are WAREHOUSE custody, so warehouseId is always set; the guard satisfies the nullable column type.
+  const pairs = [...new Map(rows.flatMap((r) => (r.warehouseId === null ? [] : [[`${r.warehouseId}:${r.itemId}`, [r.warehouseId, r.itemId] as const] as const]))).values()];
+  if (pairs.length === 0) return [];
+  // Drizzle expands a JS array into a parameter list, so build explicit typed ARRAY[...] literals.
+  const intArray = (values: number[]) => sql`ARRAY[${sql.join(values.map((v) => sql`${v}`), sql`, `)}]::int[]`;
+  const whIds = intArray(pairs.map((p) => p[0]));
+  const itemIds = intArray(pairs.map((p) => p[1]));
+  // Driven by the exact pairs on the page, so an item holding only non-usable stock still
+  // reports usableOnHand 0 / availableToPromise 0 instead of disappearing.
+  const result = await tx.execute(sql`
+    SELECT p.warehouse_id AS "warehouseId", p.item_id AS "itemId",
+           trim_scale(coalesce(u.usable, 0))::text AS "usableOnHand",
+           trim_scale(coalesce(c.committed, 0))::text AS "committed",
+           trim_scale(coalesce(u.usable, 0) - coalesce(c.committed, 0))::text AS "availableToPromise"
+      FROM unnest(${whIds}, ${itemIds}) AS p(warehouse_id, item_id)
+      LEFT JOIN (SELECT e.warehouse_id, e.item_id, sum(e.signed_quantity) AS usable
+                   FROM inventory_entries e
+                  WHERE e.custody_scope = 'WAREHOUSE' AND e.condition_code = 'USABLE'
+                    AND e.warehouse_id = ANY(${whIds}) AND e.item_id = ANY(${itemIds})
+                  GROUP BY e.warehouse_id, e.item_id) u
+        ON u.warehouse_id = p.warehouse_id AND u.item_id = p.item_id
+      LEFT JOIN (SELECT k.warehouse_id, k.item_id, sum(k.quantity_base_uom - k.quantity_fulfilled) AS committed
+                   FROM inventory_commitments k
+                  WHERE k.status IN ('ACTIVE', 'PARTIALLY_FULFILLED')
+                    AND k.warehouse_id = ANY(${whIds}) AND k.item_id = ANY(${itemIds})
+                  GROUP BY k.warehouse_id, k.item_id) c
+        ON c.warehouse_id = p.warehouse_id AND c.item_id = p.item_id
+     ORDER BY p.warehouse_id, p.item_id`);
+  return result.rows as Array<{ warehouseId: number; itemId: number; usableOnHand: string; committed: string; availableToPromise: string }>;
+}
+
+/**
  * Warehouse-scoped, ledger-derived read endpoints. Each query is filtered by the
  * server-side scope AND executed under the caller's RLS context, so a missing filter
  * cannot leak another warehouse's rows.
  */
-export function inventoryRoutes({ db, logger, authenticated }: RouteDeps) {
+export function inventoryRoutes({ db, logger, authenticated, requisitionCommitmentEnabled }: RouteDeps) {
   const router = Router();
 
   // GET /api/warehouses — READ_WAREHOUSES + scope.
@@ -63,11 +101,11 @@ export function inventoryRoutes({ db, logger, authenticated }: RouteDeps) {
       const principal = principalOf(res);
       const scope = await scopeOrDeny(db, logger, res, 'GET /api/stock', q.warehouseId);
       const total = sql<string>`sum(${inventoryEntries.signedQuantity})`;
-      const rows = await withUserContext(
+      const { rows, availability } = await withUserContext(
         db,
         principal.userId,
-        (tx) =>
-          tx
+        async (tx) => {
+          const rows = await tx
             .select({
               warehouseId: inventoryEntries.warehouseId,
               warehouseCode: warehouses.code,
@@ -107,14 +145,21 @@ export function inventoryRoutes({ db, logger, authenticated }: RouteDeps) {
             .having(sql`${total} <> 0`)
             .orderBy(asc(warehouses.code), asc(items.itemCode), asc(inventoryEntries.conditionCode), asc(inventoryEntries.warehouseLocationId))
             .limit(q.limit)
-            .offset(q.offset),
+            .offset(q.offset);
+          return { rows, availability: await availabilityFor(tx, rows) };
+        },
         { readOnly: true },
       );
       res.json({
         data: rows,
         page: { limit: q.limit, offset: q.offset },
-        // Commitments/ATP arrive in M5; never present on-hand as available-to-promise.
-        availability: { commitmentsEnabled: false, note: 'On-hand only. Committed and available-to-promise are not yet computed (M5).' },
+        // On-hand per bin/condition (data) is never presented as available-to-promise; ATP is a
+        // separate per-(warehouse, item) figure (PRD §19.2).
+        availability: {
+          commitmentsEnabled: requisitionCommitmentEnabled,
+          basis: 'Usable on-hand in warehouse custody minus active commitments (a commitment is a reservation, not a physical movement).',
+          items: availability,
+        },
       });
     } catch (err) {
       next(err);

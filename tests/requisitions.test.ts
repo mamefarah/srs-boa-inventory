@@ -3,10 +3,12 @@
  * optional commitment/available-to-promise engine (PRD §23; WORKFLOWS.md §4).
  */
 import assert from 'node:assert/strict';
+import { sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
 import type pg from 'pg';
 import request from 'supertest';
+import { createDb, withUserContext } from '../server/db/client.ts';
 import { adminPool, appPool, bearer, buildTestApp, ensureFixtures, type Fixture } from './helpers.ts';
 
 let admin: pg.Pool;
@@ -256,5 +258,87 @@ describe('permission matrix', () => {
     assert.equal(noRole.body.error.code, 'PERMISSION_DENIED');
     const noReadList = await get('/api/requisitions', 'no-roles');
     assert.equal(noReadList.status, 403);
+  });
+});
+
+describe('decision integrity: exactly one decision per line (audit F1)', () => {
+  /** Drafts a two-line requisition for fx.itemId (10 each) and submits it. */
+  async function twoLineSubmitted() {
+    const h = await post('/api/requisitions', 'requester', { warehouseId: fx.warehouseA, purpose: 'Two lines', sourceEvidenceRef: `REQ-${randomUUID()}` });
+    assert.equal(h.status, 201, JSON.stringify(h.body));
+    const id = h.body.data.id as number;
+    const l1 = await post(`/api/requisitions/${id}/lines`, 'requester', { itemId: fx.itemId, requestedQuantity: '10' });
+    const l2 = await post(`/api/requisitions/${id}/lines`, 'requester', { itemId: fx.itemId, requestedQuantity: '10' });
+    const sub = await post(`/api/requisitions/${id}/submit`, 'requester', { rowVersion: l2.body.data.requisitionRowVersion });
+    assert.equal(sub.status, 200, JSON.stringify(sub.body));
+    return { id, a: l1.body.data.id as number, b: l2.body.data.id as number, rowVersion: sub.body.data.rowVersion as number };
+  }
+  const count = async (id: number) =>
+    (await admin.query(`SELECT count(*)::int AS n FROM inventory_commitments c JOIN requisition_lines l ON l.id = c.requisition_line_id WHERE l.requisition_id = $1`, [id])).rows[0].n as number;
+
+  it('the API rejects a repeated lineId before it reaches the database', async () => {
+    const { id, a, b, rowVersion } = await twoLineSubmitted();
+    const dec = await post(
+      `/api/requisitions/${id}/decide`,
+      'req-approver-a',
+      { rowVersion, lineDecisions: [{ lineId: a, approvedQuantity: '10' }, { lineId: a, approvedQuantity: '0' }, { lineId: b, approvedQuantity: '0' }], approvalReference: 'AUTH-DUP-API' },
+      { 'Idempotency-Key': key() },
+    );
+    assert.equal(dec.status, 400);
+    assert.equal(dec.body.error.code, 'VALIDATION_FAILED');
+    assert.equal(await count(id), 0);
+  });
+
+  it('the database function itself refuses a repeated lineId and leaves no commitment or decision behind', async () => {
+    const { id, a, b, rowVersion } = await twoLineSubmitted();
+    const db = createDb(pool);
+    const approver = fx.userIds['req-approver-a'];
+    // Same crafted payload that previously committed 10 units against a line approved at 0.
+    const decisions = JSON.stringify([{ lineId: a, approvedQuantity: '10' }, { lineId: a, approvedQuantity: '0' }, { lineId: b, approvedQuantity: '0' }]);
+    await assert.rejects(
+      withUserContext(db, approver, (tx) => tx.execute(sql`SELECT boa_requisition_decide(${id}, ${rowVersion}, ${decisions}::jsonb, 'AUTH-DUP-DB', NULL, true)`)),
+      (err: unknown) => /every requisition line must receive exactly one decision/.test(String((err as { cause?: { message?: string } }).cause?.message ?? err)),
+    );
+    assert.equal(await count(id), 0);
+    const r = await admin.query(`SELECT status FROM requisitions WHERE id = $1`, [id]);
+    assert.equal(r.rows[0].status, 'SUBMITTED');
+  });
+
+  it('the database function refuses an incomplete or non-array decision payload', async () => {
+    const { id, a, rowVersion } = await twoLineSubmitted();
+    const db = createDb(pool);
+    const approver = fx.userIds['req-approver-a'];
+    for (const payload of [JSON.stringify([{ lineId: a, approvedQuantity: '1' }]), JSON.stringify({ lineId: a })]) {
+      await assert.rejects(withUserContext(db, approver, (tx) => tx.execute(sql`SELECT boa_requisition_decide(${id}, ${rowVersion}, ${payload}::jsonb, 'AUTH-DUP-DB2', NULL, false)`)));
+    }
+    assert.equal(await count(id), 0);
+  });
+});
+
+describe('stock availability: committed and available-to-promise (audit F2)', () => {
+  it('/api/stock reports usable on-hand, committed and ATP per item, visible to a stock reader with no requisition permission', async () => {
+    // operator-a holds READ_STOCK but none of the requisition permissions: without the
+    // inventory_commitments_read_stock policy it would see no commitments and an overstated ATP.
+    const exp = await admin.query(
+      `SELECT trim_scale(coalesce((SELECT sum(signed_quantity) FROM inventory_entries WHERE item_id = $1 AND warehouse_id = $2 AND custody_scope = 'WAREHOUSE' AND condition_code = 'USABLE'), 0))::text AS usable,
+              trim_scale(coalesce((SELECT sum(quantity_base_uom - quantity_fulfilled) FROM inventory_commitments WHERE item_id = $1 AND warehouse_id = $2 AND status IN ('ACTIVE','PARTIALLY_FULFILLED')), 0))::text AS committed`,
+      [fx.itemId, fx.warehouseA],
+    );
+    assert.notEqual(exp.rows[0].committed, '0', 'earlier tests in this file must have left active commitments');
+    const res = await get(`/api/stock?warehouseId=${fx.warehouseA}&itemId=${fx.itemId}`, 'operator-a');
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.availability.commitmentsEnabled, true);
+    const row = res.body.availability.items.find((i: { itemId: number; warehouseId: number }) => i.itemId === fx.itemId && i.warehouseId === fx.warehouseA);
+    assert.ok(row, 'availability row for the item');
+    assert.equal(row.usableOnHand, exp.rows[0].usable);
+    assert.equal(row.committed, exp.rows[0].committed);
+    assert.equal(Number(row.availableToPromise), Number(exp.rows[0].usable) - Number(exp.rows[0].committed));
+    // Per-bin on-hand rows are unchanged: on-hand is never relabelled as available.
+    assert.ok(res.body.data.every((r: Record<string, unknown>) => !('availableToPromise' in r)));
+  });
+
+  it('a stock reader still cannot see commitments of a warehouse outside their scope', async () => {
+    const res = await get(`/api/stock?warehouseId=${fx.warehouseB}`, 'operator-a');
+    assert.equal(res.status, 403);
   });
 });

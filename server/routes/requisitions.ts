@@ -82,7 +82,11 @@ const reasonedTransitionBody = z.object({ rowVersion, reason: reasonField }).str
 const decideBody = z
   .object({
     rowVersion,
-    lineDecisions: z.array(z.object({ lineId: positiveInt, approvedQuantity: nonNegativeQuantityString })).min(1).max(500),
+    lineDecisions: z
+      .array(z.object({ lineId: positiveInt, approvedQuantity: nonNegativeQuantityString }).strict())
+      .min(1)
+      .max(500)
+      .refine((d) => new Set(d.map((x) => x.lineId)).size === d.length, 'each lineId may appear only once'),
     approvalReference: approvalReferenceField,
     decisionNotes: optionalText(1000),
   })

@@ -81,7 +81,8 @@ describe('warehouse scope', () => {
     assert.ok(s.body.data.length > 0);
     assert.ok(s.body.data.every((r: { warehouseId: number }) => r.warehouseId === fx.warehouseA));
     assert.equal(s.body.data[0].onHandQuantity, '100');
-    assert.equal(s.body.availability.commitmentsEnabled, false);
+    assert.equal(s.body.availability.commitmentsEnabled, true); // flag value of the test app (see buildTestApp)
+    assert.ok(Array.isArray(s.body.availability.items));
 
     const w = await get('/api/warehouses', 'operator-a');
     assert.deepEqual(w.body.data.map((x: { id: number }) => x.id), [fx.warehouseA]);
