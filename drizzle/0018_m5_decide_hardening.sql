@@ -104,6 +104,10 @@ BEGIN
     -- a quantity the UOM cannot represent.
     SELECT u.decimal_places INTO v_dp
       FROM public.items i JOIN public.uoms u ON u.id = i.base_uom_id WHERE i.id = v_line.item_id;
+    -- Fail closed: round(x, NULL) is NULL, which would silently skip the check below.
+    IF v_dp IS NULL THEN
+      RAISE EXCEPTION 'BOA_NOT_FOUND: base unit of measure for item %', v_line.item_id USING ERRCODE = 'BA003';
+    END IF;
     IF v_decision.approved_quantity <> round(v_decision.approved_quantity, v_dp) THEN
       RAISE EXCEPTION 'BOA_QUANTITY_PRECISION: approved quantity % exceeds % decimal places allowed for the item''s base UOM (never rounded)',
         v_decision.approved_quantity, v_dp USING ERRCODE = 'BA008';

@@ -230,7 +230,7 @@ describe('a commitment is not a physical movement (INV-037)', () => {
 
 describe('decide hardening: UOM precision, payload shape, PUBLIC execute', () => {
   const approver = () => fx.userIds['req-approver-a'];
-  const callDecide = (id: number, rowVersion: number, payload: string) =>
+  const callDecide = (id: number, rowVersion: number, payload: string | null) =>
     withUserContext(createDb(pool), approver(), (tx) =>
       tx.execute(sql`SELECT boa_requisition_decide(${id}, ${rowVersion}, ${payload}::jsonb, 'AUTH-HARDEN', NULL, true)`),
     );
@@ -272,14 +272,17 @@ describe('decide hardening: UOM precision, payload shape, PUBLIC execute', () =>
 
   it('the database function rejects malformed decision payloads cleanly and changes nothing', async () => {
     const { requisitionId, lineId, rowVersion } = await draftAndSubmit('3');
-    const payloads: Array<[string, string]> = [
-      ['SQL NULL', 'null'],
+    const payloads: Array<[string, string | null]> = [
+      ['SQL NULL', null],
+      ['JSON null', 'null'],
       ['JSON object instead of array', '{"lineId":1}'],
       ['empty array', '[]'],
       ['null element', '[null]'],
       ['nested array element', '[[1]]'],
       ['non-numeric lineId', `[{"lineId":"abc","approvedQuantity":"1"}]`],
       ['decimal lineId', `[{"lineId":"1.0","approvedQuantity":"1"}]`],
+      ['JSON-number decimal lineId', `[{"lineId":1.0,"approvedQuantity":"1"}]`],
+      ['lineId with whitespace', `[{"lineId":" 1","approvedQuantity":"1"}]`],
       ['lineId beyond bigint', `[{"lineId":"99999999999999999999","approvedQuantity":"1"}]`],
       ['missing approvedQuantity', `[{"lineId":${lineId}}]`],
       ['non-numeric approvedQuantity', `[{"lineId":${lineId},"approvedQuantity":"abc"}]`],
@@ -291,7 +294,16 @@ describe('decide hardening: UOM precision, payload shape, PUBLIC execute', () =>
     }
     // 501 decisions exceeds the documented cap.
     const tooMany = JSON.stringify(Array.from({ length: 501 }, (_, i) => ({ lineId: lineId + i, approvedQuantity: '1' })));
-    await assert.rejects(callDecide(requisitionId, rowVersion, tooMany), (err: unknown) => /BOA_REQUISITION_INVALID/.test(message(err)), '501 decisions');
+    await assert.rejects(callDecide(requisitionId, rowVersion, tooMany), (err: unknown) => /between 1 and 500/.test(message(err)), '501 decisions hit the cap');
+    // Exactly 500 passes the cap and reaches the one-decision-per-line rule instead.
+    const atCap = JSON.stringify(Array.from({ length: 500 }, (_, i) => ({ lineId: lineId + i, approvedQuantity: '1' })));
+    await assert.rejects(callDecide(requisitionId, rowVersion, atCap), (err: unknown) => /exactly one decision/.test(message(err)), '500 decisions pass the cap');
+    // An 18-digit lineId passes the shape check and fails as an ordinary not-found, never a cast error.
+    await assert.rejects(
+      callDecide(requisitionId, rowVersion, `[{"lineId":999999999999999999,"approvedQuantity":"1"}]`),
+      (err: unknown) => /BOA_NOT_FOUND/.test(message(err)),
+      '18-digit lineId',
+    );
     assert.equal(await commitments(requisitionId), 0);
     const r = await admin.query(`SELECT status FROM requisitions WHERE id = $1`, [requisitionId]);
     assert.equal(r.rows[0].status, 'SUBMITTED');
@@ -313,7 +325,59 @@ describe('decide hardening: UOM precision, payload shape, PUBLIC execute', () =>
       assert.equal(f.public_execute, false, `${f.proname} must not be executable by PUBLIC`);
       assert.equal(f.app_execute, true, `${f.proname} must stay executable by the application role`);
     }
+  });
 
+  it('the internal lock helper is not executable by PUBLIC or by the application role', async () => {
+    const r = await admin.query(
+      `SELECT p.proacl IS NOT NULL AS has_explicit_acl,
+              EXISTS (SELECT 1 FROM aclexplode(p.proacl) a WHERE a.grantee = 0 AND a.privilege_type = 'EXECUTE') AS public_execute,
+              has_function_privilege('boa_ims_app', p.oid, 'EXECUTE') AS app_execute
+         FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.proname = 'boa_requisition_lock'`,
+    );
+    assert.equal(r.rowCount, 1);
+    assert.equal(r.rows[0].has_explicit_acl, true);
+    assert.equal(r.rows[0].public_execute, false);
+    assert.equal(r.rows[0].app_execute, false, 'only the SECURITY DEFINER workflow functions may call the lock helper');
+  });
+
+  it('a precision failure on a later line rolls back an earlier line in the same decision', async () => {
+    const dp = Number((await admin.query(`SELECT decimal_places FROM uoms WHERE id = $1`, [fx.uomId])).rows[0].decimal_places);
+    const tooFine = `2.${'5'.repeat(dp + 1)}`;
+    const fits = dp === 0 ? '2' : `2.${'5'.repeat(dp)}`;
+    const h = await post('/api/requisitions', 'requester', { warehouseId: fx.warehouseA, purpose: 'Two lines', sourceEvidenceRef: `REQ-${randomUUID()}` });
+    const id = h.body.data.id as number;
+    const l1 = await post(`/api/requisitions/${id}/lines`, 'requester', { itemId: fx.itemId, requestedQuantity: '5' });
+    const l2 = await post(`/api/requisitions/${id}/lines`, 'requester', { itemId: fx.itemId, requestedQuantity: '5' });
+    const sub = await post(`/api/requisitions/${id}/submit`, 'requester', { rowVersion: l2.body.data.requisitionRowVersion });
+    assert.equal(sub.status, 200, JSON.stringify(sub.body));
+    // Line 1 is valid and (commitment engine on) would be committed first; line 2 then fails the precision check.
+    const payload = JSON.stringify([{ lineId: l1.body.data.id, approvedQuantity: fits }, { lineId: l2.body.data.id, approvedQuantity: tooFine }]);
+    await assert.rejects(callDecide(id, sub.body.data.rowVersion, payload), (err: unknown) => /BOA_QUANTITY_PRECISION/.test(message(err)));
+    assert.equal(await commitments(id), 0, 'line 1 commitment must be rolled back');
+    const lines = await admin.query(`SELECT approved_quantity FROM requisition_lines WHERE requisition_id = $1`, [id]);
+    assert.ok(lines.rows.every((l) => l.approved_quantity === null), 'no line may keep an approved quantity');
+    const r = await admin.query(`SELECT status FROM requisitions WHERE id = $1`, [id]);
+    assert.equal(r.rows[0].status, 'SUBMITTED');
+  });
+
+  it('a failed decide releases its Idempotency-Key so the corrected request can reuse it', async () => {
+    const dp = Number((await admin.query(`SELECT decimal_places FROM uoms WHERE id = $1`, [fx.uomId])).rows[0].decimal_places);
+    const { requisitionId, lineId, rowVersion } = await draftAndSubmit('5');
+    const idKey = key();
+    const attempt = (approvedQuantity: string) =>
+      post(
+        `/api/requisitions/${requisitionId}/decide`,
+        'req-approver-a',
+        { rowVersion, lineDecisions: [{ lineId, approvedQuantity }], approvalReference: 'AUTH-2026-IDEM' },
+        { 'Idempotency-Key': idKey },
+      );
+    const bad = await attempt(`2.${'5'.repeat(dp + 1)}`);
+    assert.equal(bad.status, 409, JSON.stringify(bad.body));
+    // The claim was rolled back with the failed transaction: the same key is not stuck IN_PROGRESS
+    // and is not a hash conflict, so the corrected request succeeds.
+    const good = await attempt(dp === 0 ? '2' : `2.${'5'.repeat(dp)}`);
+    assert.equal(good.status, 201, JSON.stringify(good.body));
   });
 });
 
