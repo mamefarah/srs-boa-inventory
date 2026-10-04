@@ -1,8 +1,11 @@
 # ADR-0011 — Supabase as the managed PostgreSQL host (PROPOSED)
 
-**Status:** Proposed. Not accepted until the Bureau completes its data-governance review (DEPLOYMENT.md: "Final vendor/region/hosting decisions remain subject to Bureau policy and data-governance review"). Nothing in this ADR has been applied to any Supabase project.  
-**Date:** 4 October 2026  
-**Amends:** ADR-0003 hosting direction (PostgreSQL such as Cloud SQL was an example, not a decision).  
+**Status:** SUPERSEDED by ADR-0012 on 4 October 2026: the owner decided on Bureau-hosted on-premises deployment, so Supabase is not pursued. The analysis below is kept for the record. (Previously: Proposed. Not accepted until the Bureau completes its data-governance review (DEPLOYMENT.md: "Final vendor/region/hosting decisions remain subject to Bureau policy and data-governance review"). Nothing in this ADR has been applied to any Supabase project.)
+
+**Date:** 4 October 2026
+
+**Amends:** ADR-0003 hosting direction (PostgreSQL such as Cloud SQL was an example, not a decision).
+
 **Controls:** PRD v3.1 security requirements, ADR-0004, ADR-0007, CLAUDE.md "Security" and "Direct-write prohibition".
 
 ## Context
