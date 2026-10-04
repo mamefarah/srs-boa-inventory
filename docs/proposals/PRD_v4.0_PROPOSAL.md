@@ -1,6 +1,6 @@
 # BoA-IMS Product Requirements Document — v4.0 (PROPOSAL, delta to v3.1)
 
-> **PROPOSAL FOR REVIEW. NOT A CONTROLLED DOCUMENT.** This file does not supersede `docs/PRD.md` v3.1, which remains the controlled baseline until the owner adopts v4.0 through the process in section 14. Nothing here has been built or tested.
+> **HISTORICAL REVIEW DRAFT. NOT A CONTROLLED DOCUMENT.** The normative content of this proposal was moved into `docs/PRD.md` v4.0 (Part A) by the adoption PR and takes effect only when that PR merges to `main`. This file is kept for history; if it differs from `docs/PRD.md`, the PRD governs. Nothing described here has been built or tested.
 
 | | |
 |---|---|

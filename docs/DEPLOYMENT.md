@@ -49,8 +49,8 @@ No production release unless:
 
 ## Mobile-first verification
 
-Every release candidate must be exercised from a real Android phone for the core storekeeper/requester workflows.
+Every release candidate must be exercised from a real Android phone and, from v4.0, a real iPhone with the app installed to the Home Screen, for the core storekeeper/requester workflows.
 
 ## Offline policy
 
-Initial system is online-first. Offline may support drafts later, but critical inventory posting requires server confirmation. The UI must never claim a stock-changing action succeeded until the server commits it.
+The system remains online-first for approvals, master data, adjustments and period control (offline class C). From v4.0, storekeepers' phones may capture receipts, inspections and other physical events offline and queue them as commands (PRD v4.0 Part A section 5, milestone M-M, not yet built). Critical inventory posting still requires server confirmation and offline capture never changes stock. The UI must never claim a stock-changing action succeeded until the server commits it.

@@ -70,3 +70,25 @@ Audit logs are append-only to ordinary application roles.
 ## Backup
 
 Production release requires automated encrypted backup, off-system copy, documented restore and a tested recovery procedure.
+
+## Mobile and BYOD security (v4.0, PRD Part A section 6)
+
+Storekeepers use personal phones, so the server remains the only enforcement point and the phone is treated as untrusted storage.
+
+- One person per account; no shared logins (SEC-M1).
+- Sign-in must persist across app restarts and offline periods with periodic re-authentication; today it is session-only (SEC-M2).
+- Local queue and cache are encrypted at rest and wiped on sign-out after sync or confirmed discard. Browser-based protection on a personal phone is limited and this residual risk needs the owner's acceptance (SEC-M3, PRD O8).
+- Lost or stolen phone: the administrator deactivates the user and the server refuses all sync from that moment. A web app cannot be wiped remotely, so cached data stays until it expires (SEC-M4).
+- Rate limiting is per authenticated user, not only per IP, because many phones share a mobile-carrier address (SEC-M6).
+- The server can refuse clients below a minimum app version (SEC-M8).
+- HTTPS only; no secrets in the client; service-worker caching limited to the data whitelist in PRD section 5.5 (SEC-M9).
+- Installing a web app and running a service worker need an HTTPS address that phones trust without manual certificate setup. A private certificate authority on personal phones is not an assumed option (ADR-0012 addendum).
+- Staff acceptable-use and privacy notice, data-plan cost and personal-data handling are for the Bureau and legal advice (SEC-M7, PRD O7).
+
+Additional threat scenarios (each needs automated negative tests when the feature exists):
+
+16. A queued command is replayed or sent twice.
+17. A deactivated user syncs a queue captured earlier.
+18. A phone clock is wrong or altered to backdate a capture.
+19. A stale app version syncs commands under old rules.
+20. A stolen unlocked phone is used before the account is deactivated.

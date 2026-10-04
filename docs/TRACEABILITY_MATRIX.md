@@ -1,4 +1,4 @@
-# Requirement / Rule Traceability Matrix — v3.1
+# Requirement / Rule Traceability Matrix — v4.0
 
 Use this file to connect business rules to implementation and tests. Every critical rule must be represented before its feature reaches production.
 
@@ -53,3 +53,11 @@ Rules not listed above remain mandatory; expand the matrix as their implementati
 | INV-021 | Item master | Unique immutable item code; items never deleted (ADR-0006) | `tests/item-master.test.ts` | TBD | M2 |
 | INV-016 | Maker-checker | Opening balance approver is not a contributor (creator, editor or submitter; `opening_balance_contributors`): `boa_ob_approve`, plus a table CHECK (approver ≠ creator/submitter) | `tests/opening-balance.test.ts` | TBD | M3 (opening balance) |
 | INV-024 | Serial | M3 duplicate opening protection plus M4 serial custody check under item serial advisory lock | `tests/opening-balance.test.ts`; `tests/receipts.test.ts` cross-warehouse concurrent same-serial arrival | TBD | M3+M4 |
+| INV-M01 | Offline/mobile (v4.0) | Offline capture never changes authoritative stock; only a server-accepted command does. | Not yet implemented; tests planned in `docs/TEST_PLAN.md` (offline and mobile acceptance) | TBD | M-M (planned) |
+| INV-M02 | Offline/mobile (v4.0) | Every queued command carries a client-generated idempotency key; a replay returns the original result and never posts twice. | Not yet implemented; tests planned in `docs/TEST_PLAN.md` (offline and mobile acceptance) | TBD | M-M (planned) |
+| INV-M03 | Offline/mobile (v4.0) | A rejected command is never silently dropped or silently altered; it stays visible with the server's reason until corrected or discarded with a reason. | Not yet implemented; tests planned in `docs/TEST_PLAN.md` (offline and mobile acceptance) | TBD | M-M (planned) |
+| INV-M04 | Offline/mobile (v4.0) | Client time is evidence; server time is authority. The server records both captured and received time. | Not yet implemented; tests planned in `docs/TEST_PLAN.md` (offline and mobile acceptance) | TBD | M-M (planned) |
+| INV-M05 | Offline/mobile (v4.0) | Device caches are warehouse-scoped, expiring and protected. | Not yet implemented; tests planned in `docs/TEST_PLAN.md` (offline and mobile acceptance) | TBD | M-M (planned) |
+| INV-M06 | Offline/mobile (v4.0) | Offline issue or dispatch requires a commitment synced beforehand; otherwise it is online-only. | Not yet implemented; tests planned in `docs/TEST_PLAN.md` (offline and mobile acceptance) | TBD | M-M (planned) |
+| INV-M07 | Offline/mobile (v4.0) | Every physical event the server cannot apply is visible in the exception queue and the unposted-physical-events report until resolved. | Not yet implemented; tests planned in `docs/TEST_PLAN.md` (offline and mobile acceptance) | TBD | M-M (planned) |
+| INV-M08 | Offline/mobile (v4.0) | A deactivated user's queued commands are refused at sync. | Not yet implemented; tests planned in `docs/TEST_PLAN.md` (offline and mobile acceptance) | TBD | M-M (planned) |

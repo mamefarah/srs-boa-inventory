@@ -4,7 +4,7 @@
 
 **Updated:** 2026-10-04
 
-**Controlled baseline:** PRD v3.1, adopted on `main` by PR #14.
+**Controlled baseline:** PRD v4.0 (Part A mobile/offline amendment over the v3.1 baseline, which PR #14 adopted). v4.0 takes effect when its adoption PR merges. No mobile or offline code exists yet; milestone M-M is planned after M5 (`docs/ROADMAP.md`).
 
 ## Milestone status
 

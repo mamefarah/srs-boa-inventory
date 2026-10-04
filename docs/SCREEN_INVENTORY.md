@@ -1,4 +1,4 @@
-# Screen Inventory — v3.1
+# Screen Inventory — v4.0
 
 ## Authentication
 - Sign in
@@ -115,3 +115,22 @@ Applicable transaction screens must provide a reusable evidence panel capable of
 - optional attachment metadata if attachment support is later enabled.
 
 The UI must distinguish paper actors from authenticated system actors and must not present a workflow click as a legal digital signature.
+
+## v4.0 clients (PRD Part A sections 4 and 7)
+
+Planned, not built. Existing screens (item master, opening balance, receipts, requisitions) become the basis of the admin web.
+
+Storekeeper app (Android and iPhone, offline-capable):
+- Install guidance (iPhone) and sign-in
+- Warehouse home with sync status
+- Stock view (on-hand, committed, available-to-promise, last synced)
+- Receipt and inspection capture
+- Issue and dispatch against a synced approved requisition or transfer
+- Transfer receipt, returns and condition capture, count entry
+- Drafts, queue, rejected and needs-review list
+
+Admin web additions:
+- Exception queue (NEEDS REVIEW)
+- Unposted-physical-events report
+- Directorate-head dashboard
+- Printable document summaries carrying hard-copy references

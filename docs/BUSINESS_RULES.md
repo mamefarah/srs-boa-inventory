@@ -164,3 +164,27 @@ A business transaction may reference multiple official documents (for example Mo
 
 ## INV-053
 When a receipt line records a source-authorized/expected quantity, BoA-IMS derives delivery variance from the physical delivered quantity. Short quantity = max(expected - delivered, 0); over-delivered quantity = max(delivered - expected, 0). The expected quantity and the variance are documentary controls only; only physically delivered quantity can enter inventory custody.
+
+## INV-M01
+Offline capture never changes authoritative stock; only a server-accepted command does.
+
+## INV-M02
+Every queued command carries a client-generated idempotency key; a replay returns the original result and never posts twice.
+
+## INV-M03
+A rejected command is never silently dropped or silently altered; it stays visible with the server's reason until corrected or discarded with a reason.
+
+## INV-M04
+Client time is evidence; server time is authority. The server records both captured and received time.
+
+## INV-M05
+Device caches are warehouse-scoped, expiring and protected.
+
+## INV-M06
+Offline issue or dispatch requires a commitment synced beforehand; otherwise it is online-only.
+
+## INV-M07
+Every physical event the server cannot apply is visible in the exception queue and the unposted-physical-events report until resolved.
+
+## INV-M08
+A deactivated user's queued commands are refused at sync.

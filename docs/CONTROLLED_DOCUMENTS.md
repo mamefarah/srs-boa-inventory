@@ -1,20 +1,20 @@
 # BoA-IMS Controlled Documents
 
-**Effective date:** 26 September 2026  
-**Controlled baseline:** v3.1  
-**Adoption:** Effective when the governance synchronization PR containing this file is merged to `main`.
+**Effective date:** 4 October 2026 (on merge of the v4.0 adoption PR)\
+**Controlled baseline:** v4.0 (supersedes v3.1; the v3.1 text is retained unchanged as Part B of `docs/PRD.md`)\
+**Adoption:** Effective when the v4.0 adoption PR containing this file is merged to `main`. Earlier v3.1 adoption: PR #14.
 
 This file defines the authoritative repository documentation order for BoA-IMS.
 
 ## Mandatory reading order
 
-1. **`docs/PRD.md`** — Product Requirements Document v3.1.
+1. **`docs/PRD.md`** — Product Requirements Document v4.0 (Part A: v4.0 amendment for channels, offline operation, mobile and admin web; Part B: v3.1 baseline). Part A prevails on conflict.
 2. **`docs/M0_EVIDENCE_REGISTER.md`** — evidence provenance, authority and configured fallback status.
 3. **`docs/M0_BLOCKER_MATRIX.md`** — remaining policy/configuration boundaries.
 4. **`docs/OFFICIAL_PROCESS_MAPPING.md`** — evidence-to-workflow translation.
 5. **`docs/M0_STATUS.md`** — current evidence/configuration status.
 
-Subordinate technical documents such as `BUSINESS_RULES.md`, `DATA_MODEL.md`, `WORKFLOWS.md`, `ROLES_PERMISSIONS.md`, `ROADMAP.md` and ADRs must be interpreted consistently with this controlled set. If a subordinate file conflicts, the v3.1 controlled set wins until the subordinate file is corrected.
+Subordinate technical documents such as `BUSINESS_RULES.md`, `DATA_MODEL.md`, `WORKFLOWS.md`, `ROLES_PERMISSIONS.md`, `ROADMAP.md` and ADRs must be interpreted consistently with this controlled set. If a subordinate file conflicts, the controlled set (PRD v4.0 and the documents below) wins until the subordinate file is corrected.
 
 ## Governing legal/evidence principle
 
@@ -25,6 +25,10 @@ Subordinate technical documents such as `BUSINESS_RULES.md`, `DATA_MODEL.md`, `W
 - Federal fallback is a product-configuration rule; it must never be relabeled as Somali Regional law.
 - Historical materials remain evidence of prior process/terminology only when superseded or not confirmed current.
 - Project/donor agreements, PIMs and FM manuals remain controlling for project-specific stock restrictions where applicable.
+
+## v4.0 scope note
+
+v4.0 adds an installable storekeeper web app (Android and iPhone, offline-capable) and an admin web. It changes how data is captured and viewed, not what the authoritative records are. Adopting v4.0 does not authorise implementing, deploying or migrating anything: the pending decisions in PRD Part A section 13 and ADRs 0013 to 0015 (Proposed) gate mobile implementation. `docs/proposals/PRD_v4.0_PROPOSAL.md` is retained as the historical review draft and has no authority.
 
 ## Hybrid hard-copy/electronic evidence model
 
