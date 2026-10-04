@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BoA PoC sign-in test</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Sign-in test (O9)</h1>
+  <p class="warn">Use a SEPARATE throwaway Firebase project and a test Google account. Not the real system.</p>
+  <p><a href="./">Back to the offline test</a></p>
+</header>
+<main>
+  <section>
+    <h2>1. Firebase web config</h2>
+    <p class="note">Paste the web app config as JSON with apiKey, authDomain, projectId, appId. These values are public identifiers, but keep them out of chat if you prefer. The project must list this site's domain as an authorized domain.</p>
+    <label>Config JSON <textarea id="cfg" rows="5" style="width:100%" spellcheck="false"></textarea></label>
+    <div class="row"><button id="save-cfg" type="button">Save config</button><button id="clear-cfg" type="button">Remove config</button></div>
+    <p id="cfg-state" role="status"></p>
+  </section>
+  <section>
+    <h2>2. Persistence</h2>
+    <label>Sign-in persistence
+      <select id="persist">
+        <option value="session">session (what the product does today)</option>
+        <option value="local">local (what PRD SEC-M2 needs)</option>
+      </select>
+    </label>
+  </section>
+  <section>
+    <h2>3. Sign in</h2>
+    <div class="row">
+      <button id="btn-popup" type="button">Sign in (popup)</button>
+      <button id="btn-redirect" type="button">Sign in (redirect)</button>
+      <button id="btn-out" type="button">Sign out</button>
+    </div>
+    <table id="status"></table>
+  </section>
+  <section>
+    <h2>4. Offline token tests</h2>
+    <p class="note">While signed in: get a cached token online, then go to airplane mode and tap both buttons, and repeat after 1 hour and 2 hours offline. Note which one fails and the error code.</p>
+    <div class="row">
+      <button id="btn-token" type="button">Get token (cached)</button>
+      <button id="btn-refresh" type="button">Force refresh</button>
+    </div>
+  </section>
+  <section>
+    <h2>5. Log and report</h2>
+    <pre id="log"></pre>
+    <div class="row"><button id="btn-copy" type="button">Copy report</button><button id="btn-clearlog" type="button">Clear log</button></div>
+    <p id="copy-state" role="status"></p>
+    <details><summary>Show report</summary><pre id="report"></pre></details>
+  </section>
+</main>
+<script src="auth.js"></script>
+</body>
+</html>

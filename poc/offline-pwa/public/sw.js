@@ -3,14 +3,16 @@
 // keeping its state in IndexedDB on the phone. The server-side idempotency logic is the same as server.mjs,
 // but it runs on the device, so it proves client behaviour (install, offline, storage, sync triggers, retry safety)
 // and NOT a real network round trip to a remote server.
-const CACHE = 'boa-poc-shell-v2';
+const CACHE = 'boa-poc-shell-v3';
 const BASE = self.registration.scope; // works under a sub-path such as /repo-name/
 const SHELL = ['./', 'index.html', 'app.js', 'style.css', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'].map((p) => new URL(p, BASE).href);
 try { importScripts('static-mode.js'); } catch { /* not in static mode */ }
 const STATIC_MODE = self.POC_STATIC_MODE === true;
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  // Optional files (the sign-in test exists only in the static build) must not break installation if absent.
+  const OPTIONAL = ['auth.html', 'auth.js'].map((p) => new URL(p, BASE).href);
+  e.waitUntil(caches.open(CACHE).then(async (c) => { await c.addAll(SHELL); await Promise.all(OPTIONAL.map((u) => c.add(u).catch(() => {}))); }).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
