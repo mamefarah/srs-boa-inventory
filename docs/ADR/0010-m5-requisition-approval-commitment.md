@@ -65,4 +65,3 @@ Quantities are decimal strings at the API (at most 14 integer and 6 decimal digi
 - **The commitment flag is passed to the database function by the trusted API server.** The application database role can in principle call the function with `false`. This is acceptable because the flag only permits skipping an optional reservation, but it is not a database-enforced policy.
 - **Re-validation on decide.** Updating a line during a decision re-runs the line guard, so a requisition containing a since-deactivated item, location or funding source cannot be rejected, only cancelled.
 - **Line edits carry no version check** (last write wins between two preparers of the same draft).
-- The ledger-unchanged property is by construction; an explicit test asserting the ledger row count is unchanged by a decision is still to be added.

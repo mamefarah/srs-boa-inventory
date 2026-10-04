@@ -177,6 +177,57 @@ describe('requisition scope and separation of duties', () => {
   });
 });
 
+describe('a commitment is not a physical movement (INV-037)', () => {
+  /** Whole-ledger fingerprint: any posted transaction/entry or changed quantity alters it. */
+  async function ledgerFingerprint() {
+    const r = await admin.query(
+      `SELECT (SELECT count(*)::int FROM inventory_transactions) AS transactions,
+              (SELECT count(*)::int FROM inventory_entries) AS entries,
+              (SELECT coalesce(sum(signed_quantity), 0)::text FROM inventory_entries) AS net_quantity`,
+    );
+    return r.rows[0] as { transactions: number; entries: number; net_quantity: string };
+  }
+  const availability = async () => {
+    const res = await get(`/api/stock?warehouseId=${fx.warehouseA}&itemId=${fx.itemId}`, 'operator-a');
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    const row = res.body.availability.items.find((i: { itemId: number; warehouseId: number }) => i.itemId === fx.itemId && i.warehouseId === fx.warehouseA);
+    assert.ok(row, 'availability row for the fixture item');
+    return row as { usableOnHand: string; committed: string; availableToPromise: string };
+  };
+
+  it('deciding and cancelling reserve and release ATP without writing any ledger row or changing on-hand', async () => {
+    const ledgerBefore = await ledgerFingerprint();
+    const before = await availability();
+    assert.ok(Number(before.availableToPromise) >= 1, 'fixture needs at least 1 unit of ATP headroom');
+
+    const { requisitionId, lineId, rowVersion } = await draftAndSubmit('1');
+    assert.deepEqual(await ledgerFingerprint(), ledgerBefore, 'draft + submit must not touch the ledger');
+
+    const dec = await post(
+      `/api/requisitions/${requisitionId}/decide`,
+      'req-approver-a',
+      { rowVersion, lineDecisions: [{ lineId, approvedQuantity: '1' }], approvalReference: 'AUTH-2026-LEDGER1' },
+      { 'Idempotency-Key': key() },
+    );
+    assert.equal(dec.status, 201, JSON.stringify(dec.body));
+    assert.equal(dec.body.data.lines[0].commitment.status, 'ACTIVE');
+
+    // The reservation is visible as committed/ATP, yet nothing physical moved.
+    assert.deepEqual(await ledgerFingerprint(), ledgerBefore, 'a decision with a commitment must not touch the ledger');
+    const reserved = await availability();
+    assert.equal(reserved.usableOnHand, before.usableOnHand);
+    assert.equal(Number(reserved.committed), Number(before.committed) + 1);
+    assert.equal(Number(reserved.availableToPromise), Number(before.availableToPromise) - 1);
+
+    const cancel = await post(`/api/requisitions/${requisitionId}/cancel`, 'req-approver-a', { rowVersion: dec.body.data.rowVersion, reason: 'Ledger-unchanged check (test)' });
+    assert.equal(cancel.status, 200, JSON.stringify(cancel.body));
+    assert.equal(cancel.body.data.lines[0].commitment.status, 'RELEASED');
+
+    assert.deepEqual(await ledgerFingerprint(), ledgerBefore, 'releasing a commitment must not touch the ledger');
+    assert.deepEqual(await availability(), before, 'cancellation restores committed and ATP exactly');
+  });
+});
+
 /** Eligible USABLE physical stock at warehouse A minus other tests' still-active commitments. */
 async function currentAtp(): Promise<number> {
   const r = await admin.query(
