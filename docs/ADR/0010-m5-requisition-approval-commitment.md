@@ -70,4 +70,3 @@ The four workflow functions are executable by the application role only (PUBLIC 
 - **Over-committed items can drop off the stock page.** The availability list is built from stock rows, so an item with active commitments but zero net on-hand at every bin is not shown, and ATP can go negative if stock is reduced below existing commitments (only decide-time is checked).
 - **The commitment flag is not part of the decide idempotency hash**, so a replay after the flag changes returns the original response. Not a ledger risk.
 - **Line edits carry no version check** (last write wins between two preparers of the same draft).
-- The ledger-unchanged property is by construction; an explicit test asserting the ledger row count is unchanged by a decision is still to be added.
