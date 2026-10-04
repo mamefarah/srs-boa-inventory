@@ -48,6 +48,19 @@ Things to know before you do this:
 - The workflow is manual only (`workflow_dispatch`). It never deploys on push or merge.
 - After changing a shell file, bump `CACHE` in `public/sw.js` so phones pick up the update.
 
+## Sign-in test (O9, SEC-M2)
+
+`auth.html` (static build only) tests Firebase Google sign-in inside the installed app: popup vs redirect, whether the session survives closing the app with `session` persistence (what the product does today) vs `local` persistence (what PRD SEC-M2 needs), and what happens to the ID token while offline (cached token vs forced refresh). It never stores or reports an email, token or full user id.
+
+Setup, owner only:
+1. Create a **separate throwaway Firebase project** (free plan). Do not use the real Bureau project: adding `mamefarah.github.io` as an authorized domain would trust every site under that name.
+2. In it, enable Authentication, Google sign-in, and add `mamefarah.github.io` under Authentication, Settings, Authorized domains.
+3. Register a web app and copy its config (apiKey, authDomain, projectId, appId). These are public identifiers.
+4. Open `.../srs-boa-inventory/auth.html` in the installed app on the phone, paste the config, Save. Use a test Google account.
+5. Test: sign in by popup, then by redirect (sign out between). With persistence `session`, close and reopen the app, then check the log: is the user still signed in? Repeat with `local`.
+6. Offline: while signed in, tap "Get token (cached)" online, then go to airplane mode and tap both token buttons. Repeat after 1 hour and about 2 hours offline. Note which fails and the error code. Tokens normally last 1 hour (expected, unverified here).
+7. Tap **Copy report** and paste it to Claude.
+
 ## Putting it on a phone
 
 Installability and service workers need **HTTPS with a certificate the phone trusts without manual setup**. A plain `http://192.168...` address will not install on iPhone and will not run the service worker. Use any HTTPS front (a tunnel or a small hosted page you control). Because the PoC has no real authentication and no real data, set `POC_TOKEN` whenever it is reachable from the internet, and stop the server when the test ends. Do not point it at, or reuse credentials from, the real system.

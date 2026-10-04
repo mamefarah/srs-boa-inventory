@@ -104,6 +104,17 @@ await check('persistence helpers: samples and token survive reload', async () =>
 });
 await check('report builds with environment and checklist', async () => { const r = await page.evaluate(() => window.__poc.buildReport()); assert.ok(r.environment.serviceWorkerControlsPage); assert.equal(r.queue.queued, 0); });
 
+if (STATIC) {
+  await check('sign-in test page: loads, saves config, starts auth with chosen persistence, handles not-signed-in', async () => {
+    const p2 = await ctx.newPage(); const errors = []; p2.on('pageerror', (e) => errors.push(e.message));
+    await p2.goto(base + 'auth.html'); await p2.waitForSelector('#save-cfg');
+    await p2.fill('#cfg', JSON.stringify({ apiKey: 'fake-key', authDomain: 'fake.firebaseapp.com', projectId: 'fake', appId: '1:1:web:1' }));
+    await p2.click('#save-cfg'); await p2.waitForFunction(() => document.getElementById('log').textContent.includes('startup: signedIn=false persistence=session'));
+    await p2.selectOption('#persist', 'local'); await p2.waitForFunction(() => document.getElementById('log').textContent.includes('persistence=local'));
+    await p2.click('#btn-token'); await p2.waitForFunction(() => document.getElementById('status').textContent.includes('poc/not-signed-in'));
+    assert.deepEqual(errors, []); await p2.close();
+  });
+}
 await check('server mode reported correctly', async () => assert.equal((await state()).mode, STATIC ? 'static-in-worker' : 'node'));
 const finalState = await state();
 await browser.close(); server.close();
