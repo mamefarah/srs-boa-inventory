@@ -28,8 +28,8 @@ Use this file to connect business rules to implementation and tests. Every criti
 | INV-030 | Authorization | `server/authz/authorize.ts` + RLS policies | `tests/http-authz.test.ts`, RLS suite in `tests/database.test.ts` | TBD | M1 foundation |
 | INV-031 | Ledger security | `boa_ims_app` grants (no ledger writes) | `tests/database.test.ts` direct-write prohibition | TBD | M1 foundation |
 | INV-032 | Audit | M1 audit framework plus M4 database audit triggers for receipt headers/lines, document references and supplier returns | `tests/http-admin.test.ts`, `tests/http-auth.test.ts`, `tests/receipts.test.ts` | TBD | M1+M4 |
-| INV-037 | Commitment | TBD | Reservation no physical move | TBD | Planned |
-| INV-038 | Requisition/transfer | TBD | Commitment reduces ATP | TBD | Planned |
+| INV-037 | Commitment | `inventory_commitments` is written only by `boa_requisition_decide` / `boa_requisition_cancel` (SECURITY DEFINER; app role has SELECT only); no `inventory_entries` row is ever written by the requisition path (ADR-0010) | `tests/requisitions.test.ts` (commitment creation, idempotent replay); **gap:** no test yet asserts the ledger row count is unchanged by a decision | TBD | M5 complete; ledger-unchanged assertion to add |
+| INV-038 | Requisition/transfer | ATP = usable WAREHOUSE on-hand − ACTIVE/PARTIALLY_FULFILLED commitments, checked under the per-(warehouse, item) advisory lock in `boa_requisition_decide`; `GET /api/stock` returns `availability.items` (usable on-hand, committed, available-to-promise) | `tests/requisitions.test.ts` (ATP refusal, stock availability for a stock-only reader) | TBD | M5 requisition path complete; TRANSFER commitments arrive with M7; funding/project segregation not enforced (ADR-0010) |
 | INV-039 | Transfer dispatch | TBD | Commitment + dispatch atomic | TBD | Planned |
 | INV-040 | Condition/custody | TBD | IN_TRANSIT+DAMAGED supported | TBD | Planned |
 | INV-041 | Reconciliation | M4 receipt reconciliation endpoint reports arrival/inspection quantities and rejected-return totals from ledger evidence | `tests/receipts.test.ts` reconciliation scenario | TBD | M4 receipt slice |

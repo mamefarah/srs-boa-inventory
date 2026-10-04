@@ -26,6 +26,16 @@ Read procurement/source/value reports. No ordinary stock posting.
 ### Auditor
 Read-only access to inventory, documents, approvals, ledger, period close and audit history.
 
+## Implemented technical capabilities (M5 requisitions)
+
+System capabilities, not official job titles or paper signatory authority:
+
+- `READ_REQUISITIONS` — read requisitions and lines within warehouse scope.
+- `PREPARE_REQUISITIONS` — draft, edit and submit requisitions, and cancel drafts, within warehouse scope (role: `REQUESTER`).
+- `APPROVE_REQUISITIONS` — decide (approve / partially approve / reject), return a submitted requisition to draft, and cancel a submitted or decided one (role: `REQUISITION_APPROVER`). No inventory-posting authority.
+
+Enforced in the database: the decider may not be the person who prepared or submitted the requisition, and an identity holding access-administration permissions may not also hold these operational permissions (extension of the M3/M4 separation-of-duties rule). `READ_STOCK` holders may additionally read commitments inside their warehouse scope so stock views show committed and available-to-promise quantities correctly. See ADR-0010.
+
 ## Permission model
 
 Permission = role + action + warehouse scope + transaction scope + authority limit.

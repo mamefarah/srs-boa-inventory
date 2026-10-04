@@ -137,10 +137,10 @@ Commitments reduce available-to-promise but do not change physical on-hand.
 - supplier_return_records where required
 
 ## Requisition/issue
-- requisitions
-- requisition_lines
-- requisition_approvals
+- requisitions (the single technical decision — decider, outcome, approval reference — is recorded on the header)
+- requisition_lines (`approved_quantity` is written only by the decide function)
 - inventory_commitments
+- requisition_approvals (not implemented in M5; reserved for multi-level approval if a controlling procedure requires it)
 - issues
 - issue_lines
 
