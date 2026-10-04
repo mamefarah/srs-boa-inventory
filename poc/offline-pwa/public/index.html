@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BoA PoC</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="BoA PoC">
+<meta name="theme-color" content="#1b5e20">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <h1>BoA-IMS offline PoC</h1>
+  <p class="warn">Test data only. Not the real system. Do not enter real stock or personal data.</p>
+  <div id="syncbar" role="status" aria-live="polite"></div>
+</header>
+<main>
+  <section id="install" hidden>
+    <h2>1. Install to Home Screen</h2>
+    <div id="install-body"></div>
+  </section>
+
+  <section>
+    <h2>2. Environment (read-only facts)</h2>
+    <table id="env"></table>
+    <button id="btn-persist" type="button">Request persistent storage</button>
+  </section>
+
+  <section>
+    <h2>3. Capture offline (queued command)</h2>
+    <form id="capture" autocomplete="off">
+      <label>Item code <input name="item" required maxlength="40" value="TST-EA"></label>
+      <label>Quantity <input name="qty" required inputmode="decimal" pattern="[0-9]+(\.[0-9]{1,6})?" value="1"></label>
+      <label>Type
+        <select name="type">
+          <option value="RECEIPT_CAPTURE">Receipt capture (normal)</option>
+          <option value="SIMULATED_BUSINESS_REJECTION">Simulated business rejection</option>
+        </select>
+      </label>
+      <button type="submit">Queue command</button>
+    </form>
+    <div class="row">
+      <button id="btn-sync" type="button">Sync now</button>
+      <label class="inline"><input type="checkbox" id="chk-drop"> Simulate lost server reply</label>
+    </div>
+    <ul id="queue"></ul>
+  </section>
+
+  <section>
+    <h2>4. Storage persistence</h2>
+    <p>Marker created: <b id="marker-age">...</b></p>
+    <p>Saved sign-in stand-in token: <b id="token-state">...</b></p>
+    <div class="row">
+      <button id="btn-fill" type="button">Add 200 sample records</button>
+      <button id="btn-token" type="button">Save stand-in sign-in token</button>
+    </div>
+    <p id="fill-state"></p>
+    <p class="note">Close the app, wait (hours or days), reopen: the marker, records and token should still be here. Not covered: real Firebase sign-in (see README).</p>
+  </section>
+
+  <section>
+    <h2>5. Manual checklist</h2>
+    <ul id="checklist"></ul>
+    <div class="row">
+      <button id="btn-copy" type="button">Copy report</button>
+      <button id="btn-send" type="button">Send report to server</button>
+    </div>
+    <p id="report-state" role="status"></p>
+    <details><summary>Show report</summary><pre id="report"></pre></details>
+  </section>
+</main>
+<script src="/app.js" type="module"></script>
+</body>
+</html>

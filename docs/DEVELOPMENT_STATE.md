@@ -4,7 +4,7 @@
 
 **Updated:** 2026-10-04
 
-**Controlled baseline:** PRD v4.0 (Part A mobile/offline amendment over the v3.1 baseline, which PR #14 adopted). v4.0 takes effect when its adoption PR merges. No mobile or offline code exists yet; milestone M-M is planned after M5 (`docs/ROADMAP.md`).
+**Controlled baseline:** PRD v4.0 (Part A mobile/offline amendment over the v3.1 baseline, which PR #14 adopted). v4.0 takes effect when its adoption PR merges. No mobile or offline product code exists yet; milestone M-M is planned after M5 (`docs/ROADMAP.md`). A standalone proof of concept is in `poc/offline-pwa/` (test data only; Chromium automated checks pass; real-device iPhone/Android results and real Firebase sign-in not yet tested).
 
 ## Milestone status
 
