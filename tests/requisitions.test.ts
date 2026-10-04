@@ -177,6 +177,94 @@ describe('requisition scope and separation of duties', () => {
   });
 });
 
+describe('decide hardening: UOM precision, payload shape, PUBLIC execute', () => {
+  const approver = () => fx.userIds['req-approver-a'];
+  const callDecide = (id: number, rowVersion: number, payload: string) =>
+    withUserContext(createDb(pool), approver(), (tx) =>
+      tx.execute(sql`SELECT boa_requisition_decide(${id}, ${rowVersion}, ${payload}::jsonb, 'AUTH-HARDEN', NULL, true)`),
+    );
+  const message = (err: unknown) => String((err as { cause?: { message?: string } }).cause?.message ?? err);
+  const commitments = async (id: number) =>
+    (await admin.query(`SELECT count(*)::int AS n FROM inventory_commitments c JOIN requisition_lines l ON l.id = c.requisition_line_id WHERE l.requisition_id = $1`, [id])).rows[0].n as number;
+
+  it('refuses an approved quantity finer than the item base UOM allows (reject, never round)', async () => {
+    // The fixture UOM's decimal places are changed by earlier test files, so read them here and
+    // build one quantity too fine for the UOM and one that fits exactly. The too-fine value is
+    // below the requested 5 and has scale <= 6, so only the UOM-precision check can stop it;
+    // before migration 0018 it was approved and committed as written.
+    const dp = Number((await admin.query(`SELECT decimal_places FROM uoms WHERE id = $1`, [fx.uomId])).rows[0].decimal_places);
+    assert.ok(dp >= 0 && dp < 6, `fixture UOM decimal places must be below 6, found ${dp}`);
+    const tooFine = `2.${'5'.repeat(dp + 1)}`;
+    const fits = dp === 0 ? '2' : `2.${'5'.repeat(dp)}`;
+
+    const { requisitionId, lineId, rowVersion } = await draftAndSubmit('5');
+    const bad = await post(
+      `/api/requisitions/${requisitionId}/decide`,
+      'req-approver-a',
+      { rowVersion, lineDecisions: [{ lineId, approvedQuantity: tooFine }], approvalReference: 'AUTH-2026-PREC1' },
+      { 'Idempotency-Key': key() },
+    );
+    assert.equal(bad.status, 409, JSON.stringify(bad.body));
+    assert.equal(bad.body.error.code, 'QUANTITY_PRECISION');
+    assert.equal(await commitments(requisitionId), 0);
+
+    // Positive control on the same requisition: a quantity that fits the UOM is accepted exactly.
+    const ok = await post(
+      `/api/requisitions/${requisitionId}/decide`,
+      'req-approver-a',
+      { rowVersion, lineDecisions: [{ lineId, approvedQuantity: fits }], approvalReference: 'AUTH-2026-PREC2' },
+      { 'Idempotency-Key': key() },
+    );
+    assert.equal(ok.status, 201, JSON.stringify(ok.body));
+    assert.equal(ok.body.data.lines[0].commitment.quantityBaseUom, fits);
+  });
+
+  it('the database function rejects malformed decision payloads cleanly and changes nothing', async () => {
+    const { requisitionId, lineId, rowVersion } = await draftAndSubmit('3');
+    const payloads: Array<[string, string]> = [
+      ['SQL NULL', 'null'],
+      ['JSON object instead of array', '{"lineId":1}'],
+      ['empty array', '[]'],
+      ['null element', '[null]'],
+      ['nested array element', '[[1]]'],
+      ['non-numeric lineId', `[{"lineId":"abc","approvedQuantity":"1"}]`],
+      ['decimal lineId', `[{"lineId":"1.0","approvedQuantity":"1"}]`],
+      ['lineId beyond bigint', `[{"lineId":"99999999999999999999","approvedQuantity":"1"}]`],
+      ['missing approvedQuantity', `[{"lineId":${lineId}}]`],
+      ['non-numeric approvedQuantity', `[{"lineId":${lineId},"approvedQuantity":"abc"}]`],
+      ['negative approvedQuantity', `[{"lineId":${lineId},"approvedQuantity":"-1"}]`],
+      ['more than 6 decimals', `[{"lineId":${lineId},"approvedQuantity":"1.1234567"}]`],
+    ];
+    for (const [label, payload] of payloads) {
+      await assert.rejects(callDecide(requisitionId, rowVersion, payload), (err: unknown) => /BOA_REQUISITION_INVALID/.test(message(err)), label);
+    }
+    // 501 decisions exceeds the documented cap.
+    const tooMany = JSON.stringify(Array.from({ length: 501 }, (_, i) => ({ lineId: lineId + i, approvedQuantity: '1' })));
+    await assert.rejects(callDecide(requisitionId, rowVersion, tooMany), (err: unknown) => /BOA_REQUISITION_INVALID/.test(message(err)), '501 decisions');
+    assert.equal(await commitments(requisitionId), 0);
+    const r = await admin.query(`SELECT status FROM requisitions WHERE id = $1`, [requisitionId]);
+    assert.equal(r.rows[0].status, 'SUBMITTED');
+  });
+
+  it('the four workflow functions are not executable by PUBLIC, only by the application role', async () => {
+    const r = await admin.query(
+      `SELECT p.proname,
+              p.proacl IS NOT NULL AS has_explicit_acl,
+              EXISTS (SELECT 1 FROM aclexplode(p.proacl) a WHERE a.grantee = 0 AND a.privilege_type = 'EXECUTE') AS public_execute,
+              has_function_privilege('boa_ims_app', p.oid, 'EXECUTE') AS app_execute
+         FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.proname IN ('boa_requisition_submit', 'boa_requisition_return', 'boa_requisition_cancel', 'boa_requisition_decide')
+        ORDER BY p.proname`,
+    );
+    assert.equal(r.rowCount, 4);
+    for (const f of r.rows) {
+      assert.equal(f.has_explicit_acl, true, `${f.proname} must have an explicit ACL`);
+      assert.equal(f.public_execute, false, `${f.proname} must not be executable by PUBLIC`);
+      assert.equal(f.app_execute, true, `${f.proname} must stay executable by the application role`);
+    }
+  });
+});
+
 /** Eligible USABLE physical stock at warehouse A minus other tests' still-active commitments. */
 async function currentAtp(): Promise<number> {
   const r = await admin.query(

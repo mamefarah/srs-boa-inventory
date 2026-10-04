@@ -24,6 +24,8 @@ A requisition asks the warehouse to release stock. Approving it may reserve stoc
 A decision supplies one approved quantity per line (0 ≤ approved ≤ requested), an authorization sign-off reference (`approval_reference`, at least 3 visible characters) and optional notes. The outcome is derived: `REJECTED` if the approved total is 0, `APPROVED` if it equals the requested total, otherwise `PARTIALLY_APPROVED`.
 
 - **Exactly one decision per line.** The decision array length, its number of distinct line ids and the requisition's line count must all agree (migration 0017; the API schema also rejects repeated ids). Comparing only the distinct count previously let a repeated line through.
+- **Approved quantity honours the base UOM** (migration 0018): an approved quantity with more decimal places than the item's base UOM allows is rejected (`QUANTITY_PRECISION`), never rounded, checked after the "exceeds requested" test. Before 0018 a fractional approval below a valid request could be committed as written.
+- **Payload shape is validated before any cast** (migration 0018): the decisions must be a JSON array of 1–500 objects, each with a whole-number `lineId` and a non-negative decimal `approvedQuantity` (at most 14 integer and 6 decimal digits); anything else is `REQUISITION_INVALID` rather than an unmapped cast error.
 - **Maker-checker in the database.** The decider may not be the person who created or submitted the requisition (`BOA_MAKER_CHECKER`; also a table check constraint).
 - System approval is a technical workflow state, not a legal digital signature. The authenticated actor and the paper signatory are separate facts (ADR-0008).
 
@@ -47,7 +49,7 @@ Quantities are decimal strings at the API (at most 14 integer and 6 decimal digi
 
 ### 6. Permissions and roles
 
-`READ_REQUISITIONS`, `PREPARE_REQUISITIONS`, `APPROVE_REQUISITIONS` and the role `REQUISITION_APPROVER` (the existing `REQUESTER` role gains read/prepare). They are technical capabilities, not official job titles. The M3/M4 separation-of-duties trigger is extended so an access-administration identity cannot hold them. `APPROVE_REQUISITIONS` carries no posting authority.
+The four workflow functions are executable by the application role only (PUBLIC execute revoked in migration 0018, matching the M3/M4 functions; in-function authorisation already denied callers without permission). Capabilities: `READ_REQUISITIONS`, `PREPARE_REQUISITIONS`, `APPROVE_REQUISITIONS` and the role `REQUISITION_APPROVER` (the existing `REQUESTER` role gains read/prepare). They are technical capabilities, not official job titles. The M3/M4 separation-of-duties trigger is extended so an access-administration identity cannot hold them. `APPROVE_REQUISITIONS` carries no posting authority.
 
 ### 7. Stock visibility (post-M5 fix, migration 0017)
 
@@ -64,5 +66,8 @@ Quantities are decimal strings at the API (at most 14 integer and 6 decimal digi
 - **No funding/project/location segregation in ATP.** Funding source, project and location are stored on the commitment, but ATP is computed across the whole warehouse and item. PRD §19.4 states that restrictions on cross-project substitution depend on controlling project evidence, which is not yet available. Resolve before enabling commitments for donor-funded stock.
 - **The commitment flag is passed to the database function by the trusted API server.** The application database role can in principle call the function with `false`. This is acceptable because the flag only permits skipping an optional reservation, but it is not a database-enforced policy.
 - **Re-validation on decide.** Updating a line during a decision re-runs the line guard, so a requisition containing a since-deactivated item, location or funding source cannot be rejected, only cancelled.
+- **Stock readers see whole commitment rows.** The `READ_STOCK` policy is row-level only; the table-level `SELECT` grant exposes every column, including `requisition_line_id`, `funding_source_id`, `project_id`, `released_by_user_id` and `release_reason` (which embeds the free-text cancel reason). Decide whether stock readers need those columns; if not, restrict them with a view or column grants.
+- **Over-committed items can drop off the stock page.** The availability list is built from stock rows, so an item with active commitments but zero net on-hand at every bin is not shown, and ATP can go negative if stock is reduced below existing commitments (only decide-time is checked).
+- **The commitment flag is not part of the decide idempotency hash**, so a replay after the flag changes returns the original response. Not a ledger risk.
 - **Line edits carry no version check** (last write wins between two preparers of the same draft).
 - The ledger-unchanged property is by construction; an explicit test asserting the ledger row count is unchanged by a decision is still to be added.
