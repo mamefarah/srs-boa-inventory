@@ -25,7 +25,7 @@
 
 v4.0 changes **how stores data is captured and viewed**. It does not change what the authoritative records are. The inventory ledger, business rules, evidence model and security model of v3.1 stay as they are. The change adds two channels on the same server:
 
-1. **Storekeeper app:** an installable web app (a web page the user adds to the phone's home screen) on **personal Android phones**, usable **offline** for the storekeeper's daily capture work. **[D]**
+1. **Storekeeper app:** an installable web app (a web page the user adds to the phone's home screen) on **personal Android phones and iPhones** (as a web app, not a native app), usable **offline** for the storekeeper's daily capture work. **[D]**
 2. **Admin web:** a desktop web system for the **General Service case team** and **Directorate heads**. **[D]**
 
 Other owner decisions recorded here:
@@ -36,6 +36,7 @@ Other owner decisions recorded here:
 | D2 | The installable web app is built on the **existing React code and API**; there is no separate native app. | **[D]** |
 | D3 | **No barcode scanning.** Items are found by typed code, name or recent list. | **[D]** |
 | D4 | Phones are **personal**, not Bureau-issued. | **[D]** |
+| D6 | **iPhones are supported as the web version** (Safari, added to the Home Screen). No native iOS app. | **[D]** |
 | D5 | Hosting is Bureau-controlled (ADR-0012, still Proposed); Firebase sign-in is kept. | **[D]** |
 
 **Scope question for reviewers [V]:** the owner described the purpose as "capturing and recording" stores data. v3.1 covers a full controlled lifecycle (requisition, approval, commitment, issue, transfer, returns, counts, adjustments, period close, disposal). This proposal **keeps the full v3.1 scope and controls**. If the owner intends a smaller capture-only product, that is a different, simpler PRD and should be stated before review.
@@ -58,7 +59,7 @@ Other owner decisions recorded here:
 
 | Channel | Users | Device | Connectivity | Purpose |
 |---|---|---|---|---|
-| Storekeeper app | Storekeepers **[D]** | Personal Android phone **[D]**. iOS not decided **[V]** | Works offline, syncs when online **[D]** | Capture physical events and observations at the store |
+| Storekeeper app | Storekeepers **[D]** | Personal Android phone or iPhone **[D]**; iPhone runs the same web app in Safari, installed to the Home Screen (5.9) | Works offline, syncs when online **[D]** | Capture physical events and observations at the store |
 | Admin web | General Service case team, Directorate heads **[D]**; also system administrators and auditors **[P]** | Desktop or laptop browser | Online | Approvals, review, master data, reports, administration |
 
 Requesters (directorate staff who prepare requisitions) are not named by the owner. **[P]** Admin web. **[V]** Confirm.
@@ -124,7 +125,7 @@ Each workflow is assigned a channel and one **offline class**:
 4. A rejected command is never silently dropped or silently changed; it stays visible with the server's reason. **[P]**
 5. Device time is **evidence, not authority**: the server records both captured time and received time. **[P]**
 6. Closed inventory periods still block ordinary backdated postings. An offline entry synced after a close is handled by the server's period rules. **[P]** (v3.1 §29)
-7. Sync must also work when the app is in the foreground only. Background sync is not available on all phones. **[V]**
+7. Sync must work with the app in the foreground only. Background sync is not available on iPhone and is not relied on on any phone; sync runs when the app is opened or returns to the foreground, when the connection returns while it is open, and on "Sync now". **[P]**; iPhone behaviour **[V]**
 
 ### 5.2 Command lifecycle (what the user sees)
 
@@ -177,6 +178,23 @@ Issuing or dispatching reduces available stock. Offline, the phone cannot know c
 
 An issue or dispatch captured offline has already moved goods. If the server later refuses it (for example the requisition was cancelled, or the period closed), the books and the store now disagree. **[P]** The ledger is not changed until resolved. The item enters **NEEDS REVIEW** and appears in an exception queue on the admin web for the General Service case team. An "unposted physical events" report shows every difference between physical reality and the books. Resolution uses the existing documented correction mechanisms (v3.1 §28). Class B protection (5.7) is meant to keep these cases rare. **[V]** The Bureau must agree who decides and how fast.
 
+### 5.9 iPhone (web version) constraints
+
+iPhones are supported through the same web app. Apple's browser engine on iPhone behaves differently from Android Chrome in ways that affect an offline app. The design choices below are **[P]**; the platform facts must be confirmed on real devices and against current Apple/WebKit documentation before the pilot **[V]**.
+
+| ID | Rule | Reason (to verify) |
+|---|---|---|
+| IOS-1 | The app must be **installed to the Home Screen** (Share, then Add to Home Screen) before field use. An in-browser tab is not a supported offline mode on iPhone. The app detects when it is running in a Safari tab and shows install steps with pictures, in English and Somali. | Browser-tab data on iPhone can be cleared after a period without use; installed apps are treated differently. **[V]** |
+| IOS-2 | No dependence on Background Sync or push notifications. All sync is foreground-triggered (5.1 rule 7). The unsynced counter and a prominent "Sync now" are mandatory. | These features are not available or are limited on iPhone. **[V]** |
+| IOS-3 | The installed app has its own storage and sign-in, separate from the same site opened in Safari. Training and the install screen must say: sign in again inside the installed app, and never capture in a Safari tab. | Storage is not shared between tab and installed app. **[V]** |
+| IOS-4 | Request persistent storage where supported, but treat it as best effort. Safety rests on the unsynced warnings and sign-out blocking (5.6), not on the browser's promise. | Persistence support differs by iOS version. **[V]** |
+| IOS-5 | Sync a day's work before the phone is left unused for long periods; the app shows "oldest unsynced item" age. A configurable warning appears when it exceeds a limit (set under O4). | Reduces exposure to storage clearing after long inactivity. **[P]** |
+| IOS-6 | Sign-in uses a method proven in the installed iPhone app (O9). The current pop-up flow must not be assumed to work. | Pop-ups and cross-site storage are restricted in installed web apps. **[V]** |
+| IOS-7 | One shared codebase and one feature set. Any feature that cannot be made safe on iPhone is disabled on iPhone with a clear message rather than degraded silently. | Avoids two behaviours for the same rule. **[P]** |
+| IOS-8 | Minimum iOS version and a reference iPhone are set at review (O3). Device-specific text entry (Somali and Amharic keyboards) is tested on both platforms (MOB-2). | **[V]** |
+
+All offline acceptance scenarios (section 10) must pass on **both** a reference Android phone and a reference iPhone installed to the Home Screen. A failure on one platform blocks the pilot for that platform only, and the Bureau may pilot Android first.
+
 ## 6. Device and session security (personal phones)
 
 | ID | Requirement | Tag |
@@ -227,7 +245,7 @@ No offline or installable-app code exists today (no manifest, service worker or 
 |---|---|---|
 | Data loss | No acknowledged capture may be lost (acceptance in section 10). | **[P]** |
 | Duplicates | A retried command never posts twice. | **[P]** |
-| Devices | Android Chrome minimum version and a reference low-end phone to be set at review. iOS support not decided; background-sync and storage rules differ there. | **[V]** |
+| Devices | Android Chrome and iPhone Safari (installed to the Home Screen) are both supported **[D]**. Minimum versions and a reference low-end Android phone and a reference iPhone are set at review. Rules specific to iPhone are in 5.9. | **[D]**/**[V]** |
 | Data usage | Light payloads, delta sync, no large assets, because phones are personal and use personal data plans. Targets measured on the reference phone. | **[P]**/**[V]** |
 | Performance | Common screens usable on the reference phone; numeric targets set at review. | **[V]** |
 | Localization | English/Somali, Amharic where required. | **[F]** v3.1 §45 |
@@ -303,7 +321,7 @@ If the owner adopts v4.0, update together: `docs/PRD.md` (new v4.0), `docs/CONTR
 |---|---|---|
 | O1 | Official name, duties and approval authority of the General Service case team and Directorate heads | Bureau / M0 evidence |
 | O2 | Requesters' channel (proposed: admin web) | Owner |
-| O3 | Android minimum version; whether iPhones must be supported | Owner / ICT |
+| O3 | Minimum Android and iOS versions; reference devices. (iPhone support itself is decided: D6.) | Owner / ICT |
 | O4 | Maximum offline age and cache expiry | Owner / Bureau |
 | O5 | Will requisition commitments be enabled? (decides whether offline issue is possible) | Owner / finance |
 | O6 | Who resolves NEEDS REVIEW items, and how quickly | Bureau |
@@ -323,7 +341,7 @@ If the owner adopts v4.0, update together: `docs/PRD.md` (new v4.0), `docs/CONTR
 | Goods moved offline but server rejects | Books differ from reality | Class B protection, exception queue, report (5.7, 5.8) |
 | Storekeepers do not trust or understand status | Re-entry, double work | Clear state labels (5.2); training; field test |
 | Personal data cost and privacy | Staff resistance | BYOD notice, data-light design (O7) |
-| iPhone limitations | Some staff unsupported | Decide O3 early |
+| iPhone web-app limitations (no background sync, separate storage, possible clearing after inactivity) | Lost or late captures on iPhones | 5.9 rules IOS-1 to IOS-8; test on a real iPhone; Android-first pilot allowed |
 | Scope growth from offline | Delayed pilot | Class model (3.3) limits offline to what is safe |
 
 ## Appendix A. Evidence from the repository (as of this draft)
