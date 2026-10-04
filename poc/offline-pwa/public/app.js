@@ -40,6 +40,7 @@ const countSamples = () => tx('samples', 'readonly', (s) => req2p(s.count()));
 // ---------- environment facts ----------
 const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const isStandalone = () => navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+let serverMode = 'unknown';
 let clockSkewMs = null; // server time minus client time, measured at ping
 let swState = 'none';
 
@@ -62,6 +63,7 @@ async function env() {
   e.online = navigator.onLine;
   e.language = navigator.language;
   e.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  e.serverMode = serverMode; // 'node' = real server round trip; 'static-in-worker' = server logic runs in the phone's service worker
   e.clockSkewMsServerMinusClient = clockSkewMs;
   e.displayModeStandaloneMedia = matchMedia('(display-mode: standalone)').matches;
   return e;
@@ -106,9 +108,9 @@ async function api(path, init = {}, extraHeaders = {}) {
 }
 async function measureSkew() {
   try {
-    const t0 = Date.now(); const r = await api('/api/poc/ping'); const t1 = Date.now();
+    const t0 = Date.now(); const r = await api('api/poc/ping'); const t1 = Date.now();
     if (!r.ok) return;
-    const { serverTime } = await r.json();
+    const { serverTime, mode } = await r.json(); serverMode = mode ?? 'unknown';
     clockSkewMs = Date.parse(serverTime) - Math.round((t0 + t1) / 2);
   } catch { /* offline */ }
 }
@@ -148,7 +150,7 @@ async function sync() {
     const headers = $('chk-drop').checked ? { 'x-poc-drop-response': '1' } : {};
     let res;
     try {
-      res = await api('/api/poc/sync', { method: 'POST', body: JSON.stringify({ commands: queued.map(({ clientId, idempotencyKey, type, payload, capturedAt }) => ({ clientId, idempotencyKey, type, payload, capturedAt })) }) }, headers);
+      res = await api('api/poc/sync', { method: 'POST', body: JSON.stringify({ commands: queued.map(({ clientId, idempotencyKey, type, payload, capturedAt }) => ({ clientId, idempotencyKey, type, payload, capturedAt })) }) }, headers);
     } catch (err) {
       for (const c of queued) { c.lastError = 'no reply (network)'; await putCmd(c); }
       return;
@@ -245,7 +247,7 @@ async function init() {
   await ensureMarker();
   if ('serviceWorker' in navigator) {
     try {
-      const reg = await navigator.serviceWorker.register('/sw.js');
+      const reg = await navigator.serviceWorker.register('sw.js');
       const sw = reg.installing ?? reg.waiting ?? reg.active; swState = sw?.state ?? 'registered';
       sw?.addEventListener('statechange', () => { swState = sw.state; renderEnv(); });
       await navigator.serviceWorker.ready; swState = 'activated';
@@ -264,7 +266,7 @@ async function init() {
   $('btn-token').addEventListener('click', () => saveToken().then(renderReport));
   $('btn-copy').addEventListener('click', async () => { try { await navigator.clipboard.writeText($('report').textContent); $('report-state').textContent = 'Copied.'; } catch { $('report-state').textContent = 'Copy failed: open "Show report" and copy manually.'; } });
   $('btn-send').addEventListener('click', async () => {
-    try { const r = await api('/api/poc/report', { method: 'POST', body: JSON.stringify(await buildReport()) }); $('report-state').textContent = r.ok ? 'Report sent.' : `Server said ${r.status}`; }
+    try { const r = await api('api/poc/report', { method: 'POST', body: JSON.stringify(await buildReport()) }); $('report-state').textContent = !r.ok ? `Server said ${r.status}` : serverMode === 'static-in-worker' ? 'Stored on this phone only (static hosting has no server). Use Copy report and paste it to Claude.' : 'Report sent.'; }
     catch { $('report-state').textContent = 'Could not reach the server. Use Copy report.'; }
   });
 

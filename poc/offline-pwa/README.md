@@ -24,9 +24,29 @@ Status: **PoC, test data only.** Not part of the BoA-IMS product, not connected 
 node poc/offline-pwa/server.mjs                 # http://127.0.0.1:8787, in-memory, no auth
 PORT=8799 POC_TOKEN=choose-a-secret node poc/offline-pwa/server.mjs   # optional shared token
 NODE_PATH="$(npm root -g)" node poc/offline-pwa/e2e.mjs   # automated check, needs `playwright` installed globally or locally
+node poc/offline-pwa/build-static.mjs && NODE_PATH="$(npm root -g)" node poc/offline-pwa/e2e.mjs --static   # same checks against the static build, served under a sub-path
 ```
 
 No dependencies are added to the product's `package.json`. If a token is set, open the app once as `https://your-host/#token=choose-a-secret`; it is stored on the phone and removed from the address bar.
+
+## Hosting free on GitHub Pages (static mode)
+
+GitHub Pages serves static files over HTTPS with a trusted certificate, which is what phones need. Pages has no server, so the PoC has a **static mode**: `node poc/offline-pwa/build-static.mjs` adds `static-mode.js`, and the service worker then answers `/api/poc/*` itself, keeping the "server" state in IndexedDB on the phone. It behaves as unreachable whenever the phone has no network.
+
+What static mode proves: installability, offline start, offline queue survival, foreground sync, idempotent retry and rejection handling, storage persistence, keyboards. What it does **not** prove: a real network round trip to a remote server, browser-level automatic re-sending of a dropped request, or anything about real sign-in. Reports cannot be sent anywhere: use **Copy report** and paste it to Claude.
+
+Steps (owner, once):
+1. Merge the PR containing `.github/workflows/poc-pages.yml`.
+2. Repository Settings, Pages, Build and deployment, Source: **GitHub Actions**.
+3. Actions tab, **PoC Pages (manual)**, Run workflow (branch `main`). The run prints the page URL, expected form `https://<owner>.github.io/srs-boa-inventory/`.
+4. Open that URL on the phones and follow the device protocol.
+5. When finished: Settings, Pages, unpublish the site.
+
+Things to know before you do this:
+- **Plan and privacy.** Pages from a **private** repository needs a paid GitHub plan (verify against current GitHub documentation for your account). On most plans the published site is **public on the internet** even if the repository is private. The PoC contains only test data, no secrets and no PRD text, and the workflow publishes only `poc/offline-pwa/dist`, not the product. If your plan does not allow it, use another free static HTTPS host with the same `dist` folder. Do not make the whole repository public for this.
+- Browser storage is per origin, not per path: other sites under `<owner>.github.io` share storage with this one. Database names are prefixed `boa-poc`.
+- The workflow is manual only (`workflow_dispatch`). It never deploys on push or merge.
+- After changing a shell file, bump `CACHE` in `public/sw.js` so phones pick up the update.
 
 ## Putting it on a phone
 
