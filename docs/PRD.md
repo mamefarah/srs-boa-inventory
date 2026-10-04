@@ -174,13 +174,25 @@ The regional baseline supports at least:
 - opening reconciliation.
 - duplicate-opening prevention.
 
+**M4 — Receipt + Inspection**
+- hard-copy document-reference model.
+- receipt/delivery header and lines.
+- pending-inspection custody and inspection outcomes.
+- rejected supplier return.
+- atomic/idempotent posting and reconciliation.
+
+**M5 — Requisition + Approval + Optional Commitment**
+- requisition draft/submit/decide/return/cancel with maker-checker.
+- paper requisition/approval references.
+- optional commitment engine and available-to-promise (no physical ledger movement).
+
 ### 5.2 Next
 
-**M4 — Receipt + Inspection**
+**M6 — Issue + Custody Handoff**
 
 ### 5.3 Remaining
 
-M5 through M16 remain to be implemented in sequence.
+M6 through M16 remain to be implemented in sequence.
 
 ---
 
@@ -843,7 +855,7 @@ Capture:
 
 ---
 
-## 23. Requisition + approval + optional commitment — M5
+## 23. Requisition + approval + optional commitment — M5 COMPLETE
 
 ### 23.1 Requisition
 
@@ -1714,7 +1726,7 @@ Continues in parallel as evidence enrichment and regional-override collection, b
 - pending-inspection/accept/reject mechanics.
 
 ### M5 — Requisition + Approval + Optional Commitment
-**NEXT**
+**COMPLETE**
 - paper requisition/approval references;
 - technical approval workflow;
 - commitment/ATP.

@@ -87,7 +87,8 @@ Required signed source documents remain hard copy for official government filing
 - M2 Item Master/UOM — merged.
 - M3 Opening Balance — merged.
 - M4 Receipt + Inspection — merged (PR #15).
-- M5 Requisition + Approval + Optional Commitment — next.
+- M5 Requisition + Approval + Optional Commitment — merged (PR #19; post-merge fix PR #20).
+- M6 Issue + Custody Handoff — next.
 
 ## Controlled-document precedence
 

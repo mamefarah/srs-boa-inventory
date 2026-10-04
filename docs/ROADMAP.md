@@ -73,7 +73,7 @@ Build:
 
 No legal digital-signature feature. Digital attachment upload is optional and does not block M4.
 
-## M5 — Requisition + Approval + Optional Commitment — NEXT
+## M5 — Requisition + Approval + Optional Commitment — COMPLETE
 
 Build:
 - requisition;
@@ -82,6 +82,8 @@ Build:
 - optional commitment engine;
 - available-to-promise;
 - release/cancel/partial fulfillment.
+
+Delivered in M5: requisition draft/submit/decide/return/cancel, commitment on decision (when enabled) and release on cancellation. Consuming a commitment (`quantity_fulfilled`, partial fulfilment) arrives with the M6 issue posting. See ADR-0010.
 
 Project restrictions are enforced only from controlling project evidence.
 

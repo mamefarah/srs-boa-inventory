@@ -2,7 +2,8 @@
 
 > Working notes for engineers and agents. This file never outranks the controlled documents listed in `docs/CONTROLLED_DOCUMENTS.md`.
 
-**Updated:** 2026-09-27  
+**Updated:** 2026-10-04
+
 **Controlled baseline:** PRD v3.1, adopted on `main` by PR #14.
 
 ## Milestone status
@@ -16,18 +17,16 @@
 | Local developer tooling | MERGED (PR #13) | Windows/local dev helpers present on main |
 | M4 Receipt + inspection | MERGED (PR #15) | Complete |
 | Warehouse-admin directory fix | MERGED (PR #17) | Local dev port fix + `SYSTEM_ADMIN` warehouse-tab lockout fix (INV-029) |
-| **M5 Requisition + approval + optional commitment** | **STARTING** | One milestone branch at a time |
-| M6–M16 | Planned | One milestone branch at a time |
+| M5 Requisition + approval + optional commitment | MERGED (PR #19) | Complete; see ADR-0010 |
+| Post-M5 fix | MERGED (PR #20) | One decision per line (DB + API); committed/ATP on `/api/stock`; migration 0017 |
+| **M6 Issue + custody handoff** | **NEXT** | One milestone branch at a time |
+| M7–M16 | Planned | One milestone branch at a time |
 
 ## Current main baseline
 
-Current `main` baseline for M5 (start new milestone work from this commit):
+Start M6 from updated `main`. At the time of writing, `main` includes PR #19 (M5) and PR #20 (post-M5 fix); the PR #20 merge commit is `533ad1c`. Migrations are numbered `0000`–`0017`; the canonical upgrade path is the committed `drizzle/` set.
 
-`55ccaedcaaf0767ed32c182e874819c17b872304`
-
-This includes PR #14 (PRD v3.1 governance synchronization), M3 PR #12, developer tooling PR #13, PR #16 (post-M3 hardening: audit-attribution RLS, `is_issuable` on `/api/stock`, CORS `PATCH`, `approvalReference` validation alignment), PR #15 (M4 Receipt + Inspection, merged in full including its own REDTEAM fixes), and PR #17 (local dev port pinning + the `SYSTEM_ADMIN` warehouse-directory fix below). Migration `0012_m4_receipts.sql` and `0013_m4_receipt_security.sql` were renumbered to `0013`/`0014` to make room for PR #16's `0012_m3_audit_attribution_hardening.sql`, which merged to `main` first.
-
-## Migrations through M4 branch
+## Migrations on main
 
 | File | Content |
 |---|---|
@@ -46,6 +45,9 @@ This includes PR #14 (PRD v3.1 governance synchronization), M3 PR #12, developer
 | `drizzle/0012_m3_audit_attribution_hardening.sql` | binds `audit_events.actor_user_id` to the RLS session identity (PR #16, post-M3 hardening) |
 | `drizzle/0013_m4_receipts.sql` | receipt/document-reference/supplier-return schema |
 | `drizzle/0014_m4_receipt_security.sql` | M4 permissions/RLS/guards/audit/transitions/posting/reconciliation |
+| `drizzle/0015_m5_requisitions.sql` | requisition, requisition-line and inventory-commitment schema |
+| `drizzle/0016_m5_requisition_security.sql` | M5 permissions/roles, RLS, guards, audit, workflow functions (`boa_requisition_*`), maker-checker, ATP check |
+| `drizzle/0017_m5_decision_integrity_and_atp_read.sql` | exactly-one-decision-per-line enforcement in `boa_requisition_decide`; `READ_STOCK` read access to commitments in warehouse scope |
 
 The staging/AI-Studio migration history is not the canonical upgrade path; canonical migrations above govern.
 
@@ -138,6 +140,10 @@ Current examples:
 | Non-warehouse ledger-leg visibility for IN_TRANSIT/EXTERNAL/contra | M7 |
 | Item aliases/alternate names | future master-data follow-up |
 | M3 browser/mobile verification is not documented as completed in PR #12 | before pilot / re-verify during later end-to-end testing |
+| ATP does not segregate by funding source/project/location (PRD §19.4; needs controlling project evidence) | before enabling commitments for donor-funded stock |
+| Requisition line edits have no optimistic version check (last write wins between two preparers) | M5 follow-up |
+| Deciding re-validates every line's item/location/funding as active, so a requisition containing a since-deactivated item can only be cancelled, not rejected | M5 follow-up |
+| `.env.example` does not list `REQUISITION_COMMITMENT_ENABLED` | M5 follow-up |
 | Optional attachment storage architecture | only when attachment feature is actually required |
 | Hosting/deployment ADR + backup/restore rehearsal | before M16 |
 | Period checks must be retrofitted into earlier posting functions | M11 |
@@ -185,6 +191,22 @@ Found and fixed while bringing a local dev environment up to date and manually c
 - `scripts/dev.ts` pinned the API child's `PORT` to 3000 explicitly; an ambient `PORT` env var was silently overriding it and breaking Vite's hardcoded `/api` proxy target.
 - Added `GET /api/admin/warehouses`, gated on `MANAGE_WAREHOUSE_ACCESS` rather than warehouse scope, returning the Bureau-wide warehouse directory (id/code/name/isActive only). `SYSTEM_ADMIN` can never satisfy `resolveWarehouseScope()` on the operational `GET /api/warehouses` (INV-029; ADR-0004 H2 forbids combining access-administration with `WAREHOUSE_SCOPE_ALL`), which previously left no way for an admin to discover a warehouse id to grant access to. The operational endpoint's scoped behavior is unchanged for every other role.
 
+## M5 completion summary (PR #19, merged)
+
+PR #19 implemented:
+1. requisition header/lines with DRAFT → SUBMITTED → DECIDED and cancellation;
+2. paper requisition (`source_evidence_ref`) and authorization (`approval_reference`) references;
+3. technical approval with database-enforced maker-checker;
+4. optional commitment engine (`REQUISITION_COMMITMENT_ENABLED`, default off) with ATP checked under the shared per-(warehouse, item) advisory lock;
+5. commitment release on cancellation; no `inventory_entries` row is ever written;
+6. idempotent decide endpoint; RLS/grant/direct-write controls; requisition UI.
+
+## Post-M5 fix (PR #20, merged)
+
+Found in the full project audit:
+- `boa_requisition_decide` accepted a decision array repeating a `lineId` (it compared only the distinct count), which double-counted outcome totals and could leave a commitment on a line later set to approved 0. Now enforced in the database function and in the API schema (migration 0017).
+- `GET /api/stock` still reported "commitments not yet computed". It now returns `availability.items` (usable on-hand, committed, available-to-promise per warehouse/item). Migration 0017 lets `READ_STOCK` holders read commitments in warehouse scope; without it a stock-only reader would see an overstated ATP.
+
 ## Next milestone
 
-M5 Requisition + Approval + Optional Commitment starts from updated `main` (`55ccaed...`, see baseline above), on a fresh milestone branch, per `docs/ROADMAP.md`.
+M6 Issue + Custody Handoff starts from updated `main`, on a fresh milestone branch, per `docs/ROADMAP.md`. M6 consumes commitments (`quantity_fulfilled`) and must not subtract a commitment twice (BUSINESS_RULES.md).
