@@ -18,7 +18,11 @@ Production must be separate from development.
 
 Final vendor/region/hosting decisions remain subject to Bureau policy and data-governance review.
 
-## Supabase hosting (proposed — see ADR-0011, not yet accepted)
+## On-premises hosting at the Bureau (proposed — see ADR-0012)
+
+The owner has decided the system will run on a Bureau-owned Windows computer, with Firebase sign-in over the internet and users in the office and other towns. ADR-0012 records the topology (API and PostgreSQL on one machine, PostgreSQL on localhost only, HTTPS reverse proxy on a real domain), the remote-access options, the Windows-specific gaps found in the repository, backup and power requirements, and separation of duties. Nothing has been installed or tested on Windows yet; the open decisions in ADR-0012 must be closed first.
+
+## Supabase hosting (superseded by ADR-0012 — not pursued)
 
 If the Bureau approves Supabase as the PostgreSQL host:
 
