@@ -102,6 +102,14 @@ describe('issue API: access control and scope', () => {
     assert.equal((await post('/api/issues/1/post', 'operator-a', { rowVersion: 1 }, { 'Idempotency-Key': key() })).status, 403);
   });
 
+  it('serves the active custodian list to issue users only', async () => {
+    assert.equal((await request(app).get('/api/issues/custodians')).status, 401);
+    assert.equal((await get('/api/issues/custodians', 'requester')).status, 403);
+    const ok = await get('/api/issues/custodians', OP);
+    assert.equal(ok.status, 200);
+    assert.ok(Array.isArray(ok.body.data));
+  });
+
   it('another warehouse cannot list, read, evidence, cancel or post an issue', async () => {
     const item = await newItemWithStock('10');
     const { requisitionId, lineId } = await decidedRequisition(item, '5');
