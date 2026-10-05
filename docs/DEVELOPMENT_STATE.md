@@ -19,7 +19,7 @@
 | Warehouse-admin directory fix | MERGED (PR #17) | Local dev port fix + `SYSTEM_ADMIN` warehouse-tab lockout fix (INV-029) |
 | M5 Requisition + approval + optional commitment | MERGED (PR #19) | Complete; see ADR-0010 |
 | Post-M5 fix | MERGED (PR #20) | One decision per line (DB + API); committed/ATP on `/api/stock`; migration 0017 |
-| **M6 Issue + custody handoff** | **IN PROGRESS: slice 1 (database layer)** | Migrations 0019/0020, `boa_issue_create/cancel/post`, 20 new tests; API, screens and reports are later slices; see ADR-0016 |
+| **M6 Issue + custody handoff** | **IN PROGRESS: slice 1 (database layer)** | Migrations 0019/0020, `boa_issue_create/cancel/post`, 29 new tests; API, screens and reports are later slices; see ADR-0016 |
 | M7–M16 | Planned | One milestone branch at a time |
 
 ## Current main baseline
@@ -146,6 +146,8 @@ Current examples:
 | Requisition line edits have no optimistic version check (last write wins between two preparers) | M5 follow-up |
 | Deciding re-validates every line's item/location/funding as active, so a requisition containing a since-deactivated item can only be cancelled, not rejected | M5 follow-up |
 | `.env.example` does not list `REQUISITION_COMMITMENT_ENABLED` | M5 follow-up |
+| M3/M4/M5 lock helpers accept a NULL `rowVersion` when called directly in SQL (M6 helper is fixed; API schemas require an integer) | Follow-up fix PR |
+| M6 slice 1 open decisions A1 to A8 (funding substitution, backdating, voucher numbering, durable vs consumable, cost) | ADR-0016 |
 | Optional attachment storage architecture | only when attachment feature is actually required |
 | Hosting/deployment ADR + backup/restore rehearsal | before M16 |
 | Period checks must be retrofitted into earlier posting functions | M11 |

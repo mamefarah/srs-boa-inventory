@@ -196,7 +196,7 @@ A goods issue posts as ONE atomic ledger transaction that moves usable stock fro
 Issuing against an existing commitment consumes it and must not subtract it twice. After any issue, usable physical stock must still cover all other remaining commitments; an issue with no commitment of its own cannot use stock reserved for other requisitions. Issued quantity per requisition line never exceeds the approved quantity minus earlier posted issues.
 
 ## INV-056
-An issue preserves funding source and project. Where the requisition line names a funding source or project, the stock issued must carry the same one (no substitution) until donor/project evidence defines a different rule.
+An issue preserves funding source and project. Where the requisition line names a funding source or project, the stock issued must carry the same one (no substitution), and stock of a funding/project reserved by a commitment cannot be drained by another requisition, until donor/project evidence defines a different rule.
 
 ## INV-057
-A hard-copy issue-voucher reference is required before an issue can be posted, and handing property to INTERNAL_CUSTODY requires a named active custodian. Posted and cancelled issues, their lines and their evidence are immutable; a posted issue is corrected only by reversal (M10).
+A hard-copy issue-voucher reference (document type ISSUE_VOUCHER) is required before an issue can be posted (acknowledgement evidence may be added after posting, never changed), and handing property to INTERNAL_CUSTODY requires a named active custodian. Posted and cancelled issues, their lines and their evidence are immutable; a posted issue is corrected only by reversal (M10).

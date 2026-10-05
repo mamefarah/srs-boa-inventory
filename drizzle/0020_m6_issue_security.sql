@@ -36,6 +36,15 @@ FROM (VALUES
 JOIN roles r ON r.code = m.role_code
 JOIN permissions p ON p.code = m.permission_code;
 
+-- Fail closed if the role grant was silently partial (the INSERT above is an inner join).
+DO $$
+BEGIN
+  IF (SELECT count(*) FROM role_permissions rp JOIN roles r ON r.id = rp.role_id WHERE r.code = 'ISSUE_OPERATOR') <> 7 THEN
+    RAISE EXCEPTION 'migration 0020: ISSUE_OPERATOR did not receive its 7 permissions';
+  END IF;
+END
+$$;
+
 -- Extend the separation-of-duties invariant: access administrators never also hold issue permissions.
 CREATE OR REPLACE FUNCTION boa_enforce_role_separation()
 RETURNS trigger
@@ -144,7 +153,7 @@ DROP POLICY document_references_write ON document_references;
 CREATE POLICY document_references_read ON document_references
   FOR SELECT TO boa_ims_app
   USING (
-    public.boa_can_read_receipt(public.boa_document_warehouse(entity_type, entity_id))
+    (entity_type IN ('RECEIPT', 'SUPPLIER_RETURN') AND public.boa_can_read_receipt(public.boa_document_warehouse(entity_type, entity_id)))
     OR (entity_type = 'ISSUE' AND public.boa_can_read_issue(public.boa_document_warehouse(entity_type, entity_id)))
   );
 CREATE POLICY document_references_write ON document_references
@@ -152,21 +161,25 @@ CREATE POLICY document_references_write ON document_references
   USING (
     public.boa_warehouse_in_scope(public.boa_document_warehouse(entity_type, entity_id))
     AND (
-      public.boa_has_permission('PREPARE_RECEIPTS')
-      OR public.boa_has_permission('RECEIVE_RECEIPTS')
-      OR public.boa_has_permission('INSPECT_RECEIPTS')
-      OR public.boa_has_permission('RETURN_REJECTED_STOCK')
-      OR (entity_type = 'ISSUE' AND public.boa_has_permission('PREPARE_ISSUES'))
+      (entity_type = 'ISSUE' AND public.boa_has_permission('PREPARE_ISSUES'))
+      OR (entity_type <> 'ISSUE' AND (
+        public.boa_has_permission('PREPARE_RECEIPTS')
+        OR public.boa_has_permission('RECEIVE_RECEIPTS')
+        OR public.boa_has_permission('INSPECT_RECEIPTS')
+        OR public.boa_has_permission('RETURN_REJECTED_STOCK')
+      ))
     )
   )
   WITH CHECK (
     public.boa_warehouse_in_scope(public.boa_document_warehouse(entity_type, entity_id))
     AND (
-      public.boa_has_permission('PREPARE_RECEIPTS')
-      OR public.boa_has_permission('RECEIVE_RECEIPTS')
-      OR public.boa_has_permission('INSPECT_RECEIPTS')
-      OR public.boa_has_permission('RETURN_REJECTED_STOCK')
-      OR (entity_type = 'ISSUE' AND public.boa_has_permission('PREPARE_ISSUES'))
+      (entity_type = 'ISSUE' AND public.boa_has_permission('PREPARE_ISSUES'))
+      OR (entity_type <> 'ISSUE' AND (
+        public.boa_has_permission('PREPARE_RECEIPTS')
+        OR public.boa_has_permission('RECEIVE_RECEIPTS')
+        OR public.boa_has_permission('INSPECT_RECEIPTS')
+        OR public.boa_has_permission('RETURN_REJECTED_STOCK')
+      ))
     )
   );
 
@@ -221,9 +234,10 @@ BEGIN
     IF NOT public.boa_has_permission('PREPARE_ISSUES') THEN
       RAISE EXCEPTION 'BOA_NOT_AUTHORISED: PREPARE_ISSUES required' USING ERRCODE = 'BA002';
     END IF;
-    -- Issue evidence may only be added to or changed on a DRAFT issue; it is immutable once posted or cancelled.
-    IF v_status <> 'DRAFT' THEN
-      RAISE EXCEPTION 'BOA_INVALID_STATE: issue evidence is immutable once the issue is posted or cancelled' USING ERRCODE = 'BA014';
+    -- Evidence may be added to a DRAFT or POSTED issue (recipient acknowledgement follows the physical movement,
+    -- PRD 24.1 step 9) but never changed or removed once posted, and never touched on a CANCELLED issue.
+    IF v_status = 'CANCELLED' OR (v_status = 'POSTED' AND TG_OP <> 'INSERT') THEN
+      RAISE EXCEPTION 'BOA_INVALID_STATE: issue evidence cannot change after posting (it can only be added) and is closed once cancelled' USING ERRCODE = 'BA014';
     END IF;
   ELSE
     SELECT status, warehouse_id INTO v_status, v_wh FROM public.supplier_return_headers WHERE id = v_id FOR UPDATE;
@@ -365,11 +379,13 @@ BEGIN
   END IF;
 
   INSERT INTO public.audit_events
-    (action, result, entity_type, entity_id, warehouse_id, actor_user_id, actor_firebase_uid, reason, old_data, new_data)
+    (action, result, entity_type, entity_id, warehouse_id, actor_user_id, actor_firebase_uid, reason, request_id, old_data, new_data)
   VALUES
     (v_action, 'SUCCESS', v_entity_type, v_entity_id, v_wh, v_actor,
-     (SELECT firebase_uid FROM public.users WHERE id = v_actor),
-     current_setting('boa.change_reason', true), v_old, v_new);
+     coalesce((SELECT firebase_uid FROM public.users WHERE id = v_actor), 'db:' || session_user),
+     nullif(current_setting('boa.change_reason', true), ''),
+     nullif(current_setting('boa.request_id', true), ''),
+     v_old, v_new);
   RETURN NULL;
 END;
 $$;
@@ -401,7 +417,7 @@ BEGIN
   IF NOT FOUND OR NOT public.boa_warehouse_in_scope(v_issue.warehouse_id) THEN
     RAISE EXCEPTION 'BOA_NOT_FOUND: issue %', p_issue_id USING ERRCODE = 'BA003';
   END IF;
-  IF v_issue.row_version <> p_row_version THEN
+  IF p_row_version IS NULL OR v_issue.row_version <> p_row_version THEN
     RAISE EXCEPTION 'BOA_STALE_VERSION: issue % was changed by another user', p_issue_id USING ERRCODE = 'BA018';
   END IF;
   FOREACH v_permission IN ARRAY p_permissions
@@ -457,6 +473,7 @@ DECLARE
   v_batch text;
   v_serial text;
   v_notes text;
+  v_custodian_type text;
 BEGIN
   IF v_actor IS NULL OR NOT public.boa_has_permission('PREPARE_ISSUES') THEN
     RAISE EXCEPTION 'BOA_NOT_AUTHORISED: PREPARE_ISSUES required' USING ERRCODE = 'BA002';
@@ -474,6 +491,9 @@ BEGIN
     PERFORM pg_advisory_xact_lock(hashtextextended('issue-create:' || v_actor || ':' || p_client_ref, 0));
     SELECT * INTO v_existing FROM public.issue_headers WHERE created_by_user_id = v_actor AND client_ref = p_client_ref;
     IF FOUND THEN
+      IF v_existing.requisition_id <> p_requisition_id OR NOT public.boa_warehouse_in_scope(v_existing.warehouse_id) THEN
+        RAISE EXCEPTION 'BOA_IDEMPOTENCY_CONFLICT: this client reference belongs to a different document' USING ERRCODE = 'BA028';
+      END IF;
       IF v_existing.create_hash = p_request_hash THEN
         RETURN v_existing;
       END IF;
@@ -491,9 +511,14 @@ BEGIN
     RAISE EXCEPTION 'BOA_ISSUE_INVALID: handing property to internal custody requires a named custodian' USING ERRCODE = 'BA026';
   END IF;
   IF p_custodian_id IS NOT NULL THEN
-    PERFORM 1 FROM public.custodians WHERE id = p_custodian_id AND is_active FOR SHARE;
+    SELECT custodian_type INTO v_custodian_type FROM public.custodians WHERE id = p_custodian_id AND is_active FOR SHARE;
     IF NOT FOUND THEN
       RAISE EXCEPTION 'BOA_ISSUE_INVALID: custodian % is not an active custodian', p_custodian_id USING ERRCODE = 'BA026';
+    END IF;
+    -- Bureau property stays with a Bureau user or directorate; consumed/authorised-use stock goes to nobody or an external party.
+    IF (p_destination_scope = 'INTERNAL_CUSTODY' AND v_custodian_type NOT IN ('USER', 'DIRECTORATE'))
+       OR (p_destination_scope = 'EXTERNAL' AND v_custodian_type <> 'EXTERNAL_PARTY') THEN
+      RAISE EXCEPTION 'BOA_ISSUE_INVALID: a % custodian cannot be used for a % issue', v_custodian_type, p_destination_scope USING ERRCODE = 'BA026';
     END IF;
   END IF;
   IF p_recipient_name IS NULL OR length(btrim(p_recipient_name)) = 0 OR length(p_recipient_name) > 200
@@ -502,7 +527,10 @@ BEGIN
     RAISE EXCEPTION 'BOA_ISSUE_INVALID: recipient name is required and text fields are limited to 200 characters (reason 1000)' USING ERRCODE = 'BA026';
   END IF;
 
-  IF p_lines IS NULL OR jsonb_typeof(p_lines) IS DISTINCT FROM 'array' OR jsonb_array_length(p_lines) NOT BETWEEN 1 AND 100 THEN
+  IF p_lines IS NULL OR jsonb_typeof(p_lines) IS DISTINCT FROM 'array' THEN
+    RAISE EXCEPTION 'BOA_ISSUE_INVALID: lines must be a JSON array of 1 to 100 objects' USING ERRCODE = 'BA026';
+  END IF;
+  IF jsonb_array_length(p_lines) NOT BETWEEN 1 AND 100 THEN
     RAISE EXCEPTION 'BOA_ISSUE_INVALID: lines must be a JSON array of 1 to 100 objects' USING ERRCODE = 'BA026';
   END IF;
   FOR v_el IN SELECT value FROM jsonb_array_elements(p_lines)
@@ -519,9 +547,9 @@ BEGIN
     END LOOP;
     IF coalesce(v_el ->> 'requisitionLineId', '') !~ '^[1-9][0-9]{0,17}$'
        OR coalesce(v_el ->> 'quantity', '') !~ '^(0|[1-9][0-9]{0,13})(\.[0-9]{1,6})?$'
-       OR coalesce(v_el ->> 'warehouseLocationId', '1') !~ '^[1-9][0-9]{0,9}$'
-       OR coalesce(v_el ->> 'fundingSourceId', '1') !~ '^[1-9][0-9]{0,9}$'
-       OR coalesce(v_el ->> 'projectId', '1') !~ '^[1-9][0-9]{0,9}$'
+       OR coalesce(v_el ->> 'warehouseLocationId', '1') !~ '^[1-9][0-9]{0,8}$'
+       OR coalesce(v_el ->> 'fundingSourceId', '1') !~ '^[1-9][0-9]{0,8}$'
+       OR coalesce(v_el ->> 'projectId', '1') !~ '^[1-9][0-9]{0,8}$'
        OR coalesce(v_el ->> 'expiryDate', '2000-01-01') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
        OR length(coalesce(v_el ->> 'batchRef', 'x')) NOT BETWEEN 1 AND 100
        OR length(coalesce(v_el ->> 'serialRef', 'x')) NOT BETWEEN 1 AND 100
@@ -555,7 +583,7 @@ BEGIN
       RAISE EXCEPTION 'BOA_INACTIVE_REFERENCE: item % is inactive', v_item.item_code USING ERRCODE = 'BA011';
     END IF;
     SELECT decimal_places INTO v_dp FROM public.uoms WHERE id = v_rl.base_uom_id FOR SHARE;
-    IF v_qty <> round(v_qty, v_dp) THEN
+    IF v_dp IS NULL OR v_qty <> round(v_qty, v_dp) THEN
       RAISE EXCEPTION 'BOA_QUANTITY_PRECISION: line % quantity exceeds % decimal places allowed for the item base UOM (never rounded)', v_ord, v_dp
         USING ERRCODE = 'BA008';
     END IF;
@@ -574,8 +602,8 @@ BEGIN
 
     IF v_location IS NOT NULL THEN
       SELECT * INTO v_loc FROM public.warehouse_locations WHERE id = v_location FOR SHARE;
-      IF NOT FOUND OR v_loc.warehouse_id <> v_req.warehouse_id THEN
-        RAISE EXCEPTION 'BOA_ISSUE_INVALID: line % location is not in the requisition warehouse', v_ord USING ERRCODE = 'BA026';
+      IF NOT FOUND OR v_loc.warehouse_id <> v_req.warehouse_id OR NOT v_loc.is_active THEN
+        RAISE EXCEPTION 'BOA_ISSUE_INVALID: line % location is not an active location of the requisition warehouse', v_ord USING ERRCODE = 'BA026';
       END IF;
     END IF;
     -- Funding/project is preserved, never substituted: where the requisition line names a source or project, the
@@ -591,6 +619,19 @@ BEGIN
       IF v_project IS NULL THEN v_project := v_rl.project_id; END IF;
       IF v_project <> v_rl.project_id THEN
         RAISE EXCEPTION 'BOA_ISSUE_INVALID: line % project differs from the requisition line (no substitution)', v_ord USING ERRCODE = 'BA026';
+      END IF;
+    END IF;
+
+    IF v_funding IS NOT NULL THEN
+      PERFORM 1 FROM public.funding_sources WHERE id = v_funding AND is_active FOR SHARE;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'BOA_ISSUE_INVALID: line % funding source is unknown or inactive', v_ord USING ERRCODE = 'BA026';
+      END IF;
+    END IF;
+    IF v_project IS NOT NULL THEN
+      PERFORM 1 FROM public.projects WHERE id = v_project AND is_active FOR SHARE;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'BOA_ISSUE_INVALID: line % project is unknown or inactive', v_ord USING ERRCODE = 'BA026';
       END IF;
     END IF;
 
@@ -668,11 +709,13 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.issue_lines WHERE issue_id = p_issue_id) THEN
     RAISE EXCEPTION 'BOA_ISSUE_INVALID: the issue has no lines' USING ERRCODE = 'BA026';
   END IF;
-  IF p_idempotency_key IS NULL OR p_request_hash IS NULL THEN
-    RAISE EXCEPTION 'BOA_ISSUE_INVALID: an idempotency key and request hash are required to post' USING ERRCODE = 'BA026';
+  IF p_idempotency_key IS NULL OR p_idempotency_key !~ '^[A-Za-z0-9._:-]{8,100}$'
+     OR p_request_hash IS NULL OR p_request_hash !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION 'BOA_ISSUE_INVALID: a valid idempotency key (8-100 safe characters) and a 64-hex request hash are required to post' USING ERRCODE = 'BA026';
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM public.document_references WHERE entity_type = 'ISSUE' AND entity_id = p_issue_id::text) THEN
-    RAISE EXCEPTION 'BOA_ISSUE_INVALID: a hard-copy issue-voucher reference is required before posting' USING ERRCODE = 'BA026';
+  IF NOT EXISTS (SELECT 1 FROM public.document_references
+                  WHERE entity_type = 'ISSUE' AND entity_id = p_issue_id::text AND document_type = 'ISSUE_VOUCHER') THEN
+    RAISE EXCEPTION 'BOA_ISSUE_INVALID: a hard-copy issue-voucher reference (document type ISSUE_VOUCHER) is required before posting' USING ERRCODE = 'BA026';
   END IF;
 
   -- Serial then (warehouse,item) advisory locks, always in ascending item order (ADR-0007).
@@ -712,6 +755,14 @@ BEGIN
   IF EXISTS (SELECT 1 FROM public.issue_lines il JOIN public.items i ON i.id = il.item_id
               WHERE il.issue_id = p_issue_id AND NOT i.is_active) THEN
     RAISE EXCEPTION 'BOA_INACTIVE_REFERENCE: an item on this issue is inactive' USING ERRCODE = 'BA011';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.issue_lines il JOIN public.warehouse_locations wl ON wl.id = il.warehouse_location_id
+              WHERE il.issue_id = p_issue_id AND NOT wl.is_active)
+     OR EXISTS (SELECT 1 FROM public.issue_lines il JOIN public.funding_sources f ON f.id = il.funding_source_id
+                 WHERE il.issue_id = p_issue_id AND NOT f.is_active)
+     OR EXISTS (SELECT 1 FROM public.issue_lines il JOIN public.projects pr ON pr.id = il.project_id
+                 WHERE il.issue_id = p_issue_id AND NOT pr.is_active) THEN
+    RAISE EXCEPTION 'BOA_ISSUE_INVALID: a location, funding source or project on this issue is no longer active' USING ERRCODE = 'BA026';
   END IF;
 
   -- (a) Approved quantity and active commitment remaining, aggregated per requisition line.
@@ -787,16 +838,60 @@ BEGIN
     END IF;
   END LOOP;
 
-  INSERT INTO public.inventory_transactions
-    (transaction_type, business_document_type, business_document_id, effective_at, posted_by_user_id,
-     idempotency_key, request_hash, approval_reference, reason, policy_context, source_system_ref)
-  VALUES
-    ('ISSUE', 'ISSUE', p_issue_id::text, p_effective_at, v_actor, p_idempotency_key, p_request_hash,
-     v_req.approval_reference, coalesce(v_issue.reason, 'Stock issued against requisition ' || v_req.id),
-     jsonb_build_object('issueId', p_issue_id, 'requisitionId', v_req.id, 'destinationScope', v_issue.destination_scope,
-                        'custodianId', v_issue.custodian_id, 'evidenceModel', 'HARD_COPY_REFERENCE'),
-     v_req.source_evidence_ref)
-  RETURNING id INTO v_tx;
+  -- (d) Commitments pinned to a funding source or project are reservations of THAT stock. Item-level availability in
+  -- (c) is not enough: stock of the pinned funding/project must still cover the pinned commitments that remain after
+  -- this issue, otherwise a second requisition could drain a donor-restricted bucket and starve a committed one.
+  FOR v_bucket IN
+    SELECT il.item_id, il.funding_source_id, il.project_id, sum(il.quantity) AS qty
+      FROM public.issue_lines il
+     WHERE il.issue_id = p_issue_id AND (il.funding_source_id IS NOT NULL OR il.project_id IS NOT NULL)
+     GROUP BY il.item_id, il.funding_source_id, il.project_id
+     ORDER BY il.item_id, il.funding_source_id NULLS FIRST, il.project_id NULLS FIRST
+  LOOP
+    SELECT coalesce(sum(e.signed_quantity), 0) INTO v_physical
+      FROM public.inventory_entries e
+     WHERE e.item_id = v_bucket.item_id AND e.warehouse_id = v_issue.warehouse_id
+       AND e.custody_scope = 'WAREHOUSE' AND e.condition_code = 'USABLE'
+       AND e.funding_source_id IS NOT DISTINCT FROM v_bucket.funding_source_id
+       AND e.project_id IS NOT DISTINCT FROM v_bucket.project_id;
+    SELECT coalesce(sum(c.quantity_base_uom - c.quantity_fulfilled), 0) INTO v_committed
+      FROM public.inventory_commitments c
+     WHERE c.item_id = v_bucket.item_id AND c.warehouse_id = v_issue.warehouse_id AND c.status IN ('ACTIVE', 'PARTIALLY_FULFILLED')
+       AND c.funding_source_id IS NOT DISTINCT FROM v_bucket.funding_source_id
+       AND c.project_id IS NOT DISTINCT FROM v_bucket.project_id;
+    SELECT coalesce(sum(t.qty), 0) INTO v_consumed
+      FROM (
+        SELECT sum(il.quantity) AS qty
+          FROM public.issue_lines il
+          JOIN public.inventory_commitments c ON c.requisition_line_id = il.requisition_line_id
+                                              AND c.status IN ('ACTIVE', 'PARTIALLY_FULFILLED')
+                                              AND c.funding_source_id IS NOT DISTINCT FROM v_bucket.funding_source_id
+                                              AND c.project_id IS NOT DISTINCT FROM v_bucket.project_id
+         WHERE il.issue_id = p_issue_id AND il.item_id = v_bucket.item_id
+           AND il.funding_source_id IS NOT DISTINCT FROM v_bucket.funding_source_id
+           AND il.project_id IS NOT DISTINCT FROM v_bucket.project_id
+         GROUP BY il.requisition_line_id
+      ) t;
+    IF v_physical - v_bucket.qty < v_committed - v_consumed THEN
+      RAISE EXCEPTION 'BOA_ISSUE_INSUFFICIENT_STOCK: issuing would use stock of item % reserved for another requisition of the same funding source/project',
+        v_bucket.item_id USING ERRCODE = 'BA027';
+    END IF;
+  END LOOP;
+
+  BEGIN
+    INSERT INTO public.inventory_transactions
+      (transaction_type, business_document_type, business_document_id, effective_at, posted_by_user_id,
+       idempotency_key, request_hash, approval_reference, reason, policy_context, source_system_ref)
+    VALUES
+      ('ISSUE', 'ISSUE', p_issue_id::text, p_effective_at, v_actor, p_idempotency_key, p_request_hash,
+       v_req.approval_reference, coalesce(v_issue.reason, 'Stock issued against requisition ' || v_req.id),
+       jsonb_build_object('issueId', p_issue_id, 'requisitionId', v_req.id, 'destinationScope', v_issue.destination_scope,
+                          'custodianId', v_issue.custodian_id, 'evidenceModel', 'HARD_COPY_REFERENCE'),
+       v_req.source_evidence_ref)
+    RETURNING id INTO v_tx;
+  EXCEPTION WHEN unique_violation THEN
+    RAISE EXCEPTION 'BOA_IDEMPOTENCY_CONFLICT: this idempotency key was already used by another posting' USING ERRCODE = 'BA028';
+  END;
 
   INSERT INTO public.inventory_entries
     (transaction_id, line_no, business_document_line_ref, item_id, signed_quantity, base_uom_id, custody_scope,
@@ -831,10 +926,57 @@ BEGIN
 END;
 $$;
 
+-- A requisition with posted issues cannot be cancelled: the posted ledger entries would hang off a cancelled
+-- document. Remaining approved quantity is closed by a separate short-close action in a later slice. DRAFT issues of a
+-- cancelled requisition stay DRAFT and cannot be posted; they are cancelled by their preparer.
+CREATE OR REPLACE FUNCTION boa_requisition_cancel(p_requisition_id integer, p_row_version integer, p_reason text)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_req public.requisitions :=
+    public.boa_requisition_lock(p_requisition_id, p_row_version, ARRAY['PREPARE_REQUISITIONS', 'APPROVE_REQUISITIONS']);
+  v_version integer;
+  v_actor integer := public.boa_current_user_id();
+BEGIN
+  IF v_req.status NOT IN ('DRAFT', 'SUBMITTED', 'DECIDED') THEN
+    RAISE EXCEPTION 'BOA_INVALID_STATE: a % requisition cannot be cancelled', v_req.status USING ERRCODE = 'BA014';
+  END IF;
+  IF v_req.status <> 'DRAFT' AND NOT public.boa_has_permission('APPROVE_REQUISITIONS') THEN
+    RAISE EXCEPTION 'BOA_NOT_AUTHORISED: cancelling a submitted or decided requisition requires APPROVE_REQUISITIONS' USING ERRCODE = 'BA002';
+  END IF;
+  IF NOT public.boa_reason_ok(p_reason) THEN
+    RAISE EXCEPTION 'BOA_REASON_REQUIRED: cancelling a requisition requires a reason' USING ERRCODE = 'BA007';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.issue_headers WHERE requisition_id = p_requisition_id AND status = 'POSTED') THEN
+    RAISE EXCEPTION 'BOA_INVALID_STATE: stock has already been issued against this requisition; it cannot be cancelled' USING ERRCODE = 'BA014';
+  END IF;
+  PERFORM set_config('boa.change_reason', btrim(p_reason), true);
+
+  -- Releasing any still-active commitment is part of the same atomic cancellation.
+  UPDATE public.inventory_commitments c
+     SET status = 'RELEASED', released_by_user_id = v_actor, released_at = now(),
+         release_reason = 'Requisition ' || p_requisition_id || ' cancelled: ' || btrim(p_reason)
+    FROM public.requisition_lines l
+   WHERE c.requisition_line_id = l.id AND l.requisition_id = p_requisition_id AND c.status IN ('ACTIVE', 'PARTIALLY_FULFILLED');
+
+  UPDATE public.requisitions
+     SET status = 'CANCELLED', cancelled_by_user_id = v_actor, cancelled_at = now()
+   WHERE id = p_requisition_id
+  RETURNING row_version INTO v_version;
+  RETURN v_version;
+END;
+$$;
+
 -- ---------------------------------------------------------------------------
 -- 7. Public execution hardening: only create/cancel/post and the read helper are callable by the app role.
 -- ---------------------------------------------------------------------------
 REVOKE ALL ON FUNCTION
+  boa_guard_issue_header(),
+  boa_guard_issue_line(),
+  boa_audit_issue(),
   boa_can_read_issue(integer),
   boa_issue_lock(integer, integer, text[]),
   boa_issue_create(integer, text, integer, text, text, text, text, text, text, jsonb),

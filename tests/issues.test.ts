@@ -20,6 +20,7 @@ let uomId: number;
 let categoryId: number;
 let locationId: number;
 let custodianId: number;
+let userCustodianId: number;
 let fundingId: number;
 let n = 0;
 
@@ -51,6 +52,7 @@ before(async () => {
   categoryId = (await admin.query(`SELECT id FROM item_categories WHERE code = 'TST-CAT'`)).rows[0].id;
   locationId = (await admin.query(`SELECT l.id FROM warehouse_locations l WHERE l.warehouse_id = $1 AND l.code = 'BIN-1'`, [fx.warehouseA])).rows[0].id;
   custodianId = (await admin.query(`INSERT INTO custodians (custodian_type, display_name) VALUES ('EXTERNAL_PARTY', 'Issue test custodian') RETURNING id`)).rows[0].id;
+  userCustodianId = (await admin.query(`INSERT INTO custodians (custodian_type, user_id, display_name) VALUES ('USER', $1, 'Issue test user custodian') RETURNING id`, [fx.userIds['requester']])).rows[0].id;
   fundingId = (await admin.query(`INSERT INTO funding_sources (code, name) VALUES ('ISS-F1', 'Issue funding one') RETURNING id`)).rows[0].id;
 });
 after(async () => {
@@ -182,7 +184,7 @@ describe('M6 issue: create validation', () => {
     const l = await admin.query(`SELECT item_id, base_uom_id, quantity FROM issue_lines WHERE issue_id = $1`, [issue.id]);
     assert.equal(l.rows[0].item_id, item);
     assert.equal(l.rows[0].base_uom_id, uomId);
-    const a = await admin.query(`SELECT action FROM audit_events WHERE entity_type IN ('issue_headers','issue_lines') AND (entity_id = $1 OR entity_id IN (SELECT id::text FROM issue_lines WHERE issue_id = $2)) ORDER BY id`, [String(issue.id), issue.id]);
+    const a = await admin.query(`SELECT action FROM audit_events WHERE (entity_type = 'issue_headers' AND entity_id = $1) OR (entity_type = 'issue_lines' AND entity_id IN (SELECT id::text FROM issue_lines WHERE issue_id = $2)) ORDER BY id`, [String(issue.id), issue.id]);
     assert.deepEqual(a.rows.map((x) => x.action).sort(), ['ISSUE_CREATED', 'ISSUE_LINE_ADDED']);
   });
 
@@ -340,12 +342,12 @@ describe('M6 issue: posting', () => {
     const item = await newItem('serial');
     await stock(item, '1', { serial: 'SN-CUSTODY-1', funding: undefined });
     const { requisitionId, lineId } = await approved(item, '1', '1');
-    const i = await createIssue('issue-op-a', requisitionId, [line(lineId, '1', { serialRef: 'SN-CUSTODY-1' })], { dest: 'INTERNAL_CUSTODY', custodian: custodianId });
+    const i = await createIssue('issue-op-a', requisitionId, [line(lineId, '1', { serialRef: 'SN-CUSTODY-1' })], { dest: 'INTERNAL_CUSTODY', custodian: userCustodianId });
     await voucher('issue-op-a', i.id);
     const tx = await postIssue('issue-op-a', i);
     const e = await admin.query(`SELECT custody_scope, custodian_id, serial_ref, signed_quantity FROM inventory_entries WHERE transaction_id = $1 ORDER BY line_no`, [tx]);
     assert.equal(e.rows[1].custody_scope, 'INTERNAL_CUSTODY');
-    assert.equal(e.rows[1].custodian_id, custodianId);
+    assert.equal(e.rows[1].custodian_id, userCustodianId);
     assert.equal(e.rows[1].serial_ref, 'SN-CUSTODY-1');
     // The same serial cannot be issued twice: it is no longer in the warehouse.
     const r2 = await approved(item, '1', '1', { commit: false });
@@ -404,7 +406,11 @@ describe('M6 issue: immutability, cancellation and concurrency', () => {
     await assert.rejects(admin.query(`UPDATE issue_lines SET quantity = 1 WHERE issue_id = $1`, [issue.id]), /never changed or deleted/);
     await assert.rejects(admin.query(`DELETE FROM issue_headers WHERE id = $1`, [issue.id]), /never deleted/);
     await assert.rejects(admin.query(`UPDATE inventory_entries SET signed_quantity = 9 WHERE transaction_id = $1`, [tx]));
-    assert.equal(await sqlstate(call('issue-op-a', (t) => t.execute(sql`INSERT INTO document_references (entity_type, entity_id, document_type, document_number, document_date) VALUES ('ISSUE', ${String(issue.id)}, 'ISSUE_VOUCHER', 'SIV-LATE-1', '2026-10-04')`))), 'BA014', 'no new evidence after posting');
+    // Recipient acknowledgement follows the physical movement (PRD 24.1 step 9): evidence may be ADDED after posting...
+    await call('issue-op-a', (t) => t.execute(sql`INSERT INTO document_references (entity_type, entity_id, document_type, document_number, document_date, recipient_name) VALUES ('ISSUE', ${String(issue.id)}, 'RECIPIENT_ACKNOWLEDGEMENT', 'ACK-LATE-1', '2026-10-05', 'Recipient One')`));
+    // ...but never changed or removed.
+    assert.equal(await sqlstate(call('issue-op-a', (t) => t.execute(sql`UPDATE document_references SET remarks = 'edited' WHERE entity_type = 'ISSUE' AND entity_id = ${String(issue.id)}`))), 'BA014');
+    assert.equal(await sqlstate(call('issue-op-a', (t) => t.execute(sql`DELETE FROM document_references WHERE entity_type = 'ISSUE' AND entity_id = ${String(issue.id)}`))), 'BA014');
     const cancel = await sqlstate(call('issue-op-a', (t) => t.execute(sql`SELECT boa_issue_cancel(${issue.id}, 2, 'Trying to cancel a posted issue')`)));
     assert.equal(cancel, 'BA014');
   });
@@ -450,5 +456,148 @@ describe('M6 issue: immutability, cancellation and concurrency', () => {
     assert.equal(own.c, 1);
     assert.equal(other.c, 0);
     assert.equal(otherLines.c, 0);
+  });
+});
+
+describe('M6 issue: review hardening', () => {
+  it('post requires a well-formed idempotency key and request hash, a version, and reports key reuse as a conflict', async () => {
+    const item = await newItem();
+    await stock(item, '30');
+    const a = await approved(item, '10', '10', { commit: false });
+    const b = await approved(item, '10', '10', { commit: false });
+    const ia = await createIssue('issue-op-a', a.requisitionId, [line(a.lineId, '5')]);
+    const ib = await createIssue('issue-op-a', b.requisitionId, [line(b.lineId, '5')]);
+    await voucher('issue-op-a', ia.id);
+    await voucher('issue-op-a', ib.id);
+    assert.equal(await sqlstate(postIssue('issue-op-a', ia, { k: 'x' })), 'BA026', 'short key');
+    assert.equal(await sqlstate(call('issue-op-a', (t) => t.execute(sql`SELECT boa_issue_post(${ia.id}, ${ia.row_version}, now(), ${key()}, 'not-a-hash')`))), 'BA026', 'bad hash');
+    assert.equal(await sqlstate(call('issue-op-a', (t) => t.execute(sql`SELECT boa_issue_post(${ia.id}, NULL, now(), ${key()}, ${HASH})`))), 'BA018', 'NULL version is stale, not a bypass');
+    assert.equal(await sqlstate(call('issue-op-a', (t) => t.execute(sql`SELECT boa_issue_cancel(${ia.id}, NULL, 'A valid reason here')`))), 'BA018');
+    const shared = key();
+    await postIssue('issue-op-a', ia, { k: shared });
+    assert.equal(await sqlstate(postIssue('issue-op-a', ib, { k: shared })), 'BA028', 'key already used by another posting');
+    assert.equal(await onHand(item), 25);
+  });
+
+  it('effective time must lie between the requisition decision and now', async () => {
+    const item = await newItem();
+    await stock(item, '10');
+    const { requisitionId, lineId } = await approved(item, '5', '5');
+    const issue = await createIssue('issue-op-a', requisitionId, [line(lineId, '1')]);
+    await voucher('issue-op-a', issue.id);
+    const at = (expr: ReturnType<typeof sql>) =>
+      call('issue-op-a', (t) => t.execute(sql`SELECT boa_issue_post(${issue.id}, ${issue.row_version}, ${expr}, ${key()}, ${HASH})`));
+    assert.equal(await sqlstate(at(sql`now() + interval '1 hour'`)), 'BA026', 'future');
+    assert.equal(await sqlstate(at(sql`now() - interval '10 years'`)), 'BA026', 'before the decision');
+  });
+
+  it('a requisition with a posted issue cannot be cancelled', async () => {
+    const item = await newItem();
+    await stock(item, '20');
+    const { requisitionId, lineId } = await approved(item, '10', '10');
+    const issue = await createIssue('issue-op-a', requisitionId, [line(lineId, '4')]);
+    await voucher('issue-op-a', issue.id);
+    await postIssue('issue-op-a', issue);
+    const rv = (await admin.query(`SELECT row_version FROM requisitions WHERE id = $1`, [requisitionId])).rows[0].row_version;
+    assert.equal(await sqlstate(call('req-approver-a', (t) => t.execute(sql`SELECT boa_requisition_cancel(${requisitionId}, ${rv}, 'Trying to cancel after issue')`))), 'BA014');
+    assert.equal((await commitment(lineId)).status, 'PARTIALLY_FULFILLED', 'the commitment is not released');
+  });
+
+  it('custodian type must fit the destination, and an inactive custodian blocks posting', async () => {
+    const item = await newItem();
+    await stock(item, '20');
+    const { requisitionId, lineId } = await approved(item, '10', '10', { commit: false });
+    assert.equal(await sqlstate(createIssue('issue-op-a', requisitionId, [line(lineId, '1')], { dest: 'INTERNAL_CUSTODY', custodian: custodianId })), 'BA026', 'internal custody to an external party');
+    assert.equal(await sqlstate(createIssue('issue-op-a', requisitionId, [line(lineId, '1')], { dest: 'EXTERNAL', custodian: userCustodianId })), 'BA026', 'external issue to a Bureau user custodian');
+    const ok = await createIssue('issue-op-a', requisitionId, [line(lineId, '1')], { dest: 'INTERNAL_CUSTODY', custodian: userCustodianId });
+    await voucher('issue-op-a', ok.id);
+    await admin.query(`UPDATE custodians SET is_active = false WHERE id = $1`, [userCustodianId]);
+    try {
+      assert.equal(await sqlstate(postIssue('issue-op-a', ok)), 'BA026');
+    } finally {
+      await admin.query(`UPDATE custodians SET is_active = true WHERE id = $1`, [userCustodianId]);
+    }
+  });
+
+  it('a voucher of another document type does not satisfy the voucher requirement', async () => {
+    const item = await newItem();
+    await stock(item, '10');
+    const { requisitionId, lineId } = await approved(item, '5', '5');
+    const issue = await createIssue('issue-op-a', requisitionId, [line(lineId, '1')]);
+    await call('issue-op-a', (t) => t.execute(sql`INSERT INTO document_references (entity_type, entity_id, document_type, document_number, document_date) VALUES ('ISSUE', ${String(issue.id)}, 'DELIVERY_NOTE', 'DN-OTHER-1', '2026-10-04')`));
+    assert.equal(await sqlstate(postIssue('issue-op-a', issue)), 'BA026');
+  });
+
+  it('issue evidence is invisible to and unwritable by receipt-only users and other warehouses', async () => {
+    const item = await newItem();
+    await stock(item, '10');
+    const { requisitionId, lineId } = await approved(item, '5', '5');
+    const issue = await createIssue('issue-op-a', requisitionId, [line(lineId, '1')]);
+    await voucher('issue-op-a', issue.id);
+    const rows = (uid: string) => call(uid, async (t) => (await t.execute(sql`SELECT count(*)::int AS c FROM document_references WHERE entity_type = 'ISSUE' AND entity_id = ${String(issue.id)}`)).rows[0] as Row);
+    assert.equal((await rows('issue-op-a')).c, 1);
+    assert.equal((await rows('receipt-op-a')).c, 0, 'a receipt operator in the same warehouse sees no issue vouchers');
+    assert.equal((await rows('issue-op-b')).c, 0, 'another warehouse sees nothing');
+    const attempt = (uid: string) => sqlstate(call(uid, (t) => t.execute(sql`INSERT INTO document_references (entity_type, entity_id, document_type, document_number, document_date) VALUES ('ISSUE', ${String(issue.id)}, 'ISSUE_VOUCHER', 'SIV-INJECT-1', '2026-10-04')`)));
+    assert.notEqual(await attempt('receipt-op-a'), 'OK');
+    assert.notEqual(await attempt('issue-op-b'), 'OK');
+    assert.notEqual(await attempt('requester'), 'OK');
+  });
+
+  it('a committed funded reservation cannot be starved by another requisition drawing the same funded stock', async () => {
+    const item = await newItem();
+    await stock(item, '10', { funding: fundingId });
+    await stock(item, '10');
+    const a = await approved(item, '10', '10', { line: { fundingSourceId: fundingId } });
+    const b = await approved(item, '10', '10', { commit: false });
+    const ib = await createIssue('issue-op-a', b.requisitionId, [line(b.lineId, '10', { fundingSourceId: fundingId })]);
+    await voucher('issue-op-a', ib.id);
+    assert.equal(await sqlstate(postIssue('issue-op-a', ib)), 'BA027', 'must not drain the funded bucket reserved for requisition A');
+    const ia = await createIssue('issue-op-a', a.requisitionId, [line(a.lineId, '10')]);
+    await voucher('issue-op-a', ia.id);
+    await postIssue('issue-op-a', ia);
+    assert.equal((await commitment(a.lineId)).status, 'FULFILLED');
+    // The unfunded stock is still available to the other requisition.
+    const ib2 = await createIssue('issue-op-a', b.requisitionId, [line(b.lineId, '10')]);
+    await voucher('issue-op-a', ib2.id);
+    await postIssue('issue-op-a', ib2);
+    assert.equal(await onHand(item), 0);
+  });
+
+  it('oversized ids are a clean validation error, and non-USABLE stock cannot be issued', async () => {
+    const item = await newItem();
+    await stock(item, '10');
+    const { requisitionId, lineId } = await approved(item, '5', '5', { commit: false });
+    assert.equal(await sqlstate(createIssue('issue-op-a', requisitionId, [line(lineId, '1', { warehouseLocationId: '9999999999' })])), 'BA026');
+    assert.equal(await sqlstate(createIssue('issue-op-a', requisitionId, [line(lineId, '1', { fundingSourceId: '9999999999' })])), 'BA026');
+    const damaged = await newItem();
+    const tx = await admin.query(
+      `INSERT INTO inventory_transactions (transaction_type, effective_at, posted_by_user_id, idempotency_key, request_hash, reason, business_document_type, business_document_id)
+       SELECT 'TEST_FIXTURE', now(), id, $1, repeat('b', 64), 'Damaged stock only', 'TEST_DOC', $1 FROM users WHERE firebase_uid = 'admin-1' RETURNING id`,
+      [key()],
+    );
+    await admin.query(
+      `INSERT INTO inventory_entries (transaction_id, line_no, item_id, signed_quantity, base_uom_id, custody_scope, warehouse_id, warehouse_location_id, condition_code)
+       VALUES ($1, 1, $2, 5, $3, 'WAREHOUSE', $4, $5, 'DAMAGED'), ($1, 2, $2, -5, $3, 'OPENING_BALANCE_CONTRA', NULL, NULL, 'DAMAGED')`,
+      [tx.rows[0].id, damaged, uomId, fx.warehouseA, locationId],
+    );
+    const r = await approved(damaged, '5', '5', { commit: false });
+    const issue = await createIssue('issue-op-a', r.requisitionId, [line(r.lineId, '1')]);
+    await voucher('issue-op-a', issue.id);
+    assert.equal(await sqlstate(postIssue('issue-op-a', issue)), 'BA027', 'damaged stock is a condition, not issuable usable stock');
+  });
+
+  it('trigger functions are not executable by PUBLIC, and administrators cannot hold issue permissions', async () => {
+    const r = await admin.query(
+      `SELECT p.proname, EXISTS (SELECT 1 FROM aclexplode(p.proacl) a WHERE a.grantee = 0 AND a.privilege_type = 'EXECUTE') AS public_execute
+         FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.proname IN ('boa_guard_issue_header', 'boa_guard_issue_line', 'boa_audit_issue')`,
+    );
+    assert.equal(r.rowCount, 3);
+    for (const f of r.rows) assert.equal(f.public_execute, false, `${f.proname} must not be executable by PUBLIC`);
+    const sod = await sqlstate(
+      admin.query(`INSERT INTO user_roles (user_id, role_id) SELECT $1, id FROM roles WHERE code = 'ISSUE_OPERATOR'`, [fx.userIds['admin-1']]),
+    );
+    assert.equal(sod, 'BA004');
   });
 });
