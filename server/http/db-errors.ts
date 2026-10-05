@@ -29,6 +29,7 @@ const UNIQUE_CODES: Record<string, [string, string]> = {
   supplier_return_lines_receipt_line_unique: ['DUPLICATE_RETURN_LINE', 'This receipt line is already included in this supplier return'],
   item_categories_code_unique: ['DUPLICATE_CATEGORY_CODE', 'A category with this code already exists'],
   issue_headers_client_ref_unique: ['DUPLICATE_CLIENT_REF', 'This client reference was already used for another issue'],
+  transfers_client_ref_unique: ['DUPLICATE_CLIENT_REF', 'This client reference was already used for another transfer'],
 };
 
 /** Check-constraint names → client messages (constraint names are never echoed). */
@@ -83,6 +84,16 @@ const CHECK_MESSAGES: Record<string, string> = {
   requisition_lines_requested_quantity_finite: 'Requested quantity must be a finite number',
   requisition_lines_requested_quantity_scale: 'Requested quantity may have at most 6 decimal places and is never rounded',
   requisition_lines_requested_quantity_range: 'Requested quantity is too large',
+  transfers_purpose_not_blank: 'Purpose is required',
+  transfers_distinct_warehouses: 'The destination must be a different warehouse from the source',
+  transfer_lines_quantity_positive: 'Transfer quantity must be greater than zero',
+  transfer_lines_quantity_finite: 'Transfer quantity must be a finite number',
+  transfer_lines_quantity_scale: 'Transfer quantity may have at most 6 decimal places and is never rounded',
+  transfer_lines_quantity_range: 'Transfer quantity is too large',
+  transfer_receipt_lines_quantity_positive: 'Received quantity must be greater than zero',
+  transfer_receipt_lines_quantity_finite: 'Received quantity must be a finite number',
+  transfer_receipt_lines_quantity_scale: 'Received quantity may have at most 6 decimal places and is never rounded',
+  transfer_receipt_lines_quantity_range: 'Received quantity is too large',
   requisition_lines_approved_quantity_valid: 'Approved quantity must be between zero and the requested quantity',
 };
 
@@ -123,7 +134,7 @@ export function mapDbError(err: unknown): unknown {
     case 'BA014':
       return new HttpError(409, 'INVALID_STATE', controlMessage(e, 'The record is not in a state that allows this action'));
     case 'BA015':
-      return new HttpError(403, 'MAKER_CHECKER', 'The approver may not be anyone who prepared, edited or submitted the batch');
+      return new HttpError(403, 'MAKER_CHECKER', 'Segregation of duties: the approver may not be anyone who prepared, edited or submitted the document, and a transfer receiver may not be the person who dispatched it');
     case 'BA016':
       return new HttpError(409, 'DUPLICATE_OPENING', controlMessage(e, 'An opening balance already exists for this item and warehouse'));
     case 'BA017':
@@ -148,6 +159,10 @@ export function mapDbError(err: unknown): unknown {
       return new HttpError(422, 'ISSUE_INVALID', controlMessage(e, 'The issue is not valid for this action'));
     case 'BA027':
       return new HttpError(409, 'ISSUE_STOCK_CONFLICT', controlMessage(e, 'The issue exceeds the approved quantity, the commitment or the usable stock available'));
+    case 'BA029':
+      return new HttpError(422, 'TRANSFER_INVALID', controlMessage(e, 'The transfer is not valid for this action'));
+    case 'BA030':
+      return new HttpError(409, 'TRANSFER_STOCK_CONFLICT', controlMessage(e, 'The transfer exceeds the stock available to reserve or dispatch'));
     case 'BA028':
       return new HttpError(409, 'IDEMPOTENCY_CONFLICT', controlMessage(e, 'This reference was already used with different content'));
     case '23505': {
