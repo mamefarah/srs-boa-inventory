@@ -188,3 +188,15 @@ Every physical event the server cannot apply is visible in the exception queue a
 
 ## INV-M08
 A deactivated user's queued commands are refused at sync.
+
+## INV-054
+A goods issue posts as ONE atomic ledger transaction that moves usable stock from WAREHOUSE custody to EXTERNAL (consumed or authorised use) or INTERNAL_CUSTODY (Bureau property handed to a named custodian), and consumes any active requisition commitment in the same transaction. Custody, condition and commitment stay separate: the issued stock keeps its USABLE condition.
+
+## INV-055
+Issuing against an existing commitment consumes it and must not subtract it twice. After any issue, usable physical stock must still cover all other remaining commitments; an issue with no commitment of its own cannot use stock reserved for other requisitions. Issued quantity per requisition line never exceeds the approved quantity minus earlier posted issues.
+
+## INV-056
+An issue preserves funding source and project. Where the requisition line names a funding source or project, the stock issued must carry the same one (no substitution) until donor/project evidence defines a different rule.
+
+## INV-057
+A hard-copy issue-voucher reference is required before an issue can be posted, and handing property to INTERNAL_CUSTODY requires a named active custodian. Posted and cancelled issues, their lines and their evidence are immutable; a posted issue is corrected only by reversal (M10).

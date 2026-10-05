@@ -134,6 +134,20 @@
       "when": 1791142871559,
       "tag": "0018_m5_decide_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791158688507,
+      "tag": "0019_m6_issues",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1791158692236,
+      "tag": "0020_m6_issue_security",
+      "breakpoints": true
     }
   ]
 }

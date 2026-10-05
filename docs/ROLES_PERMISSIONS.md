@@ -36,6 +36,16 @@ System capabilities, not official job titles or paper signatory authority:
 
 Enforced in the database: the decider may not be the person who prepared or submitted the requisition, and an identity holding access-administration permissions may not also hold these operational permissions (extension of the M3/M4 separation-of-duties rule). `READ_STOCK` holders may additionally read commitments inside their warehouse scope so stock views show committed and available-to-promise quantities correctly. See ADR-0010.
 
+## Implemented technical capabilities (M6 issues, slice 1)
+
+System capabilities, not official job titles or paper signatory authority:
+
+- `READ_ISSUES` — read issues, lines and issue-voucher references within warehouse scope.
+- `PREPARE_ISSUES` — create and cancel DRAFT issues against decided requisitions and add voucher references.
+- `POST_ISSUES` — post a DRAFT issue as a ledger transaction (role: `ISSUE_OPERATOR`, which also reads requisitions, stock, items and warehouses). No approval authority.
+
+Enforced in the database: the application role has `SELECT` only on issue tables; the three `boa_issue_*` functions check the permission and the warehouse scope. An identity holding access-administration permissions may not also hold these (INV-029). Whether the issuer must differ from the requester or decider is **not** required by the controlled documents and is an open policy question (ADR-0016 A2). See ADR-0016.
+
 ## Permission model
 
 Permission = role + action + warehouse scope + transaction scope + authority limit.

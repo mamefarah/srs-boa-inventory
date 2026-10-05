@@ -685,7 +685,7 @@ export const documentReferences = pgTable(
     createdAt: tstz('created_at').notNull().defaultNow(),
   },
   (t) => [
-    check('document_references_entity_type_valid', sql`${t.entityType} IN ('RECEIPT', 'SUPPLIER_RETURN')`),
+    check('document_references_entity_type_valid', sql`${t.entityType} IN ('RECEIPT', 'SUPPLIER_RETURN', 'ISSUE')`),
     check('document_references_entity_id_not_blank', sql`length(btrim(${t.entityId})) > 0`),
     check('document_references_document_type_not_blank', sql`length(btrim(${t.documentType})) > 0`),
     check('document_references_document_number_not_blank', sql`length(btrim(${t.documentNumber})) > 0`),
@@ -1105,5 +1105,106 @@ export const auditEvents = pgTable(
     index('audit_events_occurred_at_idx').on(t.occurredAt),
     index('audit_events_warehouse_idx').on(t.warehouseId),
     index('audit_events_actor_idx').on(t.actorUserId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// M6 goods issue + custody handoff (PRD §24, ADR-0016). Issue documents are written only by
+// the SECURITY DEFINER functions boa_issue_create / boa_issue_cancel / boa_issue_post
+// (migration 0020); the application role has SELECT only.
+// ---------------------------------------------------------------------------
+export const issueHeaders = pgTable(
+  'issue_headers',
+  {
+    id: id(),
+    warehouseId: integer('warehouse_id')
+      .notNull()
+      .references(() => warehouses.id, { onDelete: 'restrict' }),
+    requisitionId: integer('requisition_id')
+      .notNull()
+      .references(() => requisitions.id, { onDelete: 'restrict' }),
+    // Client-generated reference so a retried create returns the original document (PRD v4.0 API-1).
+    clientRef: text('client_ref'),
+    createHash: text('create_hash'),
+    // EXTERNAL = consumable/authorised use leaves Bureau logistics inventory; INTERNAL_CUSTODY = Bureau
+    // property handed to a named custodian (PRD §24.3-24.4).
+    destinationScope: text('destination_scope').notNull(),
+    custodianId: integer('custodian_id').references(() => custodians.id, { onDelete: 'restrict' }),
+    recipientName: text('recipient_name').notNull(),
+    recipientUnit: text('recipient_unit'),
+    handoverLocation: text('handover_location'),
+    reason: text('reason'),
+    status: text('status').notNull().default('DRAFT'),
+    createdByUserId: integer('created_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+    updatedAt: tstz('updated_at').notNull().defaultNow(),
+    rowVersion: integer('row_version').notNull().default(1),
+    postedByUserId: integer('posted_by_user_id').references(() => users.id, { onDelete: 'restrict' }),
+    postedAt: tstz('posted_at'),
+    effectiveAt: tstz('effective_at'),
+    transactionId: uuid('transaction_id').references(() => inventoryTransactions.id, { onDelete: 'restrict' }),
+    cancelledByUserId: integer('cancelled_by_user_id').references(() => users.id, { onDelete: 'restrict' }),
+    cancelledAt: tstz('cancelled_at'),
+    cancelReason: text('cancel_reason'),
+  },
+  (t) => [
+    check('issue_headers_status_valid', sql`${t.status} IN ('DRAFT', 'POSTED', 'CANCELLED')`),
+    check('issue_headers_destination_valid', sql`${t.destinationScope} IN ('EXTERNAL', 'INTERNAL_CUSTODY')`),
+    check('issue_headers_recipient_not_blank', sql`length(btrim(${t.recipientName})) > 0`),
+    // Bureau property handed over must name a custodian (PRD §24.4).
+    check('issue_headers_custody_requires_custodian', sql`${t.destinationScope} <> 'INTERNAL_CUSTODY' OR ${t.custodianId} IS NOT NULL`),
+    check(
+      'issue_headers_posted_fields',
+      sql`${t.status} <> 'POSTED' OR (${t.postedByUserId} IS NOT NULL AND ${t.postedAt} IS NOT NULL AND ${t.effectiveAt} IS NOT NULL AND ${t.transactionId} IS NOT NULL)`,
+    ),
+    check(
+      'issue_headers_cancelled_fields',
+      sql`${t.status} <> 'CANCELLED' OR (${t.cancelledByUserId} IS NOT NULL AND ${t.cancelledAt} IS NOT NULL AND length(btrim(coalesce(${t.cancelReason}, ''))) > 0)`,
+    ),
+    check('issue_headers_client_ref_pair', sql`(${t.clientRef} IS NULL) = (${t.createHash} IS NULL)`),
+    unique('issue_headers_transaction_unique').on(t.transactionId),
+    unique('issue_headers_client_ref_unique').on(t.createdByUserId, t.clientRef),
+    index('issue_headers_warehouse_status_idx').on(t.warehouseId, t.status),
+    index('issue_headers_requisition_idx').on(t.requisitionId),
+  ],
+);
+
+export const issueLines = pgTable(
+  'issue_lines',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    issueId: integer('issue_id')
+      .notNull()
+      .references(() => issueHeaders.id, { onDelete: 'restrict' }),
+    lineNo: integer('line_no').notNull(),
+    requisitionLineId: bigint('requisition_line_id', { mode: 'number' })
+      .notNull()
+      .references(() => requisitionLines.id, { onDelete: 'restrict' }),
+    itemId: integer('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'restrict' }),
+    baseUomId: integer('base_uom_id')
+      .notNull()
+      .references(() => uoms.id, { onDelete: 'restrict' }),
+    quantity: numeric('quantity').notNull(),
+    warehouseLocationId: integer('warehouse_location_id').references(() => warehouseLocations.id, { onDelete: 'restrict' }),
+    batchRef: text('batch_ref'),
+    expiryDate: date('expiry_date', { mode: 'string' }),
+    serialRef: text('serial_ref'),
+    fundingSourceId: integer('funding_source_id').references(() => fundingSources.id, { onDelete: 'restrict' }),
+    projectId: integer('project_id').references(() => projects.id, { onDelete: 'restrict' }),
+    notes: text('notes'),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    unique('issue_lines_line_per_issue').on(t.issueId, t.lineNo),
+    check('issue_lines_quantity_positive', sql`${t.quantity} > 0`),
+    check('issue_lines_quantity_finite', sql`${t.quantity} < 'Infinity'::numeric`),
+    check('issue_lines_quantity_scale', sql`scale(${t.quantity}) <= 6`),
+    check('issue_lines_quantity_range', sql`${t.quantity} < 100000000000000`),
+    index('issue_lines_requisition_line_idx').on(t.requisitionLineId),
+    index('issue_lines_item_idx').on(t.itemId),
   ],
 );
