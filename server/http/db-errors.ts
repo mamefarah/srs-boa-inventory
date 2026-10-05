@@ -165,6 +165,12 @@ export function mapDbError(err: unknown): unknown {
       return new HttpError(409, 'TRANSFER_STOCK_CONFLICT', controlMessage(e, 'The transfer exceeds the stock available to reserve or dispatch'));
     case 'BA028':
       return new HttpError(409, 'IDEMPOTENCY_CONFLICT', controlMessage(e, 'This reference was already used with different content'));
+    // Values PostgreSQL cannot store (integer overflow, a date or time out of range, NUL in text) are client errors.
+    case '22003':
+    case '22008':
+    case '22021':
+    case '22P05':
+      return new HttpError(400, 'INVALID_VALUE', 'A value is out of range or contains characters that cannot be stored');
     case '23505': {
       const known = e.constraint ? UNIQUE_CODES[e.constraint] : undefined;
       return known ? new HttpError(409, known[0], known[1]) : new HttpError(409, 'DUPLICATE', 'A record with these values already exists');

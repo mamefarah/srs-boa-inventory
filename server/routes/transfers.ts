@@ -22,7 +22,7 @@ import {
 import { mapDbError } from '../http/db-errors.ts';
 import { HttpError } from '../http/errors.ts';
 import { idParam, limitParam, offsetParam, reasonField } from '../http/validation.ts';
-import { claimIdempotencyKey, completeIdempotencyKey, IDEMPOTENCY_KEY_RE, requestHash } from '../idempotency/idempotency.ts';
+import { claimIdempotencyKey, completeIdempotencyKey, postingIdempotencyKey, requestHash } from '../idempotency/idempotency.ts';
 import type { RouteDeps } from './deps.ts';
 
 /**
@@ -35,10 +35,13 @@ import type { RouteDeps } from './deps.ts';
 const TRANSFER_STATUSES = ['DRAFT', 'SUBMITTED', 'APPROVED', 'IN_TRANSIT', 'DISCREPANCY', 'RECEIVED', 'CANCELLED'] as const;
 const positiveInt = z.number().int().positive().max(2_147_483_647);
 const lineRefInt = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
-const rowVersion = z.number().int().positive();
+// PostgreSQL cannot store NUL in text and has no year 0: refuse both here so the client gets a 400, not a 500.
+const noNul = (v: string) => !v.includes('\u0000');
+const rowVersion = z.number().int().positive().max(2_147_483_647);
 const optionalText = (max: number) =>
-  z.string().trim().max(max).nullable().optional().transform((v) => (v === undefined ? undefined : v ? v : null));
-const requiredText = (max: number) => z.string().trim().min(1).max(max);
+  z.string().refine(noNul, 'text must not contain NUL characters').pipe(z.string().trim().max(max)).nullable().optional().transform((v) => (v === undefined ? undefined : v ? v : null));
+const requiredText = (max: number) => z.string().refine(noNul, 'text must not contain NUL characters').pipe(z.string().trim().min(1).max(max));
+const refText = (max: number) => z.string().refine(noNul, 'text must not contain NUL characters').pipe(z.string().trim().min(1).max(max));
 const quantityString = z
   .string()
   .trim()
@@ -47,11 +50,12 @@ const quantityString = z
 const isoDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD')
-  .refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) && new Date(`${v}T00:00:00Z`).toISOString().startsWith(v), 'invalid date');
+  .refine((v) => !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) && new Date(`${v}T00:00:00Z`).toISOString().startsWith(v) && !v.startsWith('0000'), 'invalid date');
 const effectiveAt = z
   .string()
   .datetime({ offset: true, message: 'effectiveAt must be an ISO 8601 date-time with a time zone' })
-  .transform((v) => new Date(v));
+  .transform((v) => new Date(v))
+  .refine((d) => d.getUTCFullYear() >= 1 && d.getUTCFullYear() <= 9999, 'effectiveAt is out of range');
 const clientRef = z.string().regex(/^[A-Za-z0-9._:-]{8,100}$/, 'clientRef must be 8-100 characters of A-Z a-z 0-9 . _ : -');
 
 const createLine = z
@@ -59,9 +63,9 @@ const createLine = z
     itemId: positiveInt,
     quantity: quantityString,
     sourceLocationId: positiveInt.nullable().optional(),
-    batchRef: z.string().trim().min(1).max(100).nullable().optional(),
+    batchRef: refText(100).nullable().optional(),
     expiryDate: isoDate.nullable().optional(),
-    serialRef: z.string().trim().min(1).max(100).nullable().optional(),
+    serialRef: refText(100).nullable().optional(),
     fundingSourceId: positiveInt.nullable().optional(),
     projectId: positiveInt.nullable().optional(),
     notes: optionalText(500),
@@ -126,15 +130,6 @@ const READ_ANY = [
   PERMISSIONS.RECEIVE_TRANSFERS,
 ] as const;
 
-/** The database accepts 8-100 safe characters for a ledger key; the idempotency layer accepts up to 200. */
-function postingKey(raw: string | undefined): string {
-  const key = raw ?? '';
-  if (!IDEMPOTENCY_KEY_RE.test(key) || key.length > 100) {
-    throw new HttpError(400, 'IDEMPOTENCY_KEY_REQUIRED', 'An Idempotency-Key header (16-100 characters of A-Z, a-z, 0-9, _ - : .) is required');
-  }
-  return key;
-}
-
 export function transferRoutes({ db, logger, authenticated }: RouteDeps) {
   const router = Router();
   const canRead = requireAnyPermission(db, logger, READ_ANY);
@@ -155,6 +150,13 @@ export function transferRoutes({ db, logger, authenticated }: RouteDeps) {
 
   const idOf = (params: unknown) => z.object({ id: idParam }).parse(params).id;
   const notFound = () => new HttpError(404, 'NOT_FOUND', 'Transfer not found');
+
+  // A replay never runs the database function, so its warehouse-scope check is repeated here: a user who has lost
+  // access to the transfer's warehouses no longer receives the stored result (row-level security hides the row).
+  async function assertTransferReadable(tx: Tx, id: number) {
+    const [row] = await tx.select({ id: transfers.id }).from(transfers).where(eq(transfers.id, id));
+    if (!row) throw notFound();
+  }
 
   const sourceWh = alias(warehouses, 'source_wh');
   const destinationWh = alias(warehouses, 'destination_wh');
@@ -455,7 +457,7 @@ export function transferRoutes({ db, logger, authenticated }: RouteDeps) {
     try {
       const id = idOf(req.params);
       const b = dispatchBody.parse(req.body);
-      const key = postingKey(req.get('Idempotency-Key'));
+      const key = postingIdempotencyKey(req.get('Idempotency-Key'));
       const principal = principalOf(res);
       const hash = requestHash({
         operation: 'TRANSFER_DISPATCH',
@@ -471,7 +473,10 @@ export function transferRoutes({ db, logger, authenticated }: RouteDeps) {
       });
       const out = await run(res, async (tx) => {
         const claim = await claimIdempotencyKey(tx, { idempotencyKey: key, operationType: 'TRANSFER_DISPATCH', actorUserId: principal.userId, requestHash: hash });
-        if (claim.outcome === 'REPLAY') return { replayed: true as const, summary: claim.responseSummary };
+        if (claim.outcome === 'REPLAY') {
+          await assertTransferReadable(tx, id);
+          return { replayed: true as const, summary: claim.responseSummary };
+        }
         if (claim.outcome === 'CONFLICT') {
           throw new HttpError(409, 'IDEMPOTENCY_KEY_CONFLICT', 'This Idempotency-Key was already used for a different request');
         }
@@ -502,7 +507,7 @@ export function transferRoutes({ db, logger, authenticated }: RouteDeps) {
     try {
       const id = idOf(req.params);
       const b = receiveBody.parse(req.body);
-      const key = postingKey(req.get('Idempotency-Key'));
+      const key = postingIdempotencyKey(req.get('Idempotency-Key'));
       const principal = principalOf(res);
       const lines = b.lines.map((l) => ({
         transferLineId: l.transferLineId,
@@ -524,7 +529,10 @@ export function transferRoutes({ db, logger, authenticated }: RouteDeps) {
       });
       const out = await run(res, async (tx) => {
         const claim = await claimIdempotencyKey(tx, { idempotencyKey: key, operationType: 'TRANSFER_RECEIVE', actorUserId: principal.userId, requestHash: hash });
-        if (claim.outcome === 'REPLAY') return { replayed: true as const, summary: claim.responseSummary };
+        if (claim.outcome === 'REPLAY') {
+          await assertTransferReadable(tx, id);
+          return { replayed: true as const, summary: claim.responseSummary };
+        }
         if (claim.outcome === 'CONFLICT') {
           throw new HttpError(409, 'IDEMPOTENCY_KEY_CONFLICT', 'This Idempotency-Key was already used for a different request');
         }

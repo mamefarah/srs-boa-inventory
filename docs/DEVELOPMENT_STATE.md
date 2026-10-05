@@ -20,7 +20,7 @@
 | M5 Requisition + approval + optional commitment | MERGED (PR #19) | Complete; see ADR-0010 |
 | Post-M5 fix | MERGED (PR #20) | One decision per line (DB + API); committed/ATP on `/api/stock`; migration 0017 |
 | **M6 Issue + custody handoff** | **IN PROGRESS: slices 1-4 (database layer, HTTP API, admin screens, stock card/FEFO/pending-ack reads)** | Migrations 0019/0020, `boa_issue_*`, `/api/issues`, 40 new tests; mobile storekeeper screens and further reports are later; see ADR-0016 |
-| **M7 Warehouse transfer** | **IN PROGRESS: slices 1-2 (database layer: request, approval, reservation, dispatch, receipt)** | Migrations 0021-0024, `boa_transfer_*`, `TRANSFER` commitments, IN_TRANSIT ledger legs, 75 new tests; API, screens, discrepancy resolution are later slices; see ADR-0017 |
+| **M7 Warehouse transfer** | **IN PROGRESS: slices 1-3 (database layer, HTTP API)** | Migrations 0021-0024, `boa_transfer_*`, `TRANSFER` commitments, IN_TRANSIT ledger legs, `/api/transfers`, about 100 new tests; screens, reports, discrepancy resolution are later slices; see ADR-0017 |
 | M8–M16 | Planned | One milestone branch at a time |
 
 ## Current main baseline

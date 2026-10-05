@@ -51,7 +51,7 @@ async function newItemWithStock(qty: string): Promise<number> {
   const item = (
     await admin.query(
       `INSERT INTO items (item_code, name, category_id, base_uom_id, asset_control_type) VALUES ($1, $2, $3, $4, 'SUPPLY') RETURNING id`,
-      [`TAPI-I${n}`, `Transfer API test item ${n}`, categoryId, uomId],
+      [`TAPI-${randomUUID().slice(0, 8).toUpperCase()}-${n}`, `Transfer API test item ${n}`, categoryId, uomId],
     )
   ).rows[0].id;
   const tx = (
@@ -153,6 +153,7 @@ describe('transfer API: lifecycle and ledger effect', () => {
 
     const inTransit = await get(`/api/transfers/${t.id}`, RECEIVER);
     assert.equal(inTransit.body.data.status, 'IN_TRANSIT');
+    assert.equal(inTransit.body.data.lines[0].reservationStatus, null, 'the destination does not see the source warehouse reservation');
     assert.equal(inTransit.body.data.lines[0].dispatchedQuantity, '10');
     assert.equal(inTransit.body.data.lines[0].unmatchedQuantity, '10');
     assert.equal(inTransit.body.data.transporterName, 'Hassan Transport');
@@ -270,18 +271,105 @@ describe('transfer API: idempotent dispatch and receive', () => {
     assert.equal(fresh.status, 409);
   });
 
-  it('a key reused with different content, by another transfer, or by another actor is refused', async () => {
-    const item = await newItemWithStock('20');
+  it('a key reused with different content, by another transfer, by another actor or by another operation is refused', async () => {
+    const item = await newItemWithStock('30');
     const a = await approvedTransfer(item, '2');
     const b = await approvedTransfer(item, '2');
     const k = key();
-    assert.equal((await post(`/api/transfers/${a.id}/dispatch`, DISPATCHER, dispatchBody(a.rowVersion, { dispatchNoteRef: 'DN-ORIGINAL' }), { 'Idempotency-Key': k })).status, 201);
-    const changed = await post(`/api/transfers/${a.id}/dispatch`, DISPATCHER, dispatchBody(a.rowVersion, { dispatchNoteRef: 'DN-CHANGED' }), { 'Idempotency-Key': k });
-    assert.equal(changed.status, 409);
-    assert.equal(changed.body.error.code, 'IDEMPOTENCY_KEY_CONFLICT');
-    assert.equal((await post(`/api/transfers/${b.id}/dispatch`, DISPATCHER, dispatchBody(b.rowVersion), { 'Idempotency-Key': k })).status, 409, 'another transfer');
-    assert.equal((await post(`/api/transfers/${b.id}/dispatch`, 'transfer-both-ab', dispatchBody(b.rowVersion), { 'Idempotency-Key': k })).status, 409, 'another actor');
+    // One fixed body per transfer, so the ONLY thing that differs in each retry below is the property under test.
+    const bodyA = dispatchBody(a.rowVersion, { dispatchNoteRef: 'DN-ORIGINAL' });
+    assert.equal((await post(`/api/transfers/${a.id}/dispatch`, DISPATCHER, bodyA, { 'Idempotency-Key': k })).status, 201);
+    const conflict = (r: request.Response) => {
+      assert.equal(r.status, 409, JSON.stringify(r.body));
+      assert.equal(r.body.error.code, 'IDEMPOTENCY_KEY_CONFLICT');
+    };
+    conflict(await post(`/api/transfers/${a.id}/dispatch`, DISPATCHER, { ...bodyA, dispatchNoteRef: 'DN-CHANGED' }, { 'Idempotency-Key': k }));
+    // Same key, same row version and note on a DIFFERENT transfer: only the transfer id differs in the hash.
+    conflict(await post(`/api/transfers/${b.id}/dispatch`, DISPATCHER, { ...bodyA, rowVersion: a.rowVersion }, { 'Idempotency-Key': k }));
+    // Same key and the SAME body and transfer, but another dispatcher in the source warehouse: only the actor differs.
+    conflict(await post(`/api/transfers/${a.id}/dispatch`, 'transfer-both-ab', bodyA, { 'Idempotency-Key': k }));
+    // The same key on a different operation (receive) is refused as well.
+    const v = (await get(`/api/transfers/${a.id}`, RECEIVER)).body.data.rowVersion as number;
+    conflict(await post(`/api/transfers/${a.id}/receive`, RECEIVER, receiveBody(v, a.lineId, '2'), { 'Idempotency-Key': k }));
     assert.equal(await movements(b.id), 0);
+    assert.equal(await movements(a.id), 1);
+  });
+
+  it('receive keys are bound to their content, transfer and actor too', async () => {
+    const item = await newItemWithStock('30');
+    const a = await approvedTransfer(item, '4');
+    const b = await approvedTransfer(item, '4');
+    for (const t of [a, b]) await post(`/api/transfers/${t.id}/dispatch`, DISPATCHER, dispatchBody(t.rowVersion), { 'Idempotency-Key': key() });
+    const va = (await get(`/api/transfers/${a.id}`, RECEIVER)).body.data.rowVersion as number;
+    const vb = (await get(`/api/transfers/${b.id}`, RECEIVER)).body.data.rowVersion as number;
+    const k = key();
+    const body = receiveBody(va, a.lineId, '2', { receivingDocumentRef: 'GRN-FIXED-1' });
+    assert.equal((await post(`/api/transfers/${a.id}/receive`, RECEIVER, body, { 'Idempotency-Key': k })).status, 201);
+    for (const r of [
+      await post(`/api/transfers/${a.id}/receive`, RECEIVER, { ...body, receiverName: 'Someone Else' }, { 'Idempotency-Key': k }),
+      await post(`/api/transfers/${b.id}/receive`, RECEIVER, receiveBody(vb, b.lineId, '2', { receivingDocumentRef: 'GRN-FIXED-1' }), { 'Idempotency-Key': k }),
+      await post(`/api/transfers/${a.id}/receive`, 'transfer-both-ab', body, { 'Idempotency-Key': k }),
+    ]) {
+      assert.equal(r.status, 409, JSON.stringify(r.body));
+      assert.equal(r.body.error.code, 'IDEMPOTENCY_KEY_CONFLICT');
+    }
+    assert.equal(await sum(item, 'WAREHOUSE', fx.warehouseB), 2, 'received once');
+  });
+
+  it('a failed attempt does not burn the key: the same key succeeds once the cause is fixed', async () => {
+    const item = await newItemWithStock('10');
+    const t = await approvedTransfer(item, '10');
+    // Stock disappears after approval (fixture removal), so the dispatch is refused with a stock conflict.
+    const tx = (await admin.query(
+      `INSERT INTO inventory_transactions (transaction_type, effective_at, posted_by_user_id, idempotency_key, request_hash, reason, business_document_type, business_document_id)
+       SELECT 'TEST_FIXTURE', now() - interval '30 minutes', id, $1, repeat('b', 64), 'stock lost', 'TEST_DOC', $1 FROM users WHERE firebase_uid = 'admin-1' RETURNING id`, [key()])).rows[0].id;
+    await admin.query(
+      `INSERT INTO inventory_entries (transaction_id, line_no, item_id, signed_quantity, base_uom_id, custody_scope, warehouse_id, warehouse_location_id, condition_code)
+       VALUES ($1, 1, $2, -4, $3, 'WAREHOUSE', $4, $5, 'USABLE'), ($1, 2, $2, 4, $3, 'OPENING_BALANCE_CONTRA', NULL, NULL, 'USABLE')`,
+      [tx, item, uomId, fx.warehouseA, locationId],
+    );
+    const k = key();
+    const body = dispatchBody(t.rowVersion);
+    const refused = await post(`/api/transfers/${t.id}/dispatch`, DISPATCHER, body, { 'Idempotency-Key': k });
+    assert.equal(refused.status, 409, JSON.stringify(refused.body));
+    assert.equal(refused.body.error.code, 'TRANSFER_STOCK_CONFLICT');
+    assert.equal((await admin.query(`SELECT count(*)::int AS c FROM idempotency_records WHERE idempotency_key = $1`, [k])).rows[0].c, 0, 'the claim rolled back with the failed posting');
+    assert.equal(await movements(t.id), 0);
+    // The stock is restored; the very same request with the very same key now succeeds.
+    const back = (await admin.query(
+      `INSERT INTO inventory_transactions (transaction_type, effective_at, posted_by_user_id, idempotency_key, request_hash, reason, business_document_type, business_document_id)
+       SELECT 'TEST_FIXTURE', now() - interval '20 minutes', id, $1, repeat('b', 64), 'stock restored', 'TEST_DOC', $1 FROM users WHERE firebase_uid = 'admin-1' RETURNING id`, [key()])).rows[0].id;
+    await admin.query(
+      `INSERT INTO inventory_entries (transaction_id, line_no, item_id, signed_quantity, base_uom_id, custody_scope, warehouse_id, warehouse_location_id, condition_code)
+       VALUES ($1, 1, $2, 4, $3, 'WAREHOUSE', $4, $5, 'USABLE'), ($1, 2, $2, -4, $3, 'OPENING_BALANCE_CONTRA', NULL, NULL, 'USABLE')`,
+      [back, item, uomId, fx.warehouseA, locationId],
+    );
+    const ok = await post(`/api/transfers/${t.id}/dispatch`, DISPATCHER, body, { 'Idempotency-Key': k });
+    assert.equal(ok.status, 201, JSON.stringify(ok.body));
+    assert.equal(await movements(t.id), 1);
+  });
+
+  it('parallel dispatches with different keys post once and the rest are refused cleanly (never a 500)', async () => {
+    const item = await newItemWithStock('20');
+    const t = await approvedTransfer(item, '4');
+    const body = dispatchBody(t.rowVersion);
+    const rs = await Promise.all([1, 2, 3].map(() => post(`/api/transfers/${t.id}/dispatch`, DISPATCHER, body, { 'Idempotency-Key': key() })));
+    assert.equal(rs.filter((r) => r.status === 201).length, 1, rs.map((r) => r.status).join(','));
+    for (const r of rs.filter((x) => x.status !== 201)) {
+      assert.equal(r.status, 409, JSON.stringify(r.body));
+      assert.ok(['STALE_VERSION', 'INVALID_STATE'].includes(r.body.error.code), r.body.error.code);
+    }
+    assert.equal(await movements(t.id), 1);
+  });
+
+  it('a dispatcher assigned only to the destination warehouse cannot dispatch and leaves no idempotency record', async () => {
+    const item = await newItemWithStock('10');
+    const t = await approvedTransfer(item, '2');
+    const k = key();
+    const r = await post(`/api/transfers/${t.id}/dispatch`, 'transfer-dispatcher-b', dispatchBody(t.rowVersion), { 'Idempotency-Key': k });
+    assert.equal(r.status, 404, 'the source document is not found from the destination side');
+    assert.equal((await admin.query(`SELECT count(*)::int AS c FROM idempotency_records WHERE idempotency_key = $1`, [k])).rows[0].c, 0);
+    assert.equal(await movements(t.id), 0);
   });
 
   it('requires a well-formed Idempotency-Key', async () => {
@@ -303,7 +391,10 @@ describe('transfer API: idempotent dispatch and receive', () => {
     const body = dispatchBody(t.rowVersion);
     const rs = await Promise.all([1, 2, 3].map(() => post(`/api/transfers/${t.id}/dispatch`, DISPATCHER, body, { 'Idempotency-Key': k })));
     assert.equal(rs.filter((r) => r.status === 201).length, 1, rs.map((r) => r.status).join(','));
-    assert.ok(rs.every((r) => [200, 201, 409].includes(r.status)));
+    for (const r of rs.filter((x) => x.status !== 201)) {
+      assert.equal(r.status, 200, `a loser replays the winner's result: ${JSON.stringify(r.body)}`);
+      assert.equal(r.body.replayed, true);
+    }
     assert.equal(await movements(t.id), 1);
     assert.equal(await sum(item, 'IN_TRANSIT'), 4);
   });
@@ -384,10 +475,18 @@ describe('transfer API: error mapping and validation', () => {
       ['dispatch: missing note', `/api/transfers/${t.id}/dispatch`, { rowVersion: 1, dispatchNoteDate: '2026-10-05' }, key()],
       ['receive: no lines', `/api/transfers/${t.id}/receive`, { ...receiveBody(1, 1, '1'), lines: [] }, key()],
       ['receive: lower-case condition', `/api/transfers/${t.id}/receive`, { ...receiveBody(1, 1, '1'), lines: [{ transferLineId: 1, quantity: '1', conditionCode: 'usable' }] }, key()],
+      ['approve: row version beyond the database integer range', `/api/transfers/${t.id}/approve`, { rowVersion: 3_000_000_000, approvalReference: 'AUTH' }],
+      ['create: NUL character in text', '/api/transfers', createBody(item, '1', { purpose: 'bad\u0000purpose' })],
+      ['create: NUL character in a batch reference', '/api/transfers', { ...createBody(item, '1'), lines: [{ itemId: item, quantity: '1', batchRef: 'B\u00001' }] }],
+      ['create: year 0000 expiry', '/api/transfers', { ...createBody(item, '1'), lines: [{ itemId: item, quantity: '1', expiryDate: '0000-01-01' }] }],
+      ['dispatch: year 0000 note date', `/api/transfers/${t.id}/dispatch`, dispatchBody(1, { dispatchNoteDate: '0000-01-01' }), key()],
+      ['dispatch: effectiveAt in year 0000', `/api/transfers/${t.id}/dispatch`, dispatchBody(1, { effectiveAt: '0000-01-01T00:00:00Z' }), key()],
+      ['cancel: NUL character in the reason', `/api/transfers/${t.id}/cancel`, { rowVersion: 1, reason: 'bad\u0000reason text' }],
     ];
     for (const [name, path, body, k] of bad) {
       const r = await post(path, name.startsWith('dispatch') || name.startsWith('receive') ? (name.startsWith('dispatch') ? DISPATCHER : RECEIVER) : name.startsWith('approve') ? APPROVER : OP, body, k ? { 'Idempotency-Key': k } : {});
       assert.equal(r.status, 400, `${name}: ${JSON.stringify(r.body)}`);
+      assert.ok(['VALIDATION_FAILED', 'INVALID_VALUE'].includes(r.body.error.code), `${name}: ${r.body.error.code}`);
     }
     assert.equal((await get('/api/transfers/abc', OP)).status, 400);
     assert.equal((await get('/api/transfers/999999', OP)).status, 404);

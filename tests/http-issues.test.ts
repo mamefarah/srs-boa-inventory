@@ -197,6 +197,12 @@ describe('issue API: create, evidence, post', () => {
     assert.equal(await txCount(issue.id), 1);
   });
 
+  it('refuses an Idempotency-Key longer than the ledger accepts before reaching the database', async () => {
+    const r = await post('/api/issues/1/post', OP, { rowVersion: 1 }, { 'Idempotency-Key': 'k'.repeat(101) });
+    assert.equal(r.status, 400);
+    assert.equal(r.body.error.code, 'IDEMPOTENCY_KEY_REQUIRED');
+  });
+
   it('requires a well-formed Idempotency-Key to post', async () => {
     const item = await newItemWithStock('10');
     const { requisitionId, lineId } = await decidedRequisition(item, '5');

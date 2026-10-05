@@ -74,3 +74,4 @@ Rules not listed above remain mandatory; expand the matrix as their implementati
 | INV-064 | Transfer | Unreceived stock stays IN_TRANSIT and the transfer shows DISCREPANCY; ledger in-transit equals dispatched minus received; no over-receipt. | `tests/transfer-dispatch.test.ts` | TBD | M7 slice 2 (database layer) |
 | INV-065 | Transfer | Arrival conditions are an allow-list; expired stock is not received as USABLE. | `tests/transfer-dispatch.test.ts` | TBD | M7 slice 2 (database layer) |
 | INV-066 | Transfer | In-transit legs are visible only to the transfer's warehouses; transfer references are written only by the posting functions. | `tests/transfer-dispatch.test.ts` | TBD | M7 slice 2 (database layer) |
+| INV-067 | Transfer | Dispatch and receive are idempotent through a key claimed in the posting transaction; conflicts and failures behave as above. | `tests/http-transfers.test.ts` | TBD | M7 slice 3 (HTTP API) |

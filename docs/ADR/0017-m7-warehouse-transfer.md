@@ -2,7 +2,7 @@
 
 **Status:** Proposed (slice 1 of M7; accepted when the M7 pull requests merge). Reviewed by an independent database-security review on 5 October 2026; its findings are applied below.\
 **Date:** 5 October 2026\
-**Controls:** PRD v4.0 Part B §§19, 25, 37; ADR-0001, ADR-0005, ADR-0007, ADR-0008, ADR-0010, ADR-0016; INV-058 to INV-066.
+**Controls:** PRD v4.0 Part B §§19, 25, 37; ADR-0001, ADR-0005, ADR-0007, ADR-0008, ADR-0010, ADR-0016; INV-058 to INV-067.
 
 ## Context
 
@@ -111,3 +111,21 @@ Allow-list of arrival conditions and expired-stock rule (M-1); dispatch funding/
 ### Rollback
 
 Migrations 0023 and 0024 are not applied to any database. Before any transfer is dispatched: drop `boa_transfer_dispatch`, `boa_transfer_receive`, `boa_transfer_lock_destination`, `boa_in_transit_entry_visible`, `boa_can_read_transfer_document`, the receipt guard and audit functions and triggers, the view, the policies `inventory_entries_in_transit_read` and `transfer_receipt*_read`, the receipt tables, the dispatch columns and their constraints; restore `boa_guard_transfer_header`, `boa_transfer_lock`, `boa_can_read_transfer`, `boa_document_warehouse`, `boa_guard_document_reference` and `boa_enforce_role_separation` from 0022 and 0020, and the 0020 `document_references` policies and entity-type check; delete the two new roles and permissions. After any transfer is `IN_TRANSIT` rollback is a forward fix only: there is no reversal or return path, so ledger entries must never be deleted.
+
+## Slice 3: HTTP API (`server/routes/transfers.ts`)
+
+`GET /api/transfers` (both warehouses of a transfer see it; `direction=outgoing|incoming`, `status`, `warehouseId`), `GET /api/transfers/:id` (header, lines with dispatched / received / unmatched quantities from `transfer_line_reconciliation`, receipts with their condition lines, hard-copy references, and the reservation state, which only source-warehouse stock readers see), `POST /api/transfers` (idempotent on `clientRef`; 201 first, 200 replay, 409 different content), `POST .../submit`, `.../approve`, `.../cancel`, and the two ledger postings `POST .../dispatch` and `POST .../receive`.
+
+- **Posting idempotency.** `Idempotency-Key` is mandatory on dispatch and receive, 16 to 100 characters (the ledger stores the same key and the database accepts at most 100; the shared helper `postingIdempotencyKey` now also guards the M6 issue post, which previously accepted up to 200 and then failed inside the database). The key is claimed in the same transaction as the posting and **before** the database function runs, so a retry after a lost response replays the stored result even after the row version has moved on and the transfer status has changed (the slice 2 review finding L-3). A key reused with different content, on another transfer, by another actor or for the other operation is refused (`IDEMPOTENCY_KEY_CONFLICT`); a failed attempt rolls the claim back so the same key can be retried once the cause is fixed; parallel retries post once and the rest replay. A replay re-checks that the transfer is still readable under row-level security, so a user who lost access no longer receives the stored result.
+- **Request hash** covers the operation, transfer id, row version, effective time, every reference and date, and the ordered receiving lines.
+- **Submit, approve and cancel carry no idempotency key.** A retry after a lost response meets the row-version check and returns `STALE_VERSION`; the user reloads. It can never apply twice. Only the two stock-moving postings and create (via `clientRef`) are idempotent.
+- **Errors.** `BA029` is 422 `TRANSFER_INVALID`, `BA030` is 409 `TRANSFER_STOCK_CONFLICT`, `BA015` is 403 `MAKER_CHECKER` (message now covers approval and receipt). Values PostgreSQL cannot store (integer overflow, dates out of range, NUL characters) are 400 `INVALID_VALUE` for every route, and the transfer schemas reject them earlier as `VALIDATION_FAILED`. The JSON body limit is 256 KB so a full 100-line create or 200-line receive fits.
+- **Two codes for one idea.** An idempotency-key conflict found by the API layer is `IDEMPOTENCY_KEY_CONFLICT`; one found by the database (a reused ledger key or `clientRef`) is `IDEMPOTENCY_CONFLICT`. Clients handle both; unifying them would change the M6 contract.
+
+### Owner question added
+
+- **T12 What the destination sees.** The destination warehouse reads the whole transfer, including source batch, expiry, serial, funding source and project, the source location code, the names of the preparer, approver and dispatcher, and the approval reference. Whether funding and project detail and approver names belong in the destination's view is a Bureau choice; the reservation state is already hidden from it.
+
+### Review findings applied
+
+Out-of-range, year-0000 and NUL inputs are now 400 and not 500 (F1); the key-reuse tests now isolate the property they claim to test and assert the error code (F2); added tests for a failed attempt freeing the key, receive key conflicts, different-key parallel dispatches, destination-only dispatcher, hidden reservation state and tighter parallel-replay assertions (F3); replay re-checks readability (F4); the key length is consistent across posting endpoints (F5); body limit raised (F6); submit/approve/cancel behaviour documented (F7); destination visibility recorded as T12 (F8).

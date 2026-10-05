@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import type { Executor } from '../db/client.ts';
+import { HttpError } from '../http/errors.ts';
 import { idempotencyRecords } from '../db/schema.ts';
 
 /**
@@ -19,6 +20,19 @@ import { idempotencyRecords } from '../db/schema.ts';
  */
 
 export const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9_\-:.]{16,200}$/;
+
+/**
+ * The Idempotency-Key header of a ledger-posting endpoint. The records table accepts 16-200 characters but the
+ * posting functions store the same key on the ledger transaction, where the database accepts 8-100, so a posting
+ * endpoint accepts 16-100 end to end: a longer key would pass here and then fail inside the function.
+ */
+export function postingIdempotencyKey(raw: string | undefined): string {
+  const key = raw ?? '';
+  if (!IDEMPOTENCY_KEY_RE.test(key) || key.length > 100) {
+    throw new HttpError(400, 'IDEMPOTENCY_KEY_REQUIRED', 'An Idempotency-Key header (16-100 characters of A-Z, a-z, 0-9, _ - : .) is required');
+  }
+  return key;
+}
 
 /** Deterministic JSON: object keys sorted recursively; arrays keep order. */
 export function canonicalJson(value: unknown): string {

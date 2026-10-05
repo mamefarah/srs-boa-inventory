@@ -43,7 +43,7 @@ export function createApp({ config, db, verifier, logger }: AppDeps): Express {
   app.use(securityHeaders);
   app.use('/api', corsAllowlist(config.corsAllowedOrigins));
   app.use('/api', rateLimit(config.rateLimitPerMinute));
-  app.use('/api', express.json({ limit: '64kb', strict: true }));
+  app.use('/api', express.json({ limit: '256kb', strict: true }));
 
   // Liveness: reveals nothing about environment or configuration.
   app.get('/api/health', (_req, res) => {

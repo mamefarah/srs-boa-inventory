@@ -118,7 +118,7 @@ Build:
 - EXTERNAL vs INTERNAL_CUSTODY destination;
 - property/custodian/location handoff.
 
-## M7 — Warehouse Transfer — IN PROGRESS (slices 1-2 database layer: request, approval, reservation, dispatch, receipt; see ADR-0017)
+## M7 — Warehouse Transfer — IN PROGRESS (slices 1-3: database layer and HTTP API for request, approval, reservation, dispatch and receipt; see ADR-0017)
 
 Build:
 - transfer request/commitment;

@@ -228,3 +228,6 @@ Stock received into a destination warehouse is never PENDING_INSPECTION and expi
 ## INV-066
 In-transit ledger legs are visible to users with stock or ledger access whose scope covers the source or destination warehouse of that transfer, and to no one else. Transfer hard-copy references are written only by the dispatch and receive functions and are never changed or removed.
 
+## INV-067
+A stock-moving transfer request (dispatch or receive) carries a client Idempotency-Key that is claimed in the same transaction as the posting. A retry replays the original result and never posts twice; a key reused with different content, on another transfer, by another actor or for the other operation is refused; a failed attempt does not consume the key.
+
