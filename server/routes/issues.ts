@@ -283,6 +283,39 @@ export function issueRoutes({ db, logger, authenticated }: RouteDeps) {
     }
   });
 
+  // Report: POSTED issues with no recipient-acknowledgement reference yet, oldest first (scope-filtered).
+  router.get('/issues/pending-acknowledgement', ...authenticated, canRead, async (req, res, next) => {
+    try {
+      const q = z.object({ warehouseId: idParam.optional(), limit: limitParam(200, 100) }).parse(req.query);
+      let scope;
+      try {
+        scope = resolveWarehouseScope(principalOf(res), q.warehouseId);
+      } catch (err) {
+        return await auditScopeDenial(db, logger, res, 'GET /api/issues/pending-acknowledgement', err, q.warehouseId);
+      }
+      const rows = await run(
+        res,
+        (tx) =>
+          headerQuery(tx)
+            .where(
+              and(
+                eq(issueHeaders.status, 'POSTED'),
+                scope.kind === 'all' ? undefined : inArray(issueHeaders.warehouseId, scope.warehouseIds),
+                sql`NOT EXISTS (SELECT 1 FROM ${documentReferences} d
+                                 WHERE d.entity_type = 'ISSUE' AND d.entity_id = ${issueHeaders.id}::text
+                                   AND d.document_type = 'RECIPIENT_ACKNOWLEDGEMENT')`,
+              ),
+            )
+            .orderBy(asc(issueHeaders.postedAt))
+            .limit(q.limit),
+        { readOnly: true },
+      );
+      res.json({ data: rows.map((r) => ({ ...r, daysSincePosted: r.postedAt ? Math.floor((Date.now() - new Date(r.postedAt).getTime()) / 86_400_000) : null })) });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get('/issues/:id', ...authenticated, canRead, async (req, res, next) => {
     try {
       const id = idOf(req.params);

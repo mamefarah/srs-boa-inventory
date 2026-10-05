@@ -104,3 +104,15 @@ None.
 Implemented: issue list with status filter; create from a DECIDED requisition (approved / remaining-to-issue / quantity-now per line, remaining computed with exact decimal arithmetic from the open commitment); EXTERNAL or INTERNAL_CUSTODY destination with a custodian picker (`GET /api/issues/custodians`, read-only, issue permission holders only); detail with lines, hard-copy references, add-voucher, confirm-then-post (Idempotency-Key kept across a retry after a network failure and the issue reloaded so the true outcome is shown), cancel with reason, add recipient acknowledgement after posting, and a visible "acknowledgement pending" notice. States are distinguished by icon, label and border shape, never colour alone. Create sends a stable `clientRef`.
 
 Deliberately not in this slice: FEFO suggestion and override reason, the mobile storekeeper app screens (PRD v4.0 offline class B), and the pending-acknowledgement report. FEFO needs the per-bucket availability read that slice 4 adds with bin-card visibility; the mobile queue needs the offline command envelope and is a separate milestone track. The server remains the only enforcement point; the UI cannot widen access.
+
+## Slice 4: stock card, FEFO buckets, pending-acknowledgement report
+
+All read-only; no migration and no new write path.
+
+- `GET /api/stock/card?warehouseId&itemId` (READ_LEDGER + warehouse scope): every posted entry in warehouse custody for one item in time order, with a running balance computed by the database and never stored. It needs READ_LEDGER because `inventory_transactions` row-level security already requires it; the policy was deliberately not widened for storekeepers.
+- `GET /api/stock/buckets?warehouseId&itemId` (READ_STOCK + scope): issuable on-hand per exact bucket (location, batch, expiry, serial, funding, project), earliest expiry first, no expiry last, empty buckets omitted. Decision support only: `boa_issue_post` still validates the exact bucket it is given.
+- `GET /api/issues/pending-acknowledgement`: POSTED issues with no recipient-acknowledgement reference, oldest first, scope-filtered, with days since posting.
+- The issue form now lists the FEFO-ordered buckets per line, defaults to the first, and requires a reason (recorded in the line notes as `FEFO override: ...`) when a later bucket is chosen. Quantity is checked against the chosen bucket. If buckets cannot be read, the form falls back to the previous behaviour and the server decides.
+- A Stock card tab shows the bin card; the Issues tab can filter to issues awaiting acknowledgement.
+
+Limits: the FEFO override reason is stored in free-text notes, not a structured column; a structured field would need a migration and an owner decision on whether FEFO is mandatory for the Bureau (not found in the controlled documents). The mobile storekeeper screens (offline class B) remain a separate track.
