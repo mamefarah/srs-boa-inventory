@@ -46,6 +46,16 @@ System capabilities, not official job titles or paper signatory authority:
 
 Enforced in the database: the application role has `SELECT` only on issue tables; the three `boa_issue_*` functions check the permission and the warehouse scope. An identity holding access-administration permissions may not also hold these (INV-029). Whether the issuer must differ from the requester or decider is **not** required by the controlled documents and is an open policy question (ADR-0016 A2). See ADR-0016.
 
+## Implemented technical capabilities (M7 transfers, slice 1)
+
+System capabilities, not official job titles or paper signatory authority:
+
+- `READ_TRANSFERS` — read transfers and lines when the source **or** destination warehouse is in scope.
+- `PREPARE_TRANSFERS` — create, submit and cancel DRAFT transfers out of an assigned source warehouse (role: `TRANSFER_OPERATOR`). No stock effect.
+- `APPROVE_TRANSFERS` — approve submitted transfers out of an assigned source warehouse, reserving the stock, and cancel submitted or approved ones (role: `TRANSFER_APPROVER`). No inventory-posting authority.
+
+Enforced in the database: SELECT-only grants; the approver may not be the preparer or submitter; an access administrator may not hold these (INV-029). Who may approve by value or item class is open (ADR-0017 T1). See ADR-0017.
+
 ## Permission model
 
 Permission = role + action + warehouse scope + transaction scope + authority limit.

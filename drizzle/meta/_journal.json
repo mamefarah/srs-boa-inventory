@@ -148,6 +148,20 @@
       "when": 1791158692236,
       "tag": "0020_m6_issue_security",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791166404688,
+      "tag": "0021_m7_transfers",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1791166405688,
+      "tag": "0022_m7_transfer_security",
+      "breakpoints": true
     }
   ]
 }

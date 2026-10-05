@@ -14,6 +14,7 @@
  */
 import { sql } from 'drizzle-orm';
 import {
+  type AnyPgColumn,
   bigint,
   boolean,
   check,
@@ -1005,6 +1006,10 @@ export const inventoryCommitments = pgTable(
     requisitionLineId: bigint('requisition_line_id', { mode: 'number' })
       .references(() => requisitionLines.id, { onDelete: 'restrict' })
       .unique(),
+    // M7: a TRANSFER commitment reserves source stock for an approved transfer line (ADR-0017).
+    transferLineId: bigint('transfer_line_id', { mode: 'number' })
+      .references((): AnyPgColumn => transferLines.id, { onDelete: 'restrict' })
+      .unique(),
     itemId: integer('item_id')
       .notNull()
       .references(() => items.id, { onDelete: 'restrict' }),
@@ -1031,9 +1036,13 @@ export const inventoryCommitments = pgTable(
     releaseReason: text('release_reason'),
   },
   (t) => [
-    check('inventory_commitments_type_valid', sql`${t.commitmentType} IN ('REQUISITION')`),
+    check('inventory_commitments_type_valid', sql`${t.commitmentType} IN ('REQUISITION', 'TRANSFER')`),
     check('inventory_commitments_status_valid', sql`${t.status} IN ('ACTIVE', 'PARTIALLY_FULFILLED', 'FULFILLED', 'RELEASED', 'EXPIRED', 'CANCELLED')`),
-    check('inventory_commitments_requisition_link', sql`${t.commitmentType} <> 'REQUISITION' OR ${t.requisitionLineId} IS NOT NULL`),
+    // Exactly the link that matches the type: a commitment can never reserve for two documents.
+    check(
+      'inventory_commitments_source_link',
+      sql`(${t.commitmentType} = 'REQUISITION' AND ${t.requisitionLineId} IS NOT NULL AND ${t.transferLineId} IS NULL) OR (${t.commitmentType} = 'TRANSFER' AND ${t.transferLineId} IS NOT NULL AND ${t.requisitionLineId} IS NULL)`,
+    ),
     check('inventory_commitments_quantity_positive', sql`${t.quantityBaseUom} > 0`),
     check('inventory_commitments_quantity_finite', sql`${t.quantityBaseUom} < 'Infinity'::numeric`),
     check('inventory_commitments_quantity_scale', sql`scale(${t.quantityBaseUom}) <= 6`),
@@ -1206,5 +1215,104 @@ export const issueLines = pgTable(
     check('issue_lines_quantity_range', sql`${t.quantity} < 100000000000000`),
     index('issue_lines_requisition_line_idx').on(t.requisitionLineId),
     index('issue_lines_item_idx').on(t.itemId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// M7 warehouse transfer (PRD §25, ADR-0017). Slice 1: request, submit, approve (TRANSFER commitment) and
+// cancel. Written only by the SECURITY DEFINER functions boa_transfer_* (migration 0022); the application
+// role has SELECT only. Dispatch (WAREHOUSE -> IN_TRANSIT) and destination receipt arrive in slice 2; the
+// status set already names them so the check constraint never has to be widened.
+// ---------------------------------------------------------------------------
+export const TRANSFER_STATUSES = ['DRAFT', 'SUBMITTED', 'APPROVED', 'IN_TRANSIT', 'DISCREPANCY', 'RECEIVED', 'CANCELLED'] as const;
+
+export const transfers = pgTable(
+  'transfers',
+  {
+    id: id(),
+    sourceWarehouseId: integer('source_warehouse_id')
+      .notNull()
+      .references(() => warehouses.id, { onDelete: 'restrict' }),
+    destinationWarehouseId: integer('destination_warehouse_id')
+      .notNull()
+      .references(() => warehouses.id, { onDelete: 'restrict' }),
+    // Client-generated reference so a retried create returns the original document (PRD v4.0 API-1).
+    clientRef: text('client_ref'),
+    createHash: text('create_hash'),
+    purpose: text('purpose').notNull(),
+    // Hard-copy transfer request / authority reference; required before submission (PRD §25.2).
+    sourceEvidenceRef: text('source_evidence_ref'),
+    status: text('status').notNull().default('DRAFT'),
+    createdByUserId: integer('created_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+    updatedAt: tstz('updated_at').notNull().defaultNow(),
+    rowVersion: integer('row_version').notNull().default(1),
+    submittedByUserId: integer('submitted_by_user_id').references(() => users.id, { onDelete: 'restrict' }),
+    submittedAt: tstz('submitted_at'),
+    approvedByUserId: integer('approved_by_user_id').references(() => users.id, { onDelete: 'restrict' }),
+    approvedAt: tstz('approved_at'),
+    approvalReference: text('approval_reference'),
+    approvalNotes: text('approval_notes'),
+    cancelledByUserId: integer('cancelled_by_user_id').references(() => users.id, { onDelete: 'restrict' }),
+    cancelledAt: tstz('cancelled_at'),
+    cancelReason: text('cancel_reason'),
+  },
+  (t) => [
+    check('transfers_status_valid', sql`${t.status} IN ('DRAFT', 'SUBMITTED', 'APPROVED', 'IN_TRANSIT', 'DISCREPANCY', 'RECEIVED', 'CANCELLED')`),
+    check('transfers_distinct_warehouses', sql`${t.sourceWarehouseId} <> ${t.destinationWarehouseId}`),
+    check('transfers_purpose_not_blank', sql`length(btrim(${t.purpose})) > 0`),
+    check(
+      'transfers_submitted_fields',
+      sql`${t.status} NOT IN ('SUBMITTED', 'APPROVED', 'IN_TRANSIT', 'DISCREPANCY', 'RECEIVED') OR (${t.submittedByUserId} IS NOT NULL AND ${t.submittedAt} IS NOT NULL)`,
+    ),
+    check(
+      'transfers_approved_fields',
+      sql`${t.status} NOT IN ('APPROVED', 'IN_TRANSIT', 'DISCREPANCY', 'RECEIVED') OR (${t.approvedByUserId} IS NOT NULL AND ${t.approvedAt} IS NOT NULL AND length(btrim(coalesce(${t.approvalReference}, ''))) > 0)`,
+    ),
+    check(
+      'transfers_cancelled_fields',
+      sql`${t.status} <> 'CANCELLED' OR (${t.cancelledByUserId} IS NOT NULL AND ${t.cancelledAt} IS NOT NULL AND length(btrim(coalesce(${t.cancelReason}, ''))) > 0)`,
+    ),
+    check('transfers_client_ref_pair', sql`(${t.clientRef} IS NULL) = (${t.createHash} IS NULL)`),
+    unique('transfers_client_ref_unique').on(t.createdByUserId, t.clientRef),
+    index('transfers_source_status_idx').on(t.sourceWarehouseId, t.status),
+    index('transfers_destination_status_idx').on(t.destinationWarehouseId, t.status),
+  ],
+);
+
+export const transferLines = pgTable(
+  'transfer_lines',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    transferId: integer('transfer_id')
+      .notNull()
+      .references(() => transfers.id, { onDelete: 'restrict' }),
+    lineNo: integer('line_no').notNull(),
+    itemId: integer('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'restrict' }),
+    baseUomId: integer('base_uom_id')
+      .notNull()
+      .references(() => uoms.id, { onDelete: 'restrict' }),
+    quantity: numeric('quantity').notNull(),
+    // Exact source stock bucket (PRD §25): location, batch, expiry, serial, funding and project are preserved.
+    sourceLocationId: integer('source_location_id').references(() => warehouseLocations.id, { onDelete: 'restrict' }),
+    batchRef: text('batch_ref'),
+    expiryDate: date('expiry_date', { mode: 'string' }),
+    serialRef: text('serial_ref'),
+    fundingSourceId: integer('funding_source_id').references(() => fundingSources.id, { onDelete: 'restrict' }),
+    projectId: integer('project_id').references(() => projects.id, { onDelete: 'restrict' }),
+    notes: text('notes'),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    unique('transfer_lines_line_per_transfer').on(t.transferId, t.lineNo),
+    check('transfer_lines_quantity_positive', sql`${t.quantity} > 0`),
+    check('transfer_lines_quantity_finite', sql`${t.quantity} < 'Infinity'::numeric`),
+    check('transfer_lines_quantity_scale', sql`scale(${t.quantity}) <= 6`),
+    check('transfer_lines_quantity_range', sql`${t.quantity} < 100000000000000`),
+    index('transfer_lines_item_idx').on(t.itemId),
   ],
 );

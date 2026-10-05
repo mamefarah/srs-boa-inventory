@@ -65,3 +65,7 @@ Rules not listed above remain mandatory; expand the matrix as their implementati
 | INV-055 | Issue | Issuing against an existing commitment consumes it and must not subtract it twice. | `tests/issues.test.ts` | TBD | M6 slice 1 (database layer) |
 | INV-056 | Issue | An issue preserves funding source and project. | `tests/issues.test.ts` | TBD | M6 slice 1 (database layer) |
 | INV-057 | Issue | A hard-copy issue-voucher reference is required before an issue can be posted, and handing property to INTERNAL_CUSTODY requires a named active custodian. | `tests/issues.test.ts` | TBD | M6 slice 1 (database layer) |
+| INV-058 | Transfer | A transfer is two-stage (dispatch then destination receipt); slice 1 writes no inventory entry. | `tests/transfers.test.ts` | TBD | M7 slice 1 (database layer) |
+| INV-059 | Transfer | Approval reserves stock as TRANSFER commitments that compete with requisitions and constrain issues; a refused approval writes nothing. | `tests/transfers.test.ts` | TBD | M7 slice 1 (database layer) |
+| INV-060 | Transfer | Approver differs from preparer and submitter; mutation needs source scope; read from source or destination. | `tests/transfers.test.ts` | TBD | M7 slice 1 (database layer) |
+| INV-061 | Transfer | Hard-copy request reference required to submit; lines immutable; cancel releases reservations. | `tests/transfers.test.ts` | TBD | M7 slice 1 (database layer) |
