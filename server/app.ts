@@ -17,6 +17,7 @@ import { itemRoutes } from './routes/items.ts';
 import { masterRoutes } from './routes/master.ts';
 import { openingBalanceRoutes } from './routes/opening-balances.ts';
 import { issueRoutes } from './routes/issues.ts';
+import { transferRoutes } from './routes/transfers.ts';
 import { receiptRoutes } from './routes/receipts.ts';
 import { requisitionRoutes } from './routes/requisitions.ts';
 import { sessionRoutes } from './routes/session.ts';
@@ -42,7 +43,7 @@ export function createApp({ config, db, verifier, logger }: AppDeps): Express {
   app.use(securityHeaders);
   app.use('/api', corsAllowlist(config.corsAllowedOrigins));
   app.use('/api', rateLimit(config.rateLimitPerMinute));
-  app.use('/api', express.json({ limit: '64kb', strict: true }));
+  app.use('/api', express.json({ limit: '256kb', strict: true }));
 
   // Liveness: reveals nothing about environment or configuration.
   app.get('/api/health', (_req, res) => {
@@ -75,6 +76,7 @@ export function createApp({ config, db, verifier, logger }: AppDeps): Express {
   app.use('/api', receiptRoutes(deps));
   app.use('/api', requisitionRoutes(deps));
   app.use('/api', issueRoutes(deps));
+  app.use('/api', transferRoutes(deps));
   app.use('/api/admin', adminRoutes(deps));
   app.use('/api', notFoundApi);
 

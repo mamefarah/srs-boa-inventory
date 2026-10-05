@@ -78,6 +78,11 @@ export const USERS = {
   transferApproverA2: { uid: 'transfer-approver-a2', roles: ['TRANSFER_APPROVER'], warehouses: ['TWH-A'], active: true },
   transferApproverB: { uid: 'transfer-approver-b', roles: ['TRANSFER_APPROVER'], warehouses: ['TWH-B'], active: true },
   transferBothA: { uid: 'transfer-both-a', roles: ['TRANSFER_OPERATOR', 'TRANSFER_APPROVER'], warehouses: ['TWH-A'], active: true },
+  transferDispatcherA: { uid: 'transfer-dispatcher-a', roles: ['TRANSFER_DISPATCHER'], warehouses: ['TWH-A'], active: true },
+  transferDispatcherB: { uid: 'transfer-dispatcher-b', roles: ['TRANSFER_DISPATCHER'], warehouses: ['TWH-B'], active: true },
+  transferReceiverA: { uid: 'transfer-receiver-a', roles: ['TRANSFER_RECEIVER'], warehouses: ['TWH-A'], active: true },
+  transferReceiverB: { uid: 'transfer-receiver-b', roles: ['TRANSFER_RECEIVER'], warehouses: ['TWH-B'], active: true },
+  transferBothAB: { uid: 'transfer-both-ab', roles: ['TRANSFER_DISPATCHER', 'TRANSFER_RECEIVER'], warehouses: ['TWH-A', 'TWH-B'], active: true },
 } as const;
 
 export interface Fixture {

@@ -686,7 +686,7 @@ export const documentReferences = pgTable(
     createdAt: tstz('created_at').notNull().defaultNow(),
   },
   (t) => [
-    check('document_references_entity_type_valid', sql`${t.entityType} IN ('RECEIPT', 'SUPPLIER_RETURN', 'ISSUE')`),
+    check('document_references_entity_type_valid', sql`${t.entityType} IN ('RECEIPT', 'SUPPLIER_RETURN', 'ISSUE', 'TRANSFER')`),
     check('document_references_entity_id_not_blank', sql`length(btrim(${t.entityId})) > 0`),
     check('document_references_document_type_not_blank', sql`length(btrim(${t.documentType})) > 0`),
     check('document_references_document_number_not_blank', sql`length(btrim(${t.documentNumber})) > 0`),
@@ -1258,8 +1258,20 @@ export const transfers = pgTable(
     cancelledByUserId: integer('cancelled_by_user_id').references(() => users.id, { onDelete: 'restrict' }),
     cancelledAt: tstz('cancelled_at'),
     cancelReason: text('cancel_reason'),
+    // Slice 2: dispatch (WAREHOUSE -> IN_TRANSIT). The dispatch note / gate pass references live in document_references.
+    dispatchedByUserId: integer('dispatched_by_user_id').references(() => users.id, { onDelete: 'restrict' }),
+    dispatchedAt: tstz('dispatched_at'),
+    dispatchEffectiveAt: tstz('dispatch_effective_at'),
+    dispatchTransactionId: uuid('dispatch_transaction_id').references(() => inventoryTransactions.id, { onDelete: 'restrict' }),
+    transporterName: text('transporter_name'),
+    vehicleRef: text('vehicle_ref'),
   },
   (t) => [
+    check(
+      'transfers_dispatched_fields',
+      sql`${t.status} NOT IN ('IN_TRANSIT', 'DISCREPANCY', 'RECEIVED') OR (${t.dispatchedByUserId} IS NOT NULL AND ${t.dispatchedAt} IS NOT NULL AND ${t.dispatchEffectiveAt} IS NOT NULL AND ${t.dispatchTransactionId} IS NOT NULL)`,
+    ),
+    unique('transfers_dispatch_transaction_unique').on(t.dispatchTransactionId),
     check('transfers_status_valid', sql`${t.status} IN ('DRAFT', 'SUBMITTED', 'APPROVED', 'IN_TRANSIT', 'DISCREPANCY', 'RECEIVED', 'CANCELLED')`),
     check('transfers_distinct_warehouses', sql`${t.sourceWarehouseId} <> ${t.destinationWarehouseId}`),
     check('transfers_purpose_not_blank', sql`length(btrim(${t.purpose})) > 0`),
@@ -1314,5 +1326,64 @@ export const transferLines = pgTable(
     check('transfer_lines_quantity_scale', sql`scale(${t.quantity}) <= 6`),
     check('transfer_lines_quantity_range', sql`${t.quantity} < 100000000000000`),
     index('transfer_lines_item_idx').on(t.itemId),
+  ],
+);
+
+// Destination receipts (slice 2). Insert-only: one row per receiving event, posted atomically with its ledger
+// transaction by boa_transfer_receive. A line may be received in several events (partial / late arrival) and in
+// several conditions; whatever is not yet received stays IN_TRANSIT in the ledger and the transfer shows DISCREPANCY.
+export const transferReceipts = pgTable(
+  'transfer_receipts',
+  {
+    id: id(),
+    transferId: integer('transfer_id')
+      .notNull()
+      .references(() => transfers.id, { onDelete: 'restrict' }),
+    receiptNo: integer('receipt_no').notNull(),
+    receivedByUserId: integer('received_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    receivedAt: tstz('received_at').notNull().defaultNow(),
+    effectiveAt: tstz('effective_at').notNull(),
+    transactionId: uuid('transaction_id')
+      .notNull()
+      .references(() => inventoryTransactions.id, { onDelete: 'restrict' }),
+    // Paper signatory on the receiving document; separate from the authenticated user who recorded it.
+    receiverName: text('receiver_name').notNull(),
+    receivingDocumentRef: text('receiving_document_ref').notNull(),
+    remarks: text('remarks'),
+  },
+  (t) => [
+    unique('transfer_receipts_no_per_transfer').on(t.transferId, t.receiptNo),
+    unique('transfer_receipts_transaction_unique').on(t.transactionId),
+    check('transfer_receipts_receiver_not_blank', sql`length(btrim(${t.receiverName})) > 0`),
+    check('transfer_receipts_ref_not_blank', sql`length(btrim(${t.receivingDocumentRef})) > 0`),
+  ],
+);
+
+export const transferReceiptLines = pgTable(
+  'transfer_receipt_lines',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    receiptId: integer('receipt_id')
+      .notNull()
+      .references(() => transferReceipts.id, { onDelete: 'restrict' }),
+    transferLineId: bigint('transfer_line_id', { mode: 'number' })
+      .notNull()
+      .references(() => transferLines.id, { onDelete: 'restrict' }),
+    conditionCode: text('condition_code')
+      .notNull()
+      .references(() => conditionCodes.code, { onDelete: 'restrict' }),
+    quantity: numeric('quantity').notNull(),
+    destinationLocationId: integer('destination_location_id').references(() => warehouseLocations.id, { onDelete: 'restrict' }),
+    notes: text('notes'),
+  },
+  (t) => [
+    check('transfer_receipt_lines_quantity_positive', sql`${t.quantity} > 0`),
+    check('transfer_receipt_lines_quantity_finite', sql`${t.quantity} < 'Infinity'::numeric`),
+    check('transfer_receipt_lines_quantity_scale', sql`scale(${t.quantity}) <= 6`),
+    check('transfer_receipt_lines_quantity_range', sql`${t.quantity} < 100000000000000`),
+    index('transfer_receipt_lines_line_idx').on(t.transferLineId),
+    index('transfer_receipt_lines_receipt_idx').on(t.receiptId),
   ],
 );

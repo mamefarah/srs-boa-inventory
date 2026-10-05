@@ -20,7 +20,7 @@ import {
 import { mapDbError } from '../http/db-errors.ts';
 import { HttpError } from '../http/errors.ts';
 import { idParam, limitParam, offsetParam, reasonField } from '../http/validation.ts';
-import { claimIdempotencyKey, completeIdempotencyKey, IDEMPOTENCY_KEY_RE, requestHash } from '../idempotency/idempotency.ts';
+import { claimIdempotencyKey, completeIdempotencyKey, postingIdempotencyKey, requestHash } from '../idempotency/idempotency.ts';
 import type { RouteDeps } from './deps.ts';
 
 /**
@@ -428,10 +428,7 @@ export function issueRoutes({ db, logger, authenticated }: RouteDeps) {
     try {
       const id = idOf(req.params);
       const b = postBody.parse(req.body);
-      const key = req.get('Idempotency-Key') ?? '';
-      if (!IDEMPOTENCY_KEY_RE.test(key)) {
-        throw new HttpError(400, 'IDEMPOTENCY_KEY_REQUIRED', 'An Idempotency-Key header (16–200 characters of A–Z, a–z, 0–9, _ - : .) is required');
-      }
+      const key = postingIdempotencyKey(req.get('Idempotency-Key'));
       const principal = principalOf(res);
       const hash = requestHash({
         operation: 'ISSUE_POST',

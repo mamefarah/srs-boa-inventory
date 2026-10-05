@@ -162,6 +162,20 @@
       "when": 1791166405688,
       "tag": "0022_m7_transfer_security",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791168019065,
+      "tag": "0023_m7_dispatch_receipt",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791168020065,
+      "tag": "0024_m7_dispatch_receipt_security",
+      "breakpoints": true
     }
   ]
 }

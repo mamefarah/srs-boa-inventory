@@ -147,6 +147,7 @@ Commitments reduce available-to-promise but do not change physical on-hand.
 
 ## Transfer
 - transfers (M7 slice 1: DRAFT/SUBMITTED/APPROVED/CANCELLED reachable; IN_TRANSIT/DISCREPANCY/RECEIVED named for slice 2; source and destination warehouse; written only by `boa_transfer_*` functions)
+- transfer_receipts / transfer_receipt_lines (M7 slice 2: insert-only receiving events and conditions found; written only by `boa_transfer_receive`) and the view `transfer_line_reconciliation` (dispatched, received, unmatched per line)
 - transfer_lines (M7 slice 1: exact source bucket; insert-only while DRAFT)
 - transfer_receipts
 - transfer_discrepancies
