@@ -71,6 +71,13 @@ export const USERS = {
   // M6 issues (technical role; carries no approval authority).
   issueOpA: { uid: 'issue-op-a', roles: ['ISSUE_OPERATOR'], warehouses: ['TWH-A'], active: true },
   issueOpB: { uid: 'issue-op-b', roles: ['ISSUE_OPERATOR'], warehouses: ['TWH-B'], active: true },
+  // M7 transfers (technical roles; no Bureau approval authority implied).
+  transferOpA: { uid: 'transfer-op-a', roles: ['TRANSFER_OPERATOR'], warehouses: ['TWH-A'], active: true },
+  transferOpB: { uid: 'transfer-op-b', roles: ['TRANSFER_OPERATOR'], warehouses: ['TWH-B'], active: true },
+  transferApproverA: { uid: 'transfer-approver-a', roles: ['TRANSFER_APPROVER'], warehouses: ['TWH-A'], active: true },
+  transferApproverA2: { uid: 'transfer-approver-a2', roles: ['TRANSFER_APPROVER'], warehouses: ['TWH-A'], active: true },
+  transferApproverB: { uid: 'transfer-approver-b', roles: ['TRANSFER_APPROVER'], warehouses: ['TWH-B'], active: true },
+  transferBothA: { uid: 'transfer-both-a', roles: ['TRANSFER_OPERATOR', 'TRANSFER_APPROVER'], warehouses: ['TWH-A'], active: true },
 } as const;
 
 export interface Fixture {

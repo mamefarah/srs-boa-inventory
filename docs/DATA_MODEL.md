@@ -146,8 +146,8 @@ Commitments reduce available-to-promise but do not change physical on-hand.
 - document_references with entity type `ISSUE` (hard-copy issue voucher and recipient acknowledgement details)
 
 ## Transfer
-- transfers
-- transfer_lines
+- transfers (M7 slice 1: DRAFT/SUBMITTED/APPROVED/CANCELLED reachable; IN_TRANSIT/DISCREPANCY/RECEIVED named for slice 2; source and destination warehouse; written only by `boa_transfer_*` functions)
+- transfer_lines (M7 slice 1: exact source bucket; insert-only while DRAFT)
 - transfer_receipts
 - transfer_discrepancies
 

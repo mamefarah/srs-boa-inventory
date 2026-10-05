@@ -200,3 +200,16 @@ An issue preserves funding source and project. Where the requisition line names 
 
 ## INV-057
 A hard-copy issue-voucher reference (document type ISSUE_VOUCHER) is required before an issue can be posted (acknowledgement evidence may be added after posting, never changed), and handing property to INTERNAL_CUSTODY requires a named active custodian. Posted and cancelled issues, their lines and their evidence are immutable; a posted issue is corrected only by reversal (M10).
+
+## INV-058
+A warehouse transfer is two-stage and never collapsed: dispatch (WAREHOUSE source to IN_TRANSIT) and destination receipt (IN_TRANSIT to WAREHOUSE destination) are separate postings. Slice 1 implements only request, submission, approval and reservation; it writes no inventory entry.
+
+## INV-059
+Approving a transfer reserves its stock as one TRANSFER commitment per line, pinned to the exact source bucket; two transfers cannot reserve the same bucket and an issue cannot drain a bucket a transfer has reserved. A reservation is not a physical movement. It competes with requisition commitments for available-to-promise, so a requisition cannot be approved, and an issue cannot be posted, into stock a transfer has reserved. A refused approval writes nothing.
+
+## INV-060
+A transfer's approver is neither the person who prepared nor the person who submitted it, and records an authorization sign-off reference. Mutations need the source warehouse in scope; a transfer is readable from both the source and the destination warehouse.
+
+## INV-061
+A transfer needs a hard-copy transfer request reference to be submitted. Transfer lines and identity are immutable once created; a change means cancel and recreate. Cancelling releases every reservation in the same transaction and needs the approver permission once the transfer is submitted.
+
