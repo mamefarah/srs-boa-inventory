@@ -213,3 +213,18 @@ A transfer's approver is neither the person who prepared nor the person who subm
 ## INV-061
 A transfer needs a hard-copy transfer request reference to be submitted. Transfer lines and identity are immutable once created; a change means cancel and recreate. Cancelling releases every reservation in the same transaction and needs the approver permission once the transfer is submitted.
 
+## INV-062
+Dispatch posts ONE atomic ledger transaction that moves each line from the source WAREHOUSE to IN_TRANSIT (no warehouse), preserving item, batch, expiry, serial, funding source and project, and consumes the TRANSFER commitment in the same transaction. The transfer's own reservation is secured stock and is never subtracted twice. A hard-copy dispatch note reference is required.
+
+## INV-063
+Destination receipt posts a separate ledger transaction that moves stock from IN_TRANSIT to the destination WAREHOUSE in the condition found, by a person other than the dispatcher. Damage on arrival is a condition, not a quantity loss. A hard-copy receiving document reference and the receiving person's name are required.
+
+## INV-064
+Whatever is dispatched and not received stays IN_TRANSIT in the ledger and the transfer shows DISCREPANCY until it is received late; per line, the ledger's in-transit stock must equal dispatched minus received. More than the dispatched quantity cannot be received. A discrepancy is never resolved by an adjustment.
+
+## INV-065
+Stock received into a destination warehouse is never PENDING_INSPECTION and expired stock is never received as USABLE. Arrival conditions are an explicit allow-list.
+
+## INV-066
+In-transit ledger legs are visible to users with stock or ledger access whose scope covers the source or destination warehouse of that transfer, and to no one else. Transfer hard-copy references are written only by the dispatch and receive functions and are never changed or removed.
+

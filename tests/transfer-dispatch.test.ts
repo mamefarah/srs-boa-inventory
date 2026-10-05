@@ -547,6 +547,84 @@ describe('M7 receipt: IN_TRANSIT -> destination WAREHOUSE', () => {
   });
 });
 
+describe('M7 dispatch/receipt: independent review findings', () => {
+  async function inTransit(item: number, qty: string, extra: Body = {}) {
+    const t = await approvedTransfer([line(item, qty, extra)]);
+    await dispatch(DISPATCHER, t);
+    const [l] = await transferLines(t.id);
+    return { id: t.id, lineId: l!.id as number };
+  }
+
+  it('receives only into an explicit allow-list of arrival conditions', async () => {
+    const item = await newItem();
+    await stock(item, '30');
+    const { id, lineId } = await inTransit(item, '10');
+    assert.equal(await sqlstate(receive(RECEIVER, { id }, [rl(lineId, '1', { conditionCode: 'PENDING_INSPECTION' })])), 'BA029', 'only the receipt inspection flow can clear it');
+    assert.equal(await sqlstate(receive(RECEIVER, { id }, [rl(lineId, '1', { conditionCode: 'REJECTED_PENDING_RETURN' })])), 'BA029');
+    await admin.query(`INSERT INTO condition_codes (code, name, is_issuable) VALUES ('TRD_NEW_CODE', 'Added later', false) ON CONFLICT DO NOTHING`);
+    assert.equal(await sqlstate(receive(RECEIVER, { id }, [rl(lineId, '1', { conditionCode: 'TRD_NEW_CODE' })])), 'BA029', 'a condition added later stays refused until the owner allows it');
+    // One request may split a line across several allowed conditions.
+    await receive(RECEIVER, { id }, [rl(lineId, '6'), rl(lineId, '2', { conditionCode: 'DAMAGED' }), rl(lineId, '2', { conditionCode: 'QUARANTINE' })]);
+    assert.equal(await status(id), 'RECEIVED');
+    assert.equal(await sumEntries(item, 'WAREHOUSE', fx.warehouseB, 'USABLE'), 6);
+    assert.equal(await sumEntries(item, 'WAREHOUSE', fx.warehouseB, 'DAMAGED'), 2);
+    assert.equal(await sumEntries(item, 'WAREHOUSE', fx.warehouseB, 'QUARANTINE'), 2);
+    assert.equal(await sumEntries(item, 'IN_TRANSIT'), 0);
+  });
+
+  it('expired stock cannot become available at the destination by being received as USABLE', async () => {
+    const batch = await newItem('batch');
+    await stock(batch, '6', { batch: 'OLD-1', expiry: '2020-01-31' });
+    const { id, lineId } = await inTransit(batch, '6', { batchRef: 'OLD-1', expiryDate: '2020-01-31' });
+    assert.equal(await sqlstate(receive(RECEIVER, { id }, [rl(lineId, '6')])), 'BA029');
+    assert.equal(await sumEntries(batch, 'WAREHOUSE', fx.warehouseB), 0);
+    await receive(RECEIVER, { id }, [rl(lineId, '6', { conditionCode: 'EXPIRED' })]);
+    assert.equal(await sumEntries(batch, 'WAREHOUSE', fx.warehouseB, 'EXPIRED'), 6);
+    assert.equal(await sumEntries(batch, 'WAREHOUSE', fx.warehouseB, 'USABLE'), 0);
+  });
+
+  it('a late arrival may be recorded on the same receiving document without error', async () => {
+    const item = await newItem();
+    await stock(item, '20');
+    const { id, lineId } = await inTransit(item, '8');
+    await receive(RECEIVER, { id }, [rl(lineId, '5')], { ref: 'GRN-SAME-1' });
+    assert.equal(await status(id), 'DISCREPANCY');
+    await receive(RECEIVER, { id }, [rl(lineId, '3')], { ref: 'GRN-SAME-1' });
+    assert.equal(await status(id), 'RECEIVED');
+    assert.equal((await admin.query(`SELECT count(*)::int AS c FROM document_references WHERE entity_type = 'TRANSFER' AND entity_id = $1 AND document_type = 'RECEIVING_DOCUMENT'`, [String(id)])).rows[0].c, 1, 'the reference is on file once');
+    assert.equal((await admin.query(`SELECT count(*)::int AS c FROM transfer_receipts WHERE transfer_id = $1 AND receiving_document_ref = 'GRN-SAME-1'`, [id])).rows[0].c, 2, 'both receipts keep their own reference');
+  });
+
+  it('dispatches funding-pinned stock and keeps the funding source on both legs', async () => {
+    const item = await newItem();
+    await stock(item, '10', { funding: fundingId });
+    await stock(item, '10');
+    const t = await approvedTransfer([line(item, '6', { fundingSourceId: fundingId })]);
+    const tx = await dispatch(DISPATCHER, t);
+    assert.equal((await admin.query(`SELECT count(*)::int AS c FROM inventory_entries WHERE transaction_id = $1 AND funding_source_id = $2`, [tx, fundingId])).rows[0].c, 2);
+    assert.equal(await sumEntries(item, 'IN_TRANSIT'), 6);
+  });
+
+  it('submission, approval and cancellation records are never rewritten', async () => {
+    const item = await newItem();
+    await stock(item, '10');
+    const t = await approvedTransfer([line(item, '2')]);
+    await assert.rejects(
+      admin.query(`UPDATE transfers SET status = 'CANCELLED', cancelled_by_user_id = $2, cancelled_at = now(), cancel_reason = 'x reason', approval_reference = 'REWRITTEN' WHERE id = $1`, [t.id, fx.userIds[APPROVER]]),
+      /BOA_IMMUTABLE/,
+    );
+    assert.equal((await admin.query(`SELECT approval_reference FROM transfers WHERE id = $1`, [t.id])).rows[0].approval_reference, 'AUTH-TRD');
+  });
+
+  it('a user without transfer permission cannot probe transfer ids or row versions', async () => {
+    const item = await newItem();
+    await stock(item, '10');
+    const t = await approvedTransfer([line(item, '2')]);
+    assert.equal(await sqlstate(dispatch('operator-a', t, { version: 999 })), 'BA002', 'permission is checked before the version, so a wrong version reveals nothing');
+    assert.equal(await sqlstate(dispatch(DISPATCHER, t, { version: 999 })), 'BA018', 'an authorised user still learns about a stale version');
+  });
+});
+
 describe('M7 dispatch/receipt: visibility and immutability', () => {
   it('in-transit ledger legs are visible to the source and destination warehouses of that transfer only', async () => {
     const item = await newItem();

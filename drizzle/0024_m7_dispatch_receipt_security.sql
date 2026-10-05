@@ -6,7 +6,7 @@
 -- and has not yet been received stays in the ledger as IN_TRANSIT, preserving item, batch, expiry, serial,
 -- funding source and project. Whatever is not received stays IN_TRANSIT and the transfer shows DISCREPANCY until
 -- it is received late; formal resolution of non-arrival (return to source, write-off) is a later slice that needs
--- owner decisions (ADR-0017 T9/T10). Nothing here uses an adjustment to represent a transfer discrepancy
+-- owner decisions (ADR-0017 T9 and T10). Nothing here uses an adjustment to represent a transfer discrepancy
 -- (WORKFLOWS §11).
 --
 -- SQLSTATEs reused: BA029 transfer validation, BA030 insufficient stock, BA015 maker-checker, BA028 idempotency.
@@ -142,7 +142,7 @@ AS $$
   SELECT EXISTS (
     SELECT 1
       FROM public.inventory_transactions tx
-      JOIN public.transfers t ON t.id::text = tx.business_document_id
+      JOIN public.transfers t ON t.id = CASE WHEN tx.business_document_id ~ '^[1-9][0-9]{0,9}$' THEN tx.business_document_id::integer END
      WHERE tx.id = p_transaction_id AND tx.business_document_type = 'TRANSFER'
        AND public.boa_can_read_transfer(t.source_warehouse_id, t.destination_warehouse_id)
   );
@@ -404,6 +404,14 @@ BEGIN
   IF NEW.source_evidence_ref IS DISTINCT FROM OLD.source_evidence_ref AND NOT (OLD.status = 'DRAFT' AND NEW.status = 'SUBMITTED') THEN
     RAISE EXCEPTION 'BOA_IMMUTABLE: the transfer request reference is fixed once submitted' USING ERRCODE = 'BA009';
   END IF;
+  -- Submission, approval and cancellation facts are written once, by their own transition, and never rewritten.
+  IF (OLD.submitted_by_user_id IS NOT NULL AND (NEW.submitted_by_user_id IS DISTINCT FROM OLD.submitted_by_user_id OR NEW.submitted_at IS DISTINCT FROM OLD.submitted_at))
+     OR (OLD.approved_by_user_id IS NOT NULL AND (NEW.approved_by_user_id IS DISTINCT FROM OLD.approved_by_user_id OR NEW.approved_at IS DISTINCT FROM OLD.approved_at
+         OR NEW.approval_reference IS DISTINCT FROM OLD.approval_reference OR NEW.approval_notes IS DISTINCT FROM OLD.approval_notes))
+     OR (OLD.cancelled_by_user_id IS NOT NULL AND (NEW.cancelled_by_user_id IS DISTINCT FROM OLD.cancelled_by_user_id OR NEW.cancelled_at IS DISTINCT FROM OLD.cancelled_at
+         OR NEW.cancel_reason IS DISTINCT FROM OLD.cancel_reason)) THEN
+    RAISE EXCEPTION 'BOA_IMMUTABLE: submission, approval and cancellation records cannot be rewritten' USING ERRCODE = 'BA009';
+  END IF;
   -- Dispatch data is written exactly once, by the transition APPROVED -> IN_TRANSIT, and never changes afterwards.
   IF (NEW.dispatched_by_user_id IS DISTINCT FROM OLD.dispatched_by_user_id OR NEW.dispatched_at IS DISTINCT FROM OLD.dispatched_at
       OR NEW.dispatch_effective_at IS DISTINCT FROM OLD.dispatch_effective_at OR NEW.dispatch_transaction_id IS DISTINCT FROM OLD.dispatch_transaction_id
@@ -466,6 +474,45 @@ $$;
 
 CREATE TRIGGER transfer_receipts_audit AFTER INSERT ON transfer_receipts
   FOR EACH ROW EXECUTE FUNCTION boa_audit_transfer_receipt();
+
+
+-- Re-created from 0022: the permission is checked BEFORE the row version, so a user without transfer permission
+-- cannot probe transfer ids and row versions (BA018 versus BA002).
+CREATE OR REPLACE FUNCTION boa_transfer_lock(p_transfer_id integer, p_row_version integer, p_permissions text[])
+RETURNS public.transfers
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_actor integer := public.boa_current_user_id();
+  v_transfer public.transfers;
+  v_permission text;
+  v_allowed boolean := false;
+BEGIN
+  IF v_actor IS NULL THEN
+    RAISE EXCEPTION 'BOA_NOT_AUTHORISED: active user context required' USING ERRCODE = 'BA002';
+  END IF;
+  SELECT * INTO v_transfer FROM public.transfers WHERE id = p_transfer_id FOR UPDATE;
+  IF NOT FOUND OR NOT public.boa_warehouse_in_scope(v_transfer.source_warehouse_id) THEN
+    RAISE EXCEPTION 'BOA_NOT_FOUND: transfer %', p_transfer_id USING ERRCODE = 'BA003';
+  END IF;
+  FOREACH v_permission IN ARRAY p_permissions
+  LOOP
+    IF public.boa_has_permission(v_permission) THEN
+      v_allowed := true;
+      EXIT;
+    END IF;
+  END LOOP;
+  IF NOT v_allowed THEN
+    RAISE EXCEPTION 'BOA_NOT_AUTHORISED: transfer permission required' USING ERRCODE = 'BA002';
+  END IF;
+  IF p_row_version IS NULL OR v_transfer.row_version <> p_row_version THEN
+    RAISE EXCEPTION 'BOA_STALE_VERSION: transfer % was changed by another user', p_transfer_id USING ERRCODE = 'BA018';
+  END IF;
+  RETURN v_transfer;
+END;
+$$;
 
 -- ---------------------------------------------------------------------------
 -- 5. Dispatch: WAREHOUSE (source) -> IN_TRANSIT, consuming the TRANSFER commitment atomically.
@@ -545,6 +592,8 @@ BEGIN
     RAISE EXCEPTION 'BOA_INACTIVE_REFERENCE: an item on this transfer is now inactive' USING ERRCODE = 'BA011';
   END IF;
   PERFORM 1 FROM public.warehouse_locations WHERE id IN (SELECT source_location_id FROM public.transfer_lines WHERE transfer_id = p_transfer_id) ORDER BY id FOR SHARE;
+  PERFORM 1 FROM public.funding_sources WHERE id IN (SELECT funding_source_id FROM public.transfer_lines WHERE transfer_id = p_transfer_id) ORDER BY id FOR SHARE;
+  PERFORM 1 FROM public.projects WHERE id IN (SELECT project_id FROM public.transfer_lines WHERE transfer_id = p_transfer_id) ORDER BY id FOR SHARE;
   IF EXISTS (SELECT 1 FROM public.transfer_lines l JOIN public.warehouse_locations w ON w.id = l.source_location_id WHERE l.transfer_id = p_transfer_id AND NOT w.is_active)
      OR EXISTS (SELECT 1 FROM public.transfer_lines l JOIN public.funding_sources f ON f.id = l.funding_source_id WHERE l.transfer_id = p_transfer_id AND NOT f.is_active)
      OR EXISTS (SELECT 1 FROM public.transfer_lines l JOIN public.projects p ON p.id = l.project_id WHERE l.transfer_id = p_transfer_id AND NOT p.is_active) THEN
@@ -610,6 +659,34 @@ BEGIN
     IF v_on_hand < v_bucket.qty OR v_on_hand - v_bucket.qty < v_committed - v_bucket.qty THEN
       RAISE EXCEPTION 'BOA_TRANSFER_INSUFFICIENT_STOCK: the exact stock bucket for item % no longer holds the reserved quantity (% on hand, % required)',
         v_bucket.item_id, trim_scale(v_on_hand), trim_scale(v_bucket.qty) USING ERRCODE = 'BA030';
+    END IF;
+  END LOOP;
+
+  -- (c) Funding/project-pinned pools. Dispatch removes the same quantity from the funded stock and from this
+  -- transfer's own pinned reservation, so it cannot starve another reservation by itself; the check is kept so that
+  -- funded stock lost by any path that does not look at commitments still cannot be dispatched over a stranded
+  -- funded reservation (parity with approval check (c) and issue check (d)).
+  FOR v_bucket IN
+    SELECT l.item_id, l.funding_source_id, l.project_id, sum(l.quantity) AS qty
+      FROM public.transfer_lines l
+     WHERE l.transfer_id = p_transfer_id AND (l.funding_source_id IS NOT NULL OR l.project_id IS NOT NULL)
+     GROUP BY l.item_id, l.funding_source_id, l.project_id
+     ORDER BY l.item_id, l.funding_source_id NULLS FIRST, l.project_id NULLS FIRST
+  LOOP
+    SELECT coalesce(sum(e.signed_quantity), 0) INTO v_physical
+      FROM public.inventory_entries e
+     WHERE e.item_id = v_bucket.item_id AND e.warehouse_id = v_transfer.source_warehouse_id
+       AND e.custody_scope = 'WAREHOUSE' AND e.condition_code = 'USABLE'
+       AND e.funding_source_id IS NOT DISTINCT FROM v_bucket.funding_source_id
+       AND e.project_id IS NOT DISTINCT FROM v_bucket.project_id;
+    SELECT coalesce(sum(c.quantity_base_uom - c.quantity_fulfilled), 0) INTO v_committed
+      FROM public.inventory_commitments c
+     WHERE c.item_id = v_bucket.item_id AND c.warehouse_id = v_transfer.source_warehouse_id AND c.status IN ('ACTIVE', 'PARTIALLY_FULFILLED')
+       AND c.funding_source_id IS NOT DISTINCT FROM v_bucket.funding_source_id
+       AND c.project_id IS NOT DISTINCT FROM v_bucket.project_id;
+    IF v_physical < v_committed OR v_physical < v_bucket.qty THEN
+      RAISE EXCEPTION 'BOA_TRANSFER_INSUFFICIENT_STOCK: the funded stock of item % no longer covers the reservations held against it (% on hand, % reserved)',
+        v_bucket.item_id, trim_scale(v_physical), trim_scale(v_committed) USING ERRCODE = 'BA030';
     END IF;
   END LOOP;
 
@@ -839,11 +916,18 @@ BEGIN
       RAISE EXCEPTION 'BOA_QUANTITY_PRECISION: line % quantity exceeds % decimal places allowed for the item base UOM (never rounded)', v_ord, v_dp
         USING ERRCODE = 'BA008';
     END IF;
-    -- Any active condition except REJECTED_PENDING_RETURN (reserved for the supplier-return flow). Condition is
-    -- recorded as found; a damaged arrival is a condition at receipt, not a quantity loss.
+    -- Explicit allow-list of arrival conditions (ADR-0017 T10). PENDING_INSPECTION is refused: only the receipt
+    -- inspection flow can clear it, so stock received that way would be stranded. REJECTED_PENDING_RETURN belongs
+    -- to the supplier-return flow. A condition code added later is refused until the owner allows it here.
+    -- Condition is recorded as found; a damaged arrival is a condition at receipt, not a quantity loss.
     SELECT * INTO v_cond FROM public.condition_codes WHERE code = v_el ->> 'conditionCode' FOR SHARE;
-    IF NOT FOUND OR NOT v_cond.is_active OR v_cond.code = 'REJECTED_PENDING_RETURN' THEN
+    IF NOT FOUND OR NOT v_cond.is_active
+       OR v_cond.code NOT IN ('USABLE', 'DAMAGED', 'QUARANTINE', 'EXPIRED', 'UNSERVICEABLE', 'OBSOLETE') THEN
       RAISE EXCEPTION 'BOA_TRANSFER_INVALID: line % condition is not an allowed receiving condition', v_ord USING ERRCODE = 'BA029';
+    END IF;
+    -- Expired stock never becomes available at the destination by being received as USABLE.
+    IF v_cond.code = 'USABLE' AND v_line.expiry_date IS NOT NULL AND v_line.expiry_date < p_effective_at::date THEN
+      RAISE EXCEPTION 'BOA_TRANSFER_INVALID: line % is past its expiry date and cannot be received as USABLE (receive it as EXPIRED)', v_ord USING ERRCODE = 'BA029';
     END IF;
     v_location := (v_el ->> 'destinationLocationId')::integer;
     IF v_location IS NOT NULL THEN
@@ -898,9 +982,12 @@ BEGIN
     END IF;
   END LOOP;
 
+  -- A late arrival may be recorded on the same receiving document: the reference is then already on file and is
+  -- not duplicated. Every receipt still stores its own reference and receiver name on transfer_receipts.
   INSERT INTO public.document_references (entity_type, entity_id, document_type, document_number, document_date, recipient_name, remarks)
   VALUES ('TRANSFER', p_transfer_id::text, 'RECEIVING_DOCUMENT', btrim(p_receiving_document_ref), p_receiving_document_date,
-          btrim(p_receiver_name), nullif(btrim(p_remarks), ''));
+          btrim(p_receiver_name), nullif(btrim(p_remarks), ''))
+  ON CONFLICT ON CONSTRAINT document_references_entity_type_number_unique DO NOTHING;
 
   PERFORM set_config('boa.change_reason', CASE WHEN v_short THEN 'Transfer partly received: shortfall remains in transit' ELSE 'Transfer fully received' END, true);
   UPDATE public.transfers SET status = CASE WHEN v_short THEN 'DISCREPANCY' ELSE 'RECEIVED' END WHERE id = p_transfer_id;
