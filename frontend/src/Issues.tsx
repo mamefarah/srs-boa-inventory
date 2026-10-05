@@ -57,6 +57,7 @@ interface Issue {
 interface ReqLine {
   id: number;
   lineNo: number;
+  itemId: number;
   itemCode: string;
   itemName: string;
   baseUomCode: string;
@@ -65,9 +66,21 @@ interface ReqLine {
 }
 interface Req {
   id: number;
+  warehouseId: number;
   warehouseCode: string;
   purpose: string;
   lines?: ReqLine[];
+}
+interface Bucket {
+  warehouseLocationId: number | null;
+  locationCode: string | null;
+  batchRef: string | null;
+  expiryDate: string | null;
+  serialRef: string | null;
+  fundingSourceId: number | null;
+  projectId: number | null;
+  onHandQuantity: string;
+  fefoRank: number | string;
 }
 interface Custodian { id: number; custodianType: string; displayName: string }
 
@@ -108,25 +121,29 @@ export function IssuesView({ principal }: { principal: Principal }) {
 
 function IssueList({ canPrepare, onOpen }: { canPrepare: boolean; onOpen: (id: number | 'new') => void }) {
   const [status, setStatus] = useState('');
+  const [pendingAck, setPendingAck] = useState(false);
   const [rows, setRows] = useState<Issue[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const load = useCallback(() => {
     const params = new URLSearchParams({ limit: '100' });
-    if (status) params.set('status', status);
-    api<{ data: Issue[] }>(`/issues?${params}`)
+    if (status && !pendingAck) params.set('status', status);
+    api<{ data: Issue[] }>(pendingAck ? '/issues/pending-acknowledgement' : `/issues?${params}`)
       .then((r) => {
         setRows(r.data);
         setError(null);
       })
       .catch((e) => setError(asError(e)));
-  }, [status]);
+  }, [status, pendingAck]);
   useEffect(load, [load]);
 
   return (
     <section>
       <p className="hint">{t('issIntro')}</p>
       <div className="toolbar">
-        <select aria-label={t('status')} value={status} onChange={(e) => setStatus(e.target.value)}>
+        <label className="check">
+          <input type="checkbox" checked={pendingAck} onChange={(e) => setPendingAck(e.target.checked)} /> {t('issPendingAckFilter')}
+        </label>
+        <select aria-label={t('status')} value={status} disabled={pendingAck} onChange={(e) => setStatus(e.target.value)}>
           <option value="">{t('issAllStatuses')}</option>
           {(Object.keys(STATUS) as Status[]).map((s) => (
             <option key={s} value={s}>
@@ -181,6 +198,10 @@ function NewIssueForm({ onDone }: { onDone: (id?: number) => void }) {
   const [custodians, setCustodians] = useState<Custodian[]>([]);
   const [req, setReq] = useState<Req | null>(null);
   const [qty, setQty] = useState<Record<number, string>>({});
+  // Stock bucket chosen per requisition line (index into that item's FEFO-ordered bucket list) and any override reason.
+  const [buckets, setBuckets] = useState<Record<number, Bucket[]>>({});
+  const [pickedBucket, setPickedBucket] = useState<Record<number, number>>({});
+  const [overrideReason, setOverrideReason] = useState<Record<number, string>>({});
   const [f, setF] = useState({ scope: 'EXTERNAL' as Scope, custodianId: '', recipientName: '', recipientUnit: '', handoverLocation: '', reason: '' });
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
@@ -203,6 +224,20 @@ function NewIssueForm({ onDone }: { onDone: (id?: number) => void }) {
       const r = await api<{ data: Req }>(`/requisitions/${id}`);
       setReq(r.data);
       setQty(Object.fromEntries((r.data.lines ?? []).map((l) => [l.id, remainingToIssue(l)])));
+      setPickedBucket({});
+      setOverrideReason({});
+      // FEFO decision support: issuable buckets, earliest expiry first. The server re-validates the exact bucket on post.
+      const entries = await Promise.all(
+        (r.data.lines ?? []).map(async (l) => {
+          try {
+            const b = await api<{ data: Bucket[] }>(`/stock/buckets?${new URLSearchParams({ warehouseId: String(r.data.warehouseId), itemId: String(l.itemId) })}`);
+            return [l.id, b.data] as const;
+          } catch {
+            return [l.id, []] as const;
+          }
+        }),
+      );
+      setBuckets(Object.fromEntries(entries));
     } catch (e) {
       setError(asError(e));
     }
@@ -211,7 +246,14 @@ function NewIssueForm({ onDone }: { onDone: (id?: number) => void }) {
   const open = (req?.lines ?? []).filter((l) => scaled(remainingToIssue(l)) > 0n);
   const chosen = open.filter((l) => (qty[l.id] ?? '').trim() !== '' && (qty[l.id] ?? '').trim() !== '0');
   const badQty = chosen.some((l) => !QTY_RE.test(qty[l.id]!.trim()) || scaled(qty[l.id]!.trim()) > scaled(remainingToIssue(l)));
-  const valid = !!req && chosen.length > 0 && !badQty && f.recipientName.trim().length > 0 && (f.scope === 'EXTERNAL' || f.custodianId !== '');
+  const bucketOf = (l: ReqLine): Bucket | undefined => buckets[l.id]?.[pickedBucket[l.id] ?? 0];
+  const needsOverride = (l: ReqLine) => (pickedBucket[l.id] ?? 0) > 0;
+  const bucketProblem = chosen.some((l) => {
+    const b = bucketOf(l);
+    if (!b) return false;
+    return scaled(qty[l.id]!.trim()) > scaled(b.onHandQuantity) || (needsOverride(l) && (overrideReason[l.id] ?? '').trim().length < 5);
+  });
+  const valid = !!req && chosen.length > 0 && !badQty && !bucketProblem && f.recipientName.trim().length > 0 && (f.scope === 'EXTERNAL' || f.custodianId !== '');
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -230,7 +272,24 @@ function NewIssueForm({ onDone }: { onDone: (id?: number) => void }) {
           handoverLocation: f.handoverLocation || null,
           reason: f.reason || null,
           clientRef,
-          lines: chosen.map((l) => ({ requisitionLineId: l.id, quantity: qty[l.id]!.trim() })),
+          lines: chosen.map((l) => {
+            const b = bucketOf(l);
+            return {
+              requisitionLineId: l.id,
+              quantity: qty[l.id]!.trim(),
+              ...(b
+                ? {
+                    warehouseLocationId: b.warehouseLocationId,
+                    batchRef: b.batchRef,
+                    expiryDate: b.expiryDate,
+                    serialRef: b.serialRef,
+                    fundingSourceId: b.fundingSourceId,
+                    projectId: b.projectId,
+                    notes: needsOverride(l) ? `FEFO override: ${overrideReason[l.id]!.trim()}`.slice(0, 500) : null,
+                  }
+                : {}),
+            };
+          }),
         },
       });
       onDone(r.data.id);
@@ -266,6 +325,7 @@ function NewIssueForm({ onDone }: { onDone: (id?: number) => void }) {
                 <th scope="col">{t('reqApproved')}</th>
                 <th scope="col">{t('issRemaining')}</th>
                 <th scope="col">{t('issQuantityNow')}</th>
+                <th scope="col">{t('issBucket')}</th>
               </tr>
             </thead>
             <tbody>
@@ -289,12 +349,42 @@ function NewIssueForm({ onDone }: { onDone: (id?: number) => void }) {
                       onChange={(e) => setQty({ ...qty, [l.id]: e.target.value })}
                     />
                   </td>
+                  <td data-label={t('issBucket')}>
+                    {(buckets[l.id]?.length ?? 0) === 0 ? (
+                      <span className="hint">{t('issNoBuckets')}</span>
+                    ) : (
+                      <>
+                        <select
+                          aria-label={`${t('issBucket')} ${l.itemCode}`}
+                          value={pickedBucket[l.id] ?? 0}
+                          onChange={(e) => setPickedBucket({ ...pickedBucket, [l.id]: Number(e.target.value) })}
+                        >
+                          {buckets[l.id]!.map((b, i) => (
+                            <option key={i} value={i}>
+                              {i === 0 ? `${t('issFefoFirst')} · ` : ''}
+                              {[b.locationCode, b.batchRef, b.expiryDate ? `${t('issExpires')} ${b.expiryDate}` : null].filter(Boolean).join(' · ') || t('issUnbatched')} — {b.onHandQuantity} {l.baseUomCode}
+                            </option>
+                          ))}
+                        </select>
+                        {needsOverride(l) && (
+                          <input
+                            aria-label={`${t('issOverrideReason')} ${l.itemCode}`}
+                            placeholder={t('issOverrideReason')}
+                            maxLength={450}
+                            value={overrideReason[l.id] ?? ''}
+                            onChange={(e) => setOverrideReason({ ...overrideReason, [l.id]: e.target.value })}
+                          />
+                        )}
+                      </>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
         {badQty && <p className="notice danger">{t('issQuantityInvalid')}</p>}
+        {bucketProblem && <p className="notice danger">{t('issBucketInvalid')}</p>}
         <Field label="issDestination">
           <select value={f.scope} onChange={(e) => setF({ ...f, scope: e.target.value as Scope })}>
             <option value="EXTERNAL">{t('issScopeExternal')}</option>

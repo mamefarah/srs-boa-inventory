@@ -6,6 +6,7 @@ import { IssuesView } from './Issues.tsx';
 import { ItemsView, ReferenceView } from './ItemMaster.tsx';
 import { OpeningBalancesView } from './OpeningBalance.tsx';
 import { ReceiptsView } from './Receipts.tsx';
+import { StockCardView } from './StockCard.tsx';
 import { RequisitionsView } from './Requisitions.tsx';
 
 type Session =
@@ -14,7 +15,7 @@ type Session =
   | { state: 'blocked'; code: string; requestId?: string }
   | { state: 'ready'; principal: Principal };
 
-type TabId = 'stock' | 'items' | 'reference' | 'opening' | 'receipts' | 'requisitions' | 'issues' | 'warehouses' | 'policies' | 'audit';
+type TabId = 'stock' | 'items' | 'reference' | 'opening' | 'receipts' | 'requisitions' | 'issues' | 'stockcard' | 'warehouses' | 'policies' | 'audit';
 
 // Navigation hints only. The server enforces every permission and scope independently.
 const TABS: Array<{ id: TabId; label: MessageKey; permissions: string[] }> = [
@@ -25,6 +26,7 @@ const TABS: Array<{ id: TabId; label: MessageKey; permissions: string[] }> = [
   { id: 'receipts', label: 'tabReceipts', permissions: ['READ_RECEIPTS', 'PREPARE_RECEIPTS', 'RECEIVE_RECEIPTS', 'INSPECT_RECEIPTS', 'RETURN_REJECTED_STOCK'] },
   { id: 'requisitions', label: 'tabRequisitions', permissions: ['READ_REQUISITIONS', 'PREPARE_REQUISITIONS', 'APPROVE_REQUISITIONS'] },
   { id: 'issues', label: 'tabIssues', permissions: ['READ_ISSUES', 'PREPARE_ISSUES', 'POST_ISSUES'] },
+  { id: 'stockcard', label: 'tabStockCard', permissions: ['READ_LEDGER'] },
   { id: 'warehouses', label: 'tabWarehouses', permissions: ['READ_WAREHOUSES'] },
   { id: 'policies', label: 'tabPolicies', permissions: ['READ_POLICIES'] },
   { id: 'audit', label: 'tabAudit', permissions: ['READ_AUDIT'] },
@@ -145,6 +147,7 @@ function Workspace({ principal }: { principal: Principal }) {
           {active === 'receipts' && <ReceiptsView principal={principal} />}
           {active === 'requisitions' && <RequisitionsView principal={principal} />}
           {active === 'issues' && <IssuesView principal={principal} />}
+          {active === 'stockcard' && <StockCardView principal={principal} />}
           {active === 'warehouses' && <WarehousesView canManageAccess={principal.permissions.includes('MANAGE_WAREHOUSE_ACCESS')} />}
           {active === 'policies' && <PoliciesView />}
           {active === 'audit' && <AuditView />}

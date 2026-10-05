@@ -305,6 +305,22 @@ const en = {
   issPostConfirm: 'Post this issue to the inventory ledger? Stock leaves the warehouse and cannot be edited afterwards; later corrections need a separate correction.',
   issPostConfirmButton: 'Confirm and post',
   issCancel: 'Cancel issue',
+  issBucket: 'Stock to issue from',
+  issNoBuckets: 'No issuable stock bucket is listed; the server will check the stock when posting.',
+  issFefoFirst: 'Suggested (earliest expiry)',
+  issExpires: 'expires',
+  issUnbatched: 'No batch / no expiry',
+  issOverrideReason: 'Reason for not taking the earliest-expiry stock',
+  issBucketInvalid: 'Quantity must fit the chosen stock bucket, and choosing a later-expiry bucket needs a reason of at least 5 characters.',
+  issPendingAckFilter: 'Only issues awaiting recipient acknowledgement',
+  tabStockCard: 'Stock card',
+  scTitle: 'Stock card (bin card)',
+  scIntro: 'Every posted ledger entry for one item in one warehouse, in time order, with a running balance derived from the ledger. Nothing here can be edited.',
+  scSearch: 'Find item by code or name',
+  scRunning: 'Running balance',
+  scMovement: 'Movement',
+  scDocument: 'Document',
+  scWhen: 'Effective',
 } as const;
 
 export type MessageKey = keyof typeof en;

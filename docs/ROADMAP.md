@@ -105,7 +105,7 @@ Entry gate: an iPhone and Android proof of concept for install, sign-in and offl
 
 Every workflow from M6 onward states its offline class (A, B or C) and its behaviour for each sync outcome.
 
-## M6 — Issue + Custody Handoff — IN PROGRESS (slice 1 database layer, slice 2 HTTP API and slice 3 admin screens done; see ADR-0016)
+## M6 — Issue + Custody Handoff — IN PROGRESS (slice 1 database layer, slice 2 HTTP API and slice 3 admin screens and slice 4 reads (stock card, FEFO buckets, pending acknowledgement) done; see ADR-0016)
 
 Slices: (1) schema, `boa_issue_*` functions, permissions and database tests; (2) HTTP API with idempotent post; (3) mobile and admin screens, FEFO suggestion, acknowledgement capture; (4) reports and bin-card visibility. Reversal of a posted issue is M10.
 

@@ -297,3 +297,77 @@ describe('issue API: create, evidence, post', () => {
     assert.equal(reqCancel.body.error.code, 'INVALID_STATE');
   });
 });
+
+describe('issue API: stock card, FEFO buckets and pending-acknowledgement report (slice 4)', () => {
+  const OTHER = 'issue-op-b';
+
+  async function postedIssue(stock: string, qty: string) {
+    const item = await newItemWithStock(stock);
+    const { requisitionId, lineId } = await decidedRequisition(item, qty);
+    const issue = (await post('/api/issues', OP, issueBody(requisitionId, lineId, qty))).body.data;
+    assert.equal((await voucher(issue.id)).status, 201);
+    const posted = await post(`/api/issues/${issue.id}/post`, OP, { rowVersion: issue.rowVersion }, { 'Idempotency-Key': key() });
+    assert.equal(posted.status, 201, JSON.stringify(posted.body));
+    return { item, issue };
+  }
+
+  it('the stock card lists every ledger entry in order with an exact running balance, scoped to the warehouse', async () => {
+    const { item } = await postedIssue('40', '10');
+    const card = await get(`/api/stock/card?warehouseId=${fx.warehouseA}&itemId=${item}`, 'operator-a');
+    assert.equal(card.status, 200, JSON.stringify(card.body));
+    const rows = card.body.data as Array<Record<string, string>>;
+    assert.deepEqual(rows.map((r) => [r.signedQuantity, r.runningBalance]), [['40', '40'], ['-10', '30']]);
+    assert.equal(rows[1]!.businessDocumentType, 'ISSUE');
+    assert.equal((await get(`/api/stock/card?warehouseId=${fx.warehouseA}&itemId=${item}`, 'operator-b')).status, 403, 'another warehouse is refused');
+    assert.equal((await get(`/api/stock/card?warehouseId=${fx.warehouseA}&itemId=${item}`, OP)).status, 403, 'READ_LEDGER is required');
+    assert.equal((await request(app).get(`/api/stock/card?warehouseId=${fx.warehouseA}&itemId=${item}`)).status, 401);
+    assert.equal((await get(`/api/stock/card?itemId=${item}`, 'operator-a')).status, 400, 'warehouse is required');
+  });
+
+  it('lists issuable buckets earliest-expiry first and omits empty buckets', async () => {
+    n += 1;
+    const item = (
+      await admin.query(
+        `INSERT INTO items (item_code, name, category_id, base_uom_id, asset_control_type, is_batch_tracked, is_expiry_tracked)
+         VALUES ($1, $2, $3, $4, 'SUPPLY', true, true) RETURNING id`,
+        [`API-F${n}`, `FEFO API test item ${n}`, categoryId, uomId],
+      )
+    ).rows[0].id;
+    const t = (
+      await admin.query(
+        `INSERT INTO inventory_transactions (transaction_type, effective_at, posted_by_user_id, idempotency_key, request_hash, reason, business_document_type, business_document_id)
+         SELECT 'TEST_FIXTURE', now(), id, $1, repeat('c', 64), 'FEFO fixture', 'TEST_DOC', $1 FROM users WHERE firebase_uid = 'admin-1' RETURNING id`,
+        [key()],
+      )
+    ).rows[0].id;
+    await admin.query(
+      `INSERT INTO inventory_entries (transaction_id, line_no, item_id, signed_quantity, base_uom_id, custody_scope, warehouse_id, warehouse_location_id, condition_code, batch_ref, expiry_date)
+       VALUES ($1, 1, $2, 3, $3, 'WAREHOUSE', $4, $5, 'USABLE', 'B-LATE', '2027-12-31'),
+              ($1, 2, $2, 2, $3, 'WAREHOUSE', $4, $5, 'USABLE', 'B-EARLY', '2027-01-31'),
+              ($1, 3, $2, 4, $3, 'WAREHOUSE', $4, $5, 'USABLE', 'B-GONE', '2026-12-31'),
+              ($1, 4, $2, -4, $3, 'WAREHOUSE', $4, $5, 'USABLE', 'B-GONE', '2026-12-31'),
+              ($1, 5, $2, -3, $3, 'OPENING_BALANCE_CONTRA', NULL, NULL, 'USABLE', 'B-LATE', '2027-12-31'),
+              ($1, 6, $2, -2, $3, 'OPENING_BALANCE_CONTRA', NULL, NULL, 'USABLE', 'B-EARLY', '2027-01-31')`,
+      [t, item, uomId, fx.warehouseA, locationId],
+    );
+    const r = await get(`/api/stock/buckets?warehouseId=${fx.warehouseA}&itemId=${item}`, OP);
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    const rows = r.body.data as Array<Record<string, unknown>>;
+    assert.deepEqual(rows.map((b) => [b.batchRef, b.onHandQuantity, Number(b.fefoRank)]), [
+      ['B-EARLY', '2', 1],
+      ['B-LATE', '3', 2],
+    ]);
+    assert.equal((await get(`/api/stock/buckets?warehouseId=${fx.warehouseA}&itemId=${item}`, OTHER)).status, 403);
+  });
+
+  it('the pending-acknowledgement report shows posted issues until an acknowledgement is recorded, scoped by warehouse', async () => {
+    const { issue } = await postedIssue('10', '2');
+    const listed = async (uid: string) => ((await get('/api/issues/pending-acknowledgement', uid)).body.data as Array<{ id: number }>).map((r) => r.id);
+    assert.ok((await listed(OP)).includes(issue.id));
+    assert.ok(!(await listed(OTHER)).includes(issue.id), 'not visible outside the warehouse scope');
+    const ack = await post(`/api/issues/${issue.id}/documents`, OP, { documentType: 'RECIPIENT_ACKNOWLEDGEMENT', documentNumber: `ACK-${randomUUID().slice(0, 6)}`, documentDate: '2026-10-06' });
+    assert.equal(ack.status, 201, JSON.stringify(ack.body));
+    assert.ok(!(await listed(OP)).includes(issue.id), 'acknowledged issues leave the report');
+    assert.equal((await get('/api/issues/pending-acknowledgement', 'requester')).status, 403);
+  });
+});

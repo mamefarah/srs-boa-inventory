@@ -217,6 +217,81 @@ export function inventoryRoutes({ db, logger, authenticated, requisitionCommitme
     }
   });
 
+  // GET /api/stock/card — READ_LEDGER + scope (transaction detail is ledger data; RLS needs READ_LEDGER). Ledger-derived bin/stock card for ONE item in ONE warehouse's
+  // custody: every posted entry in time order with a running balance computed by the database (never stored).
+  const cardQuery = z.object({ warehouseId: idParam, itemId: idParam, limit: limitParam(500, 100), offset: offsetParam });
+  router.get('/stock/card', ...authenticated, requirePermission(db, logger, PERMISSIONS.READ_LEDGER), async (req, res, next) => {
+    try {
+      const q = cardQuery.parse(req.query);
+      await scopeOrDeny(db, logger, res, 'GET /api/stock/card', q.warehouseId);
+      const rows = await withUserContext(
+        db,
+        principalOf(res).userId,
+        async (tx) => {
+          const r = await tx.execute(sql`
+            SELECT * FROM (
+              SELECT e.id AS "entryId", e.transaction_id AS "transactionId", t.transaction_type AS "transactionType",
+                     t.business_document_type AS "businessDocumentType", t.business_document_id AS "businessDocumentId",
+                     t.effective_at AS "effectiveAt", t.posted_at AS "postedAt",
+                     e.condition_code AS "conditionCode", e.warehouse_location_id AS "warehouseLocationId",
+                     e.batch_ref AS "batchRef", e.expiry_date AS "expiryDate",
+                     t.reversal_of_transaction_id AS "reversalOfTransactionId",
+                     trim_scale(e.signed_quantity)::text AS "signedQuantity",
+                     trim_scale(sum(e.signed_quantity) OVER (ORDER BY t.effective_at, e.id))::text AS "runningBalance"
+                FROM inventory_entries e
+                JOIN inventory_transactions t ON t.id = e.transaction_id
+               WHERE e.custody_scope = 'WAREHOUSE' AND e.warehouse_id = ${q.warehouseId} AND e.item_id = ${q.itemId}
+            ) card
+            ORDER BY "effectiveAt", "entryId"
+            LIMIT ${q.limit} OFFSET ${q.offset}`);
+          return r.rows;
+        },
+        { readOnly: true },
+      );
+      res.json({
+        data: rows,
+        page: { limit: q.limit, offset: q.offset },
+        basis: 'Running balance is the sum of all conditions in warehouse custody, in effective-time order; it is derived from the ledger and never stored.',
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // GET /api/stock/buckets — READ_STOCK + scope. Issuable on-hand per exact stock bucket for one item in one
+  // warehouse, in first-expired-first-out order (earliest expiry first, no expiry last). Decision support only:
+  // the posting function still validates the exact bucket it is given.
+  router.get('/stock/buckets', ...authenticated, requirePermission(db, logger, PERMISSIONS.READ_STOCK), async (req, res, next) => {
+    try {
+      const q = z.object({ warehouseId: idParam, itemId: idParam }).parse(req.query);
+      await scopeOrDeny(db, logger, res, 'GET /api/stock/buckets', q.warehouseId);
+      const rows = await withUserContext(
+        db,
+        principalOf(res).userId,
+        async (tx) => {
+          const r = await tx.execute(sql`
+            SELECT e.warehouse_location_id AS "warehouseLocationId", wl.code AS "locationCode",
+                   e.batch_ref AS "batchRef", e.expiry_date AS "expiryDate", e.serial_ref AS "serialRef",
+                   e.funding_source_id AS "fundingSourceId", e.project_id AS "projectId",
+                   trim_scale(sum(e.signed_quantity))::text AS "onHandQuantity",
+                   row_number() OVER (ORDER BY e.expiry_date NULLS LAST, e.batch_ref NULLS LAST, e.warehouse_location_id NULLS LAST) AS "fefoRank"
+              FROM inventory_entries e
+              JOIN condition_codes cc ON cc.code = e.condition_code AND cc.is_issuable
+              LEFT JOIN warehouse_locations wl ON wl.id = e.warehouse_location_id
+             WHERE e.custody_scope = 'WAREHOUSE' AND e.warehouse_id = ${q.warehouseId} AND e.item_id = ${q.itemId}
+             GROUP BY e.warehouse_location_id, wl.code, e.batch_ref, e.expiry_date, e.serial_ref, e.funding_source_id, e.project_id
+            HAVING sum(e.signed_quantity) > 0
+             ORDER BY "fefoRank"`);
+          return r.rows;
+        },
+        { readOnly: true },
+      );
+      res.json({ data: rows });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // GET /api/audits — READ_AUDIT + scope (global scope sees all events). Keyset pagination.
   const auditQuery = z.object({
     warehouseId: idParam.optional(),
