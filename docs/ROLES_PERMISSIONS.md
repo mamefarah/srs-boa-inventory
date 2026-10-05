@@ -56,6 +56,13 @@ System capabilities, not official job titles or paper signatory authority:
 
 Enforced in the database: SELECT-only grants; the approver may not be the preparer or submitter; an access administrator may not hold these (INV-029). Who may approve by value or item class is open (ADR-0017 T1). See ADR-0017.
 
+## Implemented technical capabilities (M7 transfers, slice 2)
+
+- `DISPATCH_TRANSFERS` — post the source-side dispatch of an approved transfer (stock to IN_TRANSIT), source warehouse scope (role: `TRANSFER_DISPATCHER`).
+- `RECEIVE_TRANSFERS` — post the destination-side receipt of a dispatched transfer, destination warehouse scope (role: `TRANSFER_RECEIVER`).
+
+The person who dispatched may not receive the same transfer (database-enforced). Whether the dispatcher must also differ from the preparer, submitter or approver is open (ADR-0017 T11). An access administrator may not hold these (INV-029).
+
 ## Permission model
 
 Permission = role + action + warehouse scope + transaction scope + authority limit.
