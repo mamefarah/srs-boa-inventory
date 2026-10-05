@@ -20,7 +20,7 @@
 | M5 Requisition + approval + optional commitment | MERGED (PR #19) | Complete; see ADR-0010 |
 | Post-M5 fix | MERGED (PR #20) | One decision per line (DB + API); committed/ATP on `/api/stock`; migration 0017 |
 | **M6 Issue + custody handoff** | **IN PROGRESS: slices 1-4 (database layer, HTTP API, admin screens, stock card/FEFO/pending-ack reads)** | Migrations 0019/0020, `boa_issue_*`, `/api/issues`, 40 new tests; mobile storekeeper screens and further reports are later; see ADR-0016 |
-| **M7 Warehouse transfer** | **IN PROGRESS: slice 1 (database layer: request, approval, reservation)** | Migrations 0021/0022, `boa_transfer_*`, `TRANSFER` commitments, 26 new tests; dispatch, receipt, API, screens are later slices; see ADR-0017 |
+| **M7 Warehouse transfer** | **IN PROGRESS: slices 1-2 (database layer: request, approval, reservation, dispatch, receipt)** | Migrations 0021-0024, `boa_transfer_*`, `TRANSFER` commitments, IN_TRANSIT ledger legs, 75 new tests; API, screens, discrepancy resolution are later slices; see ADR-0017 |
 | M8–M16 | Planned | One milestone branch at a time |
 
 ## Current main baseline
@@ -139,7 +139,7 @@ Current examples:
 | In-memory rate limiting for multi-instance production | M15 |
 | SPA Content-Security-Policy | M15 |
 | Generic M1 app-role audit insertion capability; migrate toward narrow controlled writers as workflows land | M4+ / M15 |
-| Non-warehouse ledger-leg visibility for IN_TRANSIT/EXTERNAL/contra | M7 |
+| Non-warehouse ledger-leg visibility for EXTERNAL/contra legs (IN_TRANSIT done in M7 slice 2) | M10 |
 | Item aliases/alternate names | future master-data follow-up |
 | M3 browser/mobile verification is not documented as completed in PR #12 | before pilot / re-verify during later end-to-end testing |
 | Stock readers can read whole commitment rows (incl. cancel reasons, funding/project columns); items with commitments but zero stock are not shown on the stock page | M5 follow-up (needs a policy decision) |

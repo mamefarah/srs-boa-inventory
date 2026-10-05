@@ -1,8 +1,8 @@
-# ADR-0017 — M7 Warehouse Transfer (slice 1: request, approval and reservation)
+# ADR-0017 — M7 Warehouse Transfer (slice 1: request, approval, reservation; slice 2: dispatch and receipt)
 
 **Status:** Proposed (slice 1 of M7; accepted when the M7 pull requests merge). Reviewed by an independent database-security review on 5 October 2026; its findings are applied below.\
 **Date:** 5 October 2026\
-**Controls:** PRD v4.0 Part B §§19, 25, 37; ADR-0001, ADR-0005, ADR-0007, ADR-0008, ADR-0010, ADR-0016; INV-058 to INV-061.
+**Controls:** PRD v4.0 Part B §§19, 25, 37; ADR-0001, ADR-0005, ADR-0007, ADR-0008, ADR-0010, ADR-0016; INV-058 to INV-066.
 
 ## Context
 
@@ -75,3 +75,39 @@ Cancel takes only the transfer row lock, which is safe because releasing a reser
 - Slice 3: HTTP API with idempotent create/dispatch/receive and the new SQLSTATE mappings (`BA029`, `BA030`).
 - Slice 4: screens (admin and the storekeeper app, offline class B) and reports (open and in-transit transfers, discrepancies).
 - Migration 0021 (tables, commitment link) and 0022 (security and functions) are not applied to any database. Rollback before any use: drop the triggers and functions `boa_transfer_*`, `boa_can_read_transfer`, `boa_guard_transfer_header`, `boa_guard_transfer_line` and `boa_audit_transfer`; drop the two transfer tables and the `transfer_line_id` column; restore the `inventory_commitments_requisition_link` and `inventory_commitments_type_valid` constraints from 0015; restore `boa_enforce_role_separation`, `boa_guard_commitment_update` and `boa_issue_post` from their earlier definitions (0020, 0016, 0020); delete the transfer roles and permissions. After a transfer exists, rollback is a forward fix, not a drop.
+
+## Slice 2: dispatch and destination receipt (migrations 0023-0024)
+
+Status: reviewed by a second independent database-security review on 5 October 2026; findings applied as listed below.
+
+### Dispatch (`boa_transfer_dispatch`)
+
+Source side, permission `DISPATCH_TRANSFERS` in the **source** warehouse scope, role `TRANSFER_DISPATCHER`. One atomic `TRANSFER_DISPATCH` ledger transaction per transfer, per line: `WAREHOUSE / USABLE` negative in the source bucket and `IN_TRANSIT / USABLE` positive with no warehouse, both carrying item, batch, expiry, serial, funding source and project. It consumes every TRANSFER commitment in the same transaction. Dispatched quantity is always the approved line quantity (no partial dispatch; T3). The transfer row is locked first, then serial and `(warehouse, item)` advisory locks in ascending item order, so dispatch, cancel, approve, issue and receipt serialise.
+
+The transfer's own reservation is treated as secured stock and is never subtracted twice (PRD §19.3). Item-level, exact-bucket and funding/project-pool checks compare physical stock with every other active commitment. Refusals write nothing. A dispatch needs a hard-copy dispatch note reference and date (gate pass, transporter and vehicle optional), recorded in `document_references` in the same transaction. Effective time must lie between approval and now. After dispatch the transfer can no longer be cancelled; a mistaken dispatch can only be completed by receipt until a return path exists (T9).
+
+### Receipt (`boa_transfer_receive`)
+
+Destination side, permission `RECEIVE_TRANSFERS` in the **destination** warehouse scope, role `TRANSFER_RECEIVER`. The person who dispatched may not also receive (`BA015`). Each receipt is one `TRANSFER_RECEIPT` transaction of mirror legs per line: `IN_TRANSIT` negative and destination `WAREHOUSE` positive in the condition found, at a destination location, preserving every stock dimension. One request may split a line across conditions; several receipts may follow one another (partial and late arrival). It needs a hard-copy receiving document reference and date and the receiving person's name as written on paper; the authenticated user is recorded separately. Receiving more than was dispatched is refused (T10). After every receipt the function proves, per line, that the stock still `IN_TRANSIT` in the ledger equals dispatched minus received, and fails the whole receipt if not.
+
+### Discrepancy (explicit, not resolved)
+
+Whatever has not been received stays in the ledger as `IN_TRANSIT`, the transfer becomes `DISCREPANCY` and remains receivable, and the view `transfer_line_reconciliation` (security invoker) shows dispatched, received and unmatched per line. A late arrival closes it automatically. Formal resolution of non-arrival (return to source, write-off as a loss) is **not** implemented: it is a policy question (T9) and must never be an adjustment (WORKFLOWS §11).
+
+### Visibility and evidence
+
+`IN_TRANSIT` entries carry no warehouse, so the warehouse-scope policy never showed them. A new policy shows an in-transit leg to users who may read stock or the ledger and whose scope covers the source or destination of the transfer that produced it, closing the DEVELOPMENT_STATE open item. Receipts, receipt lines and transfer hard-copy references are readable from both warehouses. The application role cannot write transfer references at all; only the dispatch and receive functions insert them, and the guard allows insert only, with the matching permission and warehouse. The write policy now enumerates entity types, so `TRANSFER` has no write branch.
+
+### Owner questions added
+
+- **T9 Non-arrival and return.** How a shortfall is formally resolved (late receipt only, return to source, loss write-off, by whom and with what evidence) and whether a dispatched transfer can be recalled. Until decided, the shortfall stays in transit.
+- **T10 Over-receipt and arrival conditions.** A physical surplus has nowhere to go until a separate finding mechanism exists. The allowed arrival conditions are `USABLE, DAMAGED, QUARANTINE, EXPIRED, UNSERVICEABLE, OBSOLETE`; `PENDING_INSPECTION` is refused because only the receipt inspection flow can clear it. Expired stock cannot be received as `USABLE`.
+- **T11 Dispatcher independence.** Only dispatcher is not receiver is enforced. Whether the dispatcher must also differ from the preparer, submitter or approver is a Bureau segregation-of-duties choice.
+
+### Review findings applied
+
+Allow-list of arrival conditions and expired-stock rule (M-1); dispatch funding/project pool check for parity (L-1); a late arrival on the same receiving document no longer fails (L-2); index-friendly in-transit visibility predicate (L-4); submission, approval and cancellation records frozen once written (L-6); permission checked before row version so ids and versions cannot be probed (L-8, also fixes slice 1); dispatch share-locks funding sources and projects (I-1). Recorded, not changed: the database does not return the original transaction on a replayed key (L-3); the slice-3 API must look up the key first through `idempotency_records` and must test a key reused on another transfer. Approval does not share-lock funding sources and projects (I-1, same as M6). Closed inventory periods (M11) are not enforced by dispatch or receipt; both functions need the period guard when it lands (I-2).
+
+### Rollback
+
+Migrations 0023 and 0024 are not applied to any database. Before any transfer is dispatched: drop `boa_transfer_dispatch`, `boa_transfer_receive`, `boa_transfer_lock_destination`, `boa_in_transit_entry_visible`, `boa_can_read_transfer_document`, the receipt guard and audit functions and triggers, the view, the policies `inventory_entries_in_transit_read` and `transfer_receipt*_read`, the receipt tables, the dispatch columns and their constraints; restore `boa_guard_transfer_header`, `boa_transfer_lock`, `boa_can_read_transfer`, `boa_document_warehouse`, `boa_guard_document_reference` and `boa_enforce_role_separation` from 0022 and 0020, and the 0020 `document_references` policies and entity-type check; delete the two new roles and permissions. After any transfer is `IN_TRANSIT` rollback is a forward fix only: there is no reversal or return path, so ledger entries must never be deleted.
