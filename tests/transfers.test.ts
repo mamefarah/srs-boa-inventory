@@ -458,6 +458,120 @@ describe('M7 transfer: submit, approve and the TRANSFER commitment', () => {
   });
 });
 
+describe('M7 transfer: exact-bucket reservation (independent review findings)', () => {
+  it('two transfers cannot reserve the same batch, even though item-level stock would cover both', async () => {
+    const item = await newItem('batch');
+    await stock(item, '100', { batch: 'BX', expiry: '2027-03-31' });
+    await stock(item, '200', { batch: 'BY', expiry: '2027-09-30' });
+    const a = await submitted(item, '100', { batchRef: 'BX', expiryDate: '2027-03-31' });
+    const b = await submitted(item, '100', { batchRef: 'BX', expiryDate: '2027-03-31' });
+    assert.equal(await sqlstate(approve(APPROVER, a.t, a.rowVersion)), 'OK');
+    assert.equal(await sqlstate(approve('transfer-approver-a2', b.t, b.rowVersion)), 'BA030', 'batch BX is fully reserved; the 200 in BY does not count');
+    assert.equal((await commitments(b.t.id)).length, 0);
+    const other = await submitted(item, '100', { batchRef: 'BY', expiryDate: '2027-09-30' });
+    assert.equal(await sqlstate(approve(APPROVER, other.t, other.rowVersion)), 'OK', 'an untouched batch can still be reserved');
+  });
+
+  it('the same serial number cannot be reserved twice', async () => {
+    const item = await newItem('serial');
+    const serialStock = async () => {
+      const tx = (await admin.query(
+        `INSERT INTO inventory_transactions (transaction_type, effective_at, posted_by_user_id, idempotency_key, request_hash, reason, business_document_type, business_document_id)
+         SELECT 'TEST_FIXTURE', now(), id, $1, repeat('b', 64), 'serial stock', 'TEST_DOC', $1 FROM users WHERE firebase_uid = 'admin-1' RETURNING id`, [key()])).rows[0].id;
+      await admin.query(
+        `INSERT INTO inventory_entries (transaction_id, line_no, item_id, signed_quantity, base_uom_id, custody_scope, warehouse_id, warehouse_location_id, condition_code, serial_ref, batch_ref, expiry_date)
+         VALUES ($1, 1, $2, 1, $3, 'WAREHOUSE', $4, $5, 'USABLE', 'SN-777', 'SB', '2028-01-01'), ($1, 2, $2, -1, $3, 'OPENING_BALANCE_CONTRA', NULL, NULL, 'USABLE', 'SN-777', 'SB', '2028-01-01')`,
+        [tx, item, uomId, fx.warehouseA, locationId],
+      );
+    };
+    // The serial item also carries batch/expiry tracking for this fixture (the helper flags all three together).
+    await admin.query(`UPDATE items SET is_batch_tracked = true, is_expiry_tracked = true WHERE id = $1`, [item]);
+    await serialStock();
+    const l = { serialRef: 'SN-777', batchRef: 'SB', expiryDate: '2028-01-01' };
+    const a = await submitted(item, '1', l);
+    const b = await submitted(item, '1', l);
+    assert.equal(await sqlstate(approve(APPROVER, a.t, a.rowVersion)), 'OK');
+    assert.equal(await sqlstate(approve('transfer-approver-a2', b.t, b.rowVersion)), 'BA030');
+  });
+
+  it('an issue cannot drain the batch a transfer has reserved while another batch still holds stock', async () => {
+    const item = await newItem('batch');
+    await stock(item, '10', { batch: 'RA', expiry: '2027-02-28' });
+    await stock(item, '10', { batch: 'RB', expiry: '2027-08-31' });
+    const { t, rowVersion } = await submitted(item, '10', { batchRef: 'RA', expiryDate: '2027-02-28' });
+    assert.equal((await approve(APPROVER, t, rowVersion)).status, 'APPROVED');
+
+    const h = await post('/api/requisitions', 'requester', { warehouseId: fx.warehouseA, purpose: 'Bucket drain', sourceEvidenceRef: `REQ-${randomUUID()}` });
+    const rl = await post(`/api/requisitions/${h.body.data.id}/lines`, 'requester', { itemId: item, requestedQuantity: '5' });
+    const sub = await post(`/api/requisitions/${h.body.data.id}/submit`, 'requester', { rowVersion: rl.body.data.requisitionRowVersion });
+    await call('req-approver-a', (tx) =>
+      tx.execute(sql`SELECT boa_requisition_decide(${h.body.data.id}, ${sub.body.data.rowVersion}, ${JSON.stringify([{ lineId: rl.body.data.id, approvedQuantity: '5' }])}::jsonb, 'AUTH-DRAIN', NULL, false)`),
+    );
+    const issueFrom = async (batchRef: string, expiryDate: string) => {
+      const issue = await call('issue-op-a', async (tx) => {
+        const r = await tx.execute(
+          sql`SELECT * FROM boa_issue_create(${h.body.data.id}, 'EXTERNAL', ${null}, 'Recipient', ${null}, ${null}, ${null}, ${null}, ${null}, ${JSON.stringify([{ requisitionLineId: rl.body.data.id, quantity: '5', warehouseLocationId: locationId, batchRef, expiryDate }])}::jsonb)`,
+        );
+        return r.rows[0] as Row;
+      });
+      await call('issue-op-a', (tx) => tx.execute(sql`INSERT INTO document_references (entity_type, entity_id, document_type, document_number, document_date) VALUES ('ISSUE', ${String(issue.id)}, 'ISSUE_VOUCHER', ${`SIV-${issue.id}`}, '2026-10-04')`));
+      return () => call('issue-op-a', (tx) => tx.execute(sql`SELECT boa_issue_post(${issue.id}, ${issue.row_version}, now(), ${key()}, ${HASH})`));
+    };
+    const fromReserved = await issueFrom('RA', '2027-02-28');
+    assert.equal(await sqlstate(fromReserved()), 'BA027', 'batch RA is reserved for the transfer in full');
+    const fromOther = await issueFrom('RB', '2027-08-31');
+    assert.equal(await sqlstate(fromOther()), 'OK', 'the unreserved batch can still be issued');
+  });
+
+  it('approval re-validates references that were deactivated after the draft was made', async () => {
+    const item = await newItem();
+    await stock(item, '10');
+    const a = await submitted(item, '1');
+    await admin.query(`UPDATE items SET is_active = false WHERE id = $1`, [item]);
+    assert.equal(await sqlstate(approve(APPROVER, a.t, a.rowVersion)), 'BA011');
+    await admin.query(`UPDATE items SET is_active = true WHERE id = $1`, [item]);
+    const b = await submitted(item, '1');
+    await admin.query(`UPDATE warehouse_locations SET is_active = false WHERE id = $1`, [locationId]);
+    const refused = await sqlstate(approve(APPROVER, b.t, b.rowVersion));
+    await admin.query(`UPDATE warehouse_locations SET is_active = true WHERE id = $1`, [locationId]);
+    assert.equal(refused, 'BA029');
+    const c = await submitted(item, '1');
+    await admin.query(`UPDATE warehouses SET is_active = false WHERE id = $1`, [fx.warehouseB]);
+    const refusedDest = await sqlstate(approve(APPROVER, c.t, c.rowVersion));
+    await admin.query(`UPDATE warehouses SET is_active = true WHERE id = $1`, [fx.warehouseB]);
+    assert.equal(refusedDest, 'BA029');
+    assert.equal((await commitments(c.t.id)).length, 0);
+  });
+
+  it('the destination check gives one generic answer for equal, missing and inactive warehouses', async () => {
+    const item = await newItem();
+    const messages = new Set<string>();
+    await admin.query(`UPDATE warehouses SET is_active = false WHERE id = $1`, [warehouseC]);
+    for (const dest of [fx.warehouseA, 999999, warehouseC]) {
+      try {
+        await createTransfer(OP, [line(item, '1')], { dest });
+        assert.fail('should be refused');
+      } catch (e) {
+        messages.add(((e as { cause?: { message?: string } }).cause?.message ?? String(e)).replace(/\s+/g, ' '));
+      }
+    }
+    await admin.query(`UPDATE warehouses SET is_active = true WHERE id = $1`, [warehouseC]);
+    assert.equal(messages.size, 1, `distinguishable destination errors: ${[...messages].join(' | ')}`);
+  });
+
+  it('a commitment keeps its bucket and a terminal commitment never leaves its terminal state', async () => {
+    const item = await newItem();
+    await stock(item, '10');
+    const { t, rowVersion } = await submitted(item, '3');
+    await approve(APPROVER, t, rowVersion);
+    const ids = `transfer_line_id IN (SELECT id FROM transfer_lines WHERE transfer_id = ${t.id})`;
+    await assert.rejects(admin.query(`UPDATE inventory_commitments SET warehouse_location_id = NULL WHERE ${ids}`), /BOA_IMMUTABLE/);
+    await assert.rejects(admin.query(`UPDATE inventory_commitments SET funding_source_id = ${fundingId} WHERE ${ids}`), /BOA_IMMUTABLE/);
+    await cancel(APPROVER, t, (await admin.query(`SELECT row_version FROM transfers WHERE id = $1`, [t.id])).rows[0].row_version);
+    await assert.rejects(admin.query(`UPDATE inventory_commitments SET status = 'ACTIVE', released_by_user_id = NULL, released_at = NULL WHERE ${ids}`), /BOA_INVALID_STATE/);
+  });
+});
+
 describe('M7 transfer: cancel releases the reservation', () => {
   it('a preparer cancels a DRAFT; the reason is mandatory; a cancelled transfer is terminal', async () => {
     const item = await newItem();

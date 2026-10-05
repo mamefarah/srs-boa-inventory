@@ -204,7 +204,9 @@ CREATE TRIGGER transfer_lines_guard BEFORE INSERT OR UPDATE OR DELETE ON transfe
 CREATE TRIGGER transfer_lines_no_truncate BEFORE TRUNCATE ON transfer_lines
   FOR EACH STATEMENT EXECUTE FUNCTION boa_reject_mutation();
 
--- A commitment's identity includes the document line it reserves for (requisition OR transfer).
+-- A commitment's identity includes the document line it reserves for (requisition OR transfer) and every dimension
+-- of the reserved bucket. Only fulfilment, status and release fields may change, and a terminal commitment never
+-- leaves its terminal state.
 CREATE OR REPLACE FUNCTION boa_guard_commitment_update()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -216,10 +218,15 @@ BEGIN
      OR NEW.transfer_line_id IS DISTINCT FROM OLD.transfer_line_id
      OR NEW.item_id IS DISTINCT FROM OLD.item_id
      OR NEW.warehouse_id IS DISTINCT FROM OLD.warehouse_id OR NEW.quantity_base_uom IS DISTINCT FROM OLD.quantity_base_uom
+     OR NEW.warehouse_location_id IS DISTINCT FROM OLD.warehouse_location_id
+     OR NEW.condition_code IS DISTINCT FROM OLD.condition_code
+     OR NEW.batch_ref IS DISTINCT FROM OLD.batch_ref OR NEW.expiry_date IS DISTINCT FROM OLD.expiry_date
+     OR NEW.serial_ref IS DISTINCT FROM OLD.serial_ref
+     OR NEW.funding_source_id IS DISTINCT FROM OLD.funding_source_id OR NEW.project_id IS DISTINCT FROM OLD.project_id
      OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
-    RAISE EXCEPTION 'BOA_IMMUTABLE: a commitment''s identity and reserved quantity cannot change' USING ERRCODE = 'BA009';
+    RAISE EXCEPTION 'BOA_IMMUTABLE: a commitment''s identity, bucket and reserved quantity cannot change' USING ERRCODE = 'BA009';
   END IF;
-  IF OLD.status IN ('FULFILLED', 'RELEASED', 'EXPIRED', 'CANCELLED') AND NEW.status = OLD.status THEN
+  IF OLD.status IN ('FULFILLED', 'RELEASED', 'EXPIRED', 'CANCELLED') THEN
     RAISE EXCEPTION 'BOA_INVALID_STATE: a % commitment is immutable', OLD.status USING ERRCODE = 'BA014';
   END IF;
   RETURN NEW;
@@ -377,7 +384,7 @@ BEGIN
   END IF;
 
   IF p_destination_warehouse_id IS NULL OR p_destination_warehouse_id = p_source_warehouse_id THEN
-    RAISE EXCEPTION 'BOA_TRANSFER_INVALID: the destination must be a different warehouse from the source' USING ERRCODE = 'BA029';
+    RAISE EXCEPTION 'BOA_TRANSFER_INVALID: the destination warehouse is not available for this transfer' USING ERRCODE = 'BA029';
   END IF;
   PERFORM 1 FROM public.warehouses WHERE id = p_source_warehouse_id AND is_active FOR SHARE;
   IF NOT FOUND THEN
@@ -385,7 +392,7 @@ BEGIN
   END IF;
   PERFORM 1 FROM public.warehouses WHERE id = p_destination_warehouse_id AND is_active FOR SHARE;
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'BOA_TRANSFER_INVALID: the destination warehouse does not exist or is inactive' USING ERRCODE = 'BA029';
+    RAISE EXCEPTION 'BOA_TRANSFER_INVALID: the destination warehouse is not available for this transfer' USING ERRCODE = 'BA029';
   END IF;
   IF p_purpose IS NULL OR length(btrim(p_purpose)) = 0 OR length(p_purpose) > 500
      OR length(coalesce(p_source_evidence_ref, '')) > 300 THEN
@@ -559,9 +566,19 @@ BEGIN
   IF NOT public.boa_ref_ok(p_approval_reference) OR length(p_approval_reference) > 200 OR length(coalesce(p_approval_notes, '')) > 1000 THEN
     RAISE EXCEPTION 'BOA_TRANSFER_INVALID: the authorization sign-off (approval) reference is required (200 characters at most; notes 1000)' USING ERRCODE = 'BA029';
   END IF;
-  PERFORM 1 FROM public.warehouses WHERE id = v_transfer.destination_warehouse_id AND is_active;
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'BOA_TRANSFER_INVALID: the destination warehouse is inactive' USING ERRCODE = 'BA029';
+  -- References are re-validated at approval: anything deactivated since the draft was made blocks the reservation.
+  PERFORM 1 FROM public.warehouses WHERE id IN (v_transfer.source_warehouse_id, v_transfer.destination_warehouse_id) FOR SHARE;
+  IF (SELECT count(*) FROM public.warehouses WHERE id IN (v_transfer.source_warehouse_id, v_transfer.destination_warehouse_id) AND is_active) <> 2 THEN
+    RAISE EXCEPTION 'BOA_TRANSFER_INVALID: the source or destination warehouse is no longer active' USING ERRCODE = 'BA029';
+  END IF;
+  PERFORM 1 FROM public.items WHERE id IN (SELECT item_id FROM public.transfer_lines WHERE transfer_id = p_transfer_id) FOR SHARE;
+  IF EXISTS (SELECT 1 FROM public.transfer_lines l JOIN public.items i ON i.id = l.item_id WHERE l.transfer_id = p_transfer_id AND NOT i.is_active) THEN
+    RAISE EXCEPTION 'BOA_INACTIVE_REFERENCE: an item on this transfer is now inactive' USING ERRCODE = 'BA011';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.transfer_lines l JOIN public.warehouse_locations w ON w.id = l.source_location_id WHERE l.transfer_id = p_transfer_id AND NOT w.is_active)
+     OR EXISTS (SELECT 1 FROM public.transfer_lines l JOIN public.funding_sources f ON f.id = l.funding_source_id WHERE l.transfer_id = p_transfer_id AND NOT f.is_active)
+     OR EXISTS (SELECT 1 FROM public.transfer_lines l JOIN public.projects p ON p.id = l.project_id WHERE l.transfer_id = p_transfer_id AND NOT p.is_active) THEN
+    RAISE EXCEPTION 'BOA_TRANSFER_INVALID: a location, funding source or project on this transfer is no longer active' USING ERRCODE = 'BA029';
   END IF;
 
   -- Shared stock lock scheme (ADR-0007): one transaction-scoped advisory lock per (warehouse, item), ascending item order.
@@ -589,7 +606,9 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- (b) Usable stock in each exact bucket named by the lines (item, location, batch, expiry, serial, funding, project).
+  -- (b) Usable stock in each exact bucket named by the lines (item, location, batch, expiry, serial, funding, project),
+  -- less what active commitments already hold on that exact bucket. Without the subtraction two transfers could
+  -- each reserve the same batch or the same serial and the second could never be dispatched.
   FOR v_bucket IN
     SELECT l.item_id, l.source_location_id, l.batch_ref, l.expiry_date, l.serial_ref, l.funding_source_id, l.project_id,
            sum(l.quantity) AS qty
@@ -607,9 +626,19 @@ BEGIN
        AND e.serial_ref IS NOT DISTINCT FROM v_bucket.serial_ref
        AND e.funding_source_id IS NOT DISTINCT FROM v_bucket.funding_source_id
        AND e.project_id IS NOT DISTINCT FROM v_bucket.project_id;
-    IF v_on_hand < v_bucket.qty THEN
-      RAISE EXCEPTION 'BOA_TRANSFER_INSUFFICIENT_STOCK: only % usable stock is held in the selected batch/location for item % (% requested)',
-        trim_scale(v_on_hand), v_bucket.item_id, trim_scale(v_bucket.qty) USING ERRCODE = 'BA030';
+    SELECT coalesce(sum(c.quantity_base_uom - c.quantity_fulfilled), 0) INTO v_committed
+      FROM public.inventory_commitments c
+     WHERE c.item_id = v_bucket.item_id AND c.warehouse_id = v_transfer.source_warehouse_id
+       AND c.status IN ('ACTIVE', 'PARTIALLY_FULFILLED')
+       AND c.warehouse_location_id IS NOT DISTINCT FROM v_bucket.source_location_id
+       AND c.batch_ref IS NOT DISTINCT FROM v_bucket.batch_ref
+       AND c.expiry_date IS NOT DISTINCT FROM v_bucket.expiry_date
+       AND c.serial_ref IS NOT DISTINCT FROM v_bucket.serial_ref
+       AND c.funding_source_id IS NOT DISTINCT FROM v_bucket.funding_source_id
+       AND c.project_id IS NOT DISTINCT FROM v_bucket.project_id;
+    IF v_on_hand - v_committed < v_bucket.qty THEN
+      RAISE EXCEPTION 'BOA_TRANSFER_INSUFFICIENT_STOCK: only % of item % is unreserved in the exact stock bucket named (location, batch, expiry, serial, funding and project must match the stock held; % requested)',
+        trim_scale(v_on_hand - v_committed), v_bucket.item_id, trim_scale(v_bucket.qty) USING ERRCODE = 'BA030';
     END IF;
   END LOOP;
 
@@ -694,6 +723,295 @@ BEGIN
    WHERE id = p_transfer_id
   RETURNING row_version INTO v_version;
   RETURN v_version;
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 5b. boa_issue_post (re-created from 0020): adds check (e), exact-bucket protection of TRANSFER reservations.
+-- CREATE OR REPLACE keeps the owner, SECURITY DEFINER and the existing EXECUTE grants.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION boa_issue_post(
+  p_issue_id integer, p_row_version integer, p_effective_at timestamptz,
+  p_idempotency_key text, p_request_hash text
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_actor integer := public.boa_current_user_id();
+  v_issue public.issue_headers := public.boa_issue_lock(p_issue_id, p_row_version, ARRAY['POST_ISSUES']);
+  v_req public.requisitions;
+  v_item_id integer;
+  v_rl record;
+  v_c public.inventory_commitments;
+  v_bucket record;
+  v_item record;
+  v_prior numeric;
+  v_on_hand numeric;
+  v_physical numeric;
+  v_committed numeric;
+  v_consumed numeric;
+  v_tx uuid;
+BEGIN
+  IF v_issue.status <> 'DRAFT' THEN
+    RAISE EXCEPTION 'BOA_INVALID_STATE: only a DRAFT issue can be posted' USING ERRCODE = 'BA014';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.issue_lines WHERE issue_id = p_issue_id) THEN
+    RAISE EXCEPTION 'BOA_ISSUE_INVALID: the issue has no lines' USING ERRCODE = 'BA026';
+  END IF;
+  IF p_idempotency_key IS NULL OR p_idempotency_key !~ '^[A-Za-z0-9._:-]{8,100}$'
+     OR p_request_hash IS NULL OR p_request_hash !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION 'BOA_ISSUE_INVALID: a valid idempotency key (8-100 safe characters) and a 64-hex request hash are required to post' USING ERRCODE = 'BA026';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.document_references
+                  WHERE entity_type = 'ISSUE' AND entity_id = p_issue_id::text AND document_type = 'ISSUE_VOUCHER') THEN
+    RAISE EXCEPTION 'BOA_ISSUE_INVALID: a hard-copy issue-voucher reference (document type ISSUE_VOUCHER) is required before posting' USING ERRCODE = 'BA026';
+  END IF;
+
+  -- Serial then (warehouse,item) advisory locks, always in ascending item order (ADR-0007).
+  FOR v_item_id IN
+    SELECT DISTINCT item_id FROM public.issue_lines WHERE issue_id = p_issue_id AND serial_ref IS NOT NULL ORDER BY item_id
+  LOOP
+    PERFORM pg_advisory_xact_lock(public.boa_serial_lock_key(v_item_id));
+  END LOOP;
+  FOR v_item_id IN
+    SELECT DISTINCT item_id FROM public.issue_lines WHERE issue_id = p_issue_id ORDER BY item_id
+  LOOP
+    PERFORM pg_advisory_xact_lock(v_issue.warehouse_id, v_item_id);
+  END LOOP;
+
+  SELECT * INTO v_req FROM public.requisitions WHERE id = v_issue.requisition_id FOR SHARE;
+  IF NOT FOUND OR v_req.status <> 'DECIDED' OR v_req.decision_outcome NOT IN ('APPROVED', 'PARTIALLY_APPROVED') THEN
+    RAISE EXCEPTION 'BOA_ISSUE_INVALID: the requisition is no longer an approved (DECIDED) requisition' USING ERRCODE = 'BA026';
+  END IF;
+  IF p_effective_at IS NULL OR p_effective_at > now() OR p_effective_at < v_req.decided_at THEN
+    RAISE EXCEPTION 'BOA_ISSUE_INVALID: issue effective time must be between the requisition decision and now' USING ERRCODE = 'BA026';
+  END IF;
+
+  PERFORM 1 FROM public.items WHERE id IN (SELECT item_id FROM public.issue_lines WHERE issue_id = p_issue_id) ORDER BY id FOR SHARE;
+  PERFORM 1 FROM public.uoms WHERE id IN (SELECT base_uom_id FROM public.issue_lines WHERE issue_id = p_issue_id) ORDER BY id FOR SHARE;
+  PERFORM 1 FROM public.warehouse_locations
+   WHERE id IN (SELECT warehouse_location_id FROM public.issue_lines WHERE issue_id = p_issue_id) ORDER BY id FOR SHARE;
+  IF v_issue.custodian_id IS NOT NULL THEN
+    PERFORM 1 FROM public.custodians WHERE id = v_issue.custodian_id AND is_active FOR SHARE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'BOA_ISSUE_INVALID: the custodian is no longer active' USING ERRCODE = 'BA026';
+    END IF;
+  END IF;
+  PERFORM 1 FROM public.condition_codes WHERE code = 'USABLE' AND is_active FOR SHARE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'BOA_ISSUE_INVALID: the USABLE condition is not active' USING ERRCODE = 'BA026';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.issue_lines il JOIN public.items i ON i.id = il.item_id
+              WHERE il.issue_id = p_issue_id AND NOT i.is_active) THEN
+    RAISE EXCEPTION 'BOA_INACTIVE_REFERENCE: an item on this issue is inactive' USING ERRCODE = 'BA011';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.issue_lines il JOIN public.warehouse_locations wl ON wl.id = il.warehouse_location_id
+              WHERE il.issue_id = p_issue_id AND NOT wl.is_active)
+     OR EXISTS (SELECT 1 FROM public.issue_lines il JOIN public.funding_sources f ON f.id = il.funding_source_id
+                 WHERE il.issue_id = p_issue_id AND NOT f.is_active)
+     OR EXISTS (SELECT 1 FROM public.issue_lines il JOIN public.projects pr ON pr.id = il.project_id
+                 WHERE il.issue_id = p_issue_id AND NOT pr.is_active) THEN
+    RAISE EXCEPTION 'BOA_ISSUE_INVALID: a location, funding source or project on this issue is no longer active' USING ERRCODE = 'BA026';
+  END IF;
+
+  -- (a) Approved quantity and active commitment remaining, aggregated per requisition line.
+  FOR v_rl IN
+    SELECT rl.id, rl.item_id, rl.approved_quantity, sum(il.quantity) AS qty
+      FROM public.issue_lines il JOIN public.requisition_lines rl ON rl.id = il.requisition_line_id
+     WHERE il.issue_id = p_issue_id
+     GROUP BY rl.id, rl.item_id, rl.approved_quantity
+     ORDER BY rl.id
+  LOOP
+    SELECT coalesce(sum(il2.quantity), 0) INTO v_prior
+      FROM public.issue_lines il2 JOIN public.issue_headers h2 ON h2.id = il2.issue_id
+     WHERE il2.requisition_line_id = v_rl.id AND h2.status = 'POSTED' AND h2.id <> p_issue_id;
+    IF v_rl.qty > coalesce(v_rl.approved_quantity, 0) - v_prior THEN
+      RAISE EXCEPTION 'BOA_ISSUE_OVER_APPROVED: issue exceeds the approved quantity remaining for requisition line %', v_rl.id USING ERRCODE = 'BA027';
+    END IF;
+    SELECT * INTO v_c FROM public.inventory_commitments WHERE requisition_line_id = v_rl.id FOR UPDATE;
+    IF FOUND AND v_c.status IN ('ACTIVE', 'PARTIALLY_FULFILLED') AND v_rl.qty > v_c.quantity_base_uom - v_c.quantity_fulfilled THEN
+      RAISE EXCEPTION 'BOA_ISSUE_OVER_APPROVED: issue exceeds the commitment remaining for requisition line %', v_rl.id USING ERRCODE = 'BA027';
+    END IF;
+  END LOOP;
+
+  -- (b) Usable stock in each exact bucket (item, location, batch, expiry, serial, funding, project).
+  FOR v_bucket IN
+    SELECT il.item_id, il.warehouse_location_id, il.batch_ref, il.expiry_date, il.serial_ref, il.funding_source_id, il.project_id,
+           sum(il.quantity) AS qty
+      FROM public.issue_lines il WHERE il.issue_id = p_issue_id
+     GROUP BY il.item_id, il.warehouse_location_id, il.batch_ref, il.expiry_date, il.serial_ref, il.funding_source_id, il.project_id
+     ORDER BY il.item_id
+  LOOP
+    SELECT coalesce(sum(e.signed_quantity), 0) INTO v_on_hand
+      FROM public.inventory_entries e
+     WHERE e.item_id = v_bucket.item_id AND e.warehouse_id = v_issue.warehouse_id
+       AND e.custody_scope = 'WAREHOUSE' AND e.condition_code = 'USABLE'
+       AND e.warehouse_location_id IS NOT DISTINCT FROM v_bucket.warehouse_location_id
+       AND e.batch_ref IS NOT DISTINCT FROM v_bucket.batch_ref
+       AND e.expiry_date IS NOT DISTINCT FROM v_bucket.expiry_date
+       AND e.serial_ref IS NOT DISTINCT FROM v_bucket.serial_ref
+       AND e.funding_source_id IS NOT DISTINCT FROM v_bucket.funding_source_id
+       AND e.project_id IS NOT DISTINCT FROM v_bucket.project_id;
+    IF v_on_hand < v_bucket.qty THEN
+      RAISE EXCEPTION 'BOA_ISSUE_INSUFFICIENT_STOCK: only % usable stock is held in the selected batch/location for item % (% requested)',
+        trim_scale(v_on_hand), v_bucket.item_id, trim_scale(v_bucket.qty) USING ERRCODE = 'BA027';
+    END IF;
+  END LOOP;
+
+  -- (c) Protect other requisitions' reservations. Issuing against an existing commitment consumes it and must not
+  -- subtract it twice (PRD §19.3): after the issue, usable physical stock must still cover every OTHER remaining
+  -- commitment:  physical - issued >= all remaining commitments - consumed by this issue.
+  FOR v_item IN
+    SELECT il.item_id, sum(il.quantity) AS qty
+      FROM public.issue_lines il WHERE il.issue_id = p_issue_id GROUP BY il.item_id ORDER BY il.item_id
+  LOOP
+    SELECT coalesce(sum(e.signed_quantity), 0) INTO v_physical
+      FROM public.inventory_entries e
+     WHERE e.item_id = v_item.item_id AND e.warehouse_id = v_issue.warehouse_id
+       AND e.custody_scope = 'WAREHOUSE' AND e.condition_code = 'USABLE';
+    SELECT coalesce(sum(c.quantity_base_uom - c.quantity_fulfilled), 0) INTO v_committed
+      FROM public.inventory_commitments c
+     WHERE c.item_id = v_item.item_id AND c.warehouse_id = v_issue.warehouse_id AND c.status IN ('ACTIVE', 'PARTIALLY_FULFILLED');
+    SELECT coalesce(sum(t.qty), 0) INTO v_consumed
+      FROM (
+        SELECT sum(il.quantity) AS qty
+          FROM public.issue_lines il
+          JOIN public.inventory_commitments c ON c.requisition_line_id = il.requisition_line_id
+                                              AND c.status IN ('ACTIVE', 'PARTIALLY_FULFILLED')
+         WHERE il.issue_id = p_issue_id AND il.item_id = v_item.item_id
+         GROUP BY il.requisition_line_id
+      ) t;
+    IF v_physical - v_item.qty < v_committed - v_consumed THEN
+      RAISE EXCEPTION 'BOA_ISSUE_INSUFFICIENT_STOCK: issuing % of item % would use stock reserved for other requisitions (available to promise: %)',
+        trim_scale(v_item.qty), v_item.item_id, trim_scale(v_physical - v_committed + v_consumed) USING ERRCODE = 'BA027';
+    END IF;
+  END LOOP;
+
+  -- (d) Commitments pinned to a funding source or project are reservations of THAT stock. Item-level availability in
+  -- (c) is not enough: stock of the pinned funding/project must still cover the pinned commitments that remain after
+  -- this issue, otherwise a second requisition could drain a donor-restricted bucket and starve a committed one.
+  FOR v_bucket IN
+    SELECT il.item_id, il.funding_source_id, il.project_id, sum(il.quantity) AS qty
+      FROM public.issue_lines il
+     WHERE il.issue_id = p_issue_id AND (il.funding_source_id IS NOT NULL OR il.project_id IS NOT NULL)
+     GROUP BY il.item_id, il.funding_source_id, il.project_id
+     ORDER BY il.item_id, il.funding_source_id NULLS FIRST, il.project_id NULLS FIRST
+  LOOP
+    SELECT coalesce(sum(e.signed_quantity), 0) INTO v_physical
+      FROM public.inventory_entries e
+     WHERE e.item_id = v_bucket.item_id AND e.warehouse_id = v_issue.warehouse_id
+       AND e.custody_scope = 'WAREHOUSE' AND e.condition_code = 'USABLE'
+       AND e.funding_source_id IS NOT DISTINCT FROM v_bucket.funding_source_id
+       AND e.project_id IS NOT DISTINCT FROM v_bucket.project_id;
+    SELECT coalesce(sum(c.quantity_base_uom - c.quantity_fulfilled), 0) INTO v_committed
+      FROM public.inventory_commitments c
+     WHERE c.item_id = v_bucket.item_id AND c.warehouse_id = v_issue.warehouse_id AND c.status IN ('ACTIVE', 'PARTIALLY_FULFILLED')
+       AND c.funding_source_id IS NOT DISTINCT FROM v_bucket.funding_source_id
+       AND c.project_id IS NOT DISTINCT FROM v_bucket.project_id;
+    SELECT coalesce(sum(t.qty), 0) INTO v_consumed
+      FROM (
+        SELECT sum(il.quantity) AS qty
+          FROM public.issue_lines il
+          JOIN public.inventory_commitments c ON c.requisition_line_id = il.requisition_line_id
+                                              AND c.status IN ('ACTIVE', 'PARTIALLY_FULFILLED')
+                                              AND c.funding_source_id IS NOT DISTINCT FROM v_bucket.funding_source_id
+                                              AND c.project_id IS NOT DISTINCT FROM v_bucket.project_id
+         WHERE il.issue_id = p_issue_id AND il.item_id = v_bucket.item_id
+           AND il.funding_source_id IS NOT DISTINCT FROM v_bucket.funding_source_id
+           AND il.project_id IS NOT DISTINCT FROM v_bucket.project_id
+         GROUP BY il.requisition_line_id
+      ) t;
+    IF v_physical - v_bucket.qty < v_committed - v_consumed THEN
+      RAISE EXCEPTION 'BOA_ISSUE_INSUFFICIENT_STOCK: issuing would use stock of item % reserved for another requisition of the same funding source/project',
+        v_bucket.item_id USING ERRCODE = 'BA027';
+    END IF;
+  END LOOP;
+
+  -- (e) Transfer reservations are pinned to an exact stock bucket (ADR-0017). Item-level checks (c) and (d) pass
+  -- whenever ANOTHER bucket of the same item holds stock, so without this an issue could drain the very batch or
+  -- serial a transfer has reserved and strand that reservation. Requisition commitments are not bucket-pinned and
+  -- are not affected.
+  FOR v_bucket IN
+    SELECT il.item_id, il.warehouse_location_id, il.batch_ref, il.expiry_date, il.serial_ref, il.funding_source_id, il.project_id,
+           sum(il.quantity) AS qty
+      FROM public.issue_lines il WHERE il.issue_id = p_issue_id
+     GROUP BY il.item_id, il.warehouse_location_id, il.batch_ref, il.expiry_date, il.serial_ref, il.funding_source_id, il.project_id
+     ORDER BY il.item_id
+  LOOP
+    SELECT coalesce(sum(e.signed_quantity), 0) INTO v_physical
+      FROM public.inventory_entries e
+     WHERE e.item_id = v_bucket.item_id AND e.warehouse_id = v_issue.warehouse_id
+       AND e.custody_scope = 'WAREHOUSE' AND e.condition_code = 'USABLE'
+       AND e.warehouse_location_id IS NOT DISTINCT FROM v_bucket.warehouse_location_id
+       AND e.batch_ref IS NOT DISTINCT FROM v_bucket.batch_ref
+       AND e.expiry_date IS NOT DISTINCT FROM v_bucket.expiry_date
+       AND e.serial_ref IS NOT DISTINCT FROM v_bucket.serial_ref
+       AND e.funding_source_id IS NOT DISTINCT FROM v_bucket.funding_source_id
+       AND e.project_id IS NOT DISTINCT FROM v_bucket.project_id;
+    SELECT coalesce(sum(c.quantity_base_uom - c.quantity_fulfilled), 0) INTO v_committed
+      FROM public.inventory_commitments c
+     WHERE c.commitment_type = 'TRANSFER' AND c.status IN ('ACTIVE', 'PARTIALLY_FULFILLED')
+       AND c.item_id = v_bucket.item_id AND c.warehouse_id = v_issue.warehouse_id
+       AND c.warehouse_location_id IS NOT DISTINCT FROM v_bucket.warehouse_location_id
+       AND c.batch_ref IS NOT DISTINCT FROM v_bucket.batch_ref
+       AND c.expiry_date IS NOT DISTINCT FROM v_bucket.expiry_date
+       AND c.serial_ref IS NOT DISTINCT FROM v_bucket.serial_ref
+       AND c.funding_source_id IS NOT DISTINCT FROM v_bucket.funding_source_id
+       AND c.project_id IS NOT DISTINCT FROM v_bucket.project_id;
+    IF v_physical - v_bucket.qty < v_committed THEN
+      RAISE EXCEPTION 'BOA_ISSUE_INSUFFICIENT_STOCK: issuing would use stock of item % reserved for a warehouse transfer in the same batch/location',
+        v_bucket.item_id USING ERRCODE = 'BA027';
+    END IF;
+  END LOOP;
+
+  BEGIN
+    INSERT INTO public.inventory_transactions
+      (transaction_type, business_document_type, business_document_id, effective_at, posted_by_user_id,
+       idempotency_key, request_hash, approval_reference, reason, policy_context, source_system_ref)
+    VALUES
+      ('ISSUE', 'ISSUE', p_issue_id::text, p_effective_at, v_actor, p_idempotency_key, p_request_hash,
+       v_req.approval_reference, coalesce(v_issue.reason, 'Stock issued against requisition ' || v_req.id),
+       jsonb_build_object('issueId', p_issue_id, 'requisitionId', v_req.id, 'destinationScope', v_issue.destination_scope,
+                          'custodianId', v_issue.custodian_id, 'evidenceModel', 'HARD_COPY_REFERENCE'),
+       v_req.source_evidence_ref)
+    RETURNING id INTO v_tx;
+  EXCEPTION WHEN unique_violation THEN
+    RAISE EXCEPTION 'BOA_IDEMPOTENCY_CONFLICT: this idempotency key was already used by another posting' USING ERRCODE = 'BA028';
+  END;
+
+  INSERT INTO public.inventory_entries
+    (transaction_id, line_no, business_document_line_ref, item_id, signed_quantity, base_uom_id, custody_scope,
+     warehouse_id, warehouse_location_id, custodian_id, condition_code, batch_ref, serial_ref, expiry_date,
+     funding_source_id, project_id)
+  SELECT v_tx, il.line_no * 2 - 1, il.id::text, il.item_id, -il.quantity, il.base_uom_id, 'WAREHOUSE',
+         v_issue.warehouse_id, il.warehouse_location_id, NULL, 'USABLE', il.batch_ref, il.serial_ref, il.expiry_date,
+         il.funding_source_id, il.project_id
+    FROM public.issue_lines il WHERE il.issue_id = p_issue_id
+  UNION ALL
+  SELECT v_tx, il.line_no * 2, il.id::text, il.item_id, il.quantity, il.base_uom_id, v_issue.destination_scope,
+         NULL, NULL, v_issue.custodian_id, 'USABLE', il.batch_ref, il.serial_ref, il.expiry_date,
+         il.funding_source_id, il.project_id
+    FROM public.issue_lines il WHERE il.issue_id = p_issue_id;
+
+  IF EXISTS (SELECT 1 FROM public.inventory_entries WHERE transaction_id = v_tx GROUP BY item_id HAVING sum(signed_quantity) <> 0) THEN
+    RAISE EXCEPTION 'BOA_ISSUE_INVALID: issue ledger reconciliation failed' USING ERRCODE = 'BA026';
+  END IF;
+
+  -- Consume the active commitment (non-physical reservation) in the same transaction.
+  UPDATE public.inventory_commitments c
+     SET quantity_fulfilled = c.quantity_fulfilled + a.qty,
+         status = CASE WHEN c.quantity_fulfilled + a.qty = c.quantity_base_uom THEN 'FULFILLED' ELSE 'PARTIALLY_FULFILLED' END
+    FROM (SELECT requisition_line_id, sum(quantity) AS qty FROM public.issue_lines WHERE issue_id = p_issue_id GROUP BY requisition_line_id) a
+   WHERE c.requisition_line_id = a.requisition_line_id AND c.status IN ('ACTIVE', 'PARTIALLY_FULFILLED');
+
+  PERFORM set_config('boa.change_reason', 'Issue posted', true);
+  UPDATE public.issue_headers
+     SET status = 'POSTED', posted_by_user_id = v_actor, posted_at = now(), effective_at = p_effective_at, transaction_id = v_tx
+   WHERE id = p_issue_id;
+  RETURN v_tx;
 END;
 $$;
 

@@ -205,7 +205,7 @@ A hard-copy issue-voucher reference (document type ISSUE_VOUCHER) is required be
 A warehouse transfer is two-stage and never collapsed: dispatch (WAREHOUSE source to IN_TRANSIT) and destination receipt (IN_TRANSIT to WAREHOUSE destination) are separate postings. Slice 1 implements only request, submission, approval and reservation; it writes no inventory entry.
 
 ## INV-059
-Approving a transfer reserves its stock as one TRANSFER commitment per line, pinned to the exact source bucket. A reservation is not a physical movement. It competes with requisition commitments for available-to-promise, so a requisition cannot be approved, and an issue cannot be posted, into stock a transfer has reserved. A refused approval writes nothing.
+Approving a transfer reserves its stock as one TRANSFER commitment per line, pinned to the exact source bucket; two transfers cannot reserve the same bucket and an issue cannot drain a bucket a transfer has reserved. A reservation is not a physical movement. It competes with requisition commitments for available-to-promise, so a requisition cannot be approved, and an issue cannot be posted, into stock a transfer has reserved. A refused approval writes nothing.
 
 ## INV-060
 A transfer's approver is neither the person who prepared nor the person who submitted it, and records an authorization sign-off reference. Mutations need the source warehouse in scope; a transfer is readable from both the source and the destination warehouse.

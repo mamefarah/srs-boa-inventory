@@ -1,6 +1,6 @@
 # ADR-0017 — M7 Warehouse Transfer (slice 1: request, approval and reservation)
 
-**Status:** Proposed (slice 1 of M7; accepted when the M7 pull requests merge). Not yet reviewed by an independent database-security review; that review is the next step before slice 2 builds on it.\
+**Status:** Proposed (slice 1 of M7; accepted when the M7 pull requests merge). Reviewed by an independent database-security review on 5 October 2026; its findings are applied below.\
 **Date:** 5 October 2026\
 **Controls:** PRD v4.0 Part B §§19, 25, 37; ADR-0001, ADR-0005, ADR-0007, ADR-0008, ADR-0010, ADR-0016; INV-058 to INV-061.
 
@@ -34,10 +34,14 @@ Approval inserts one `inventory_commitments` row of type `TRANSFER` per line, pi
 Before inserting, approval takes the shared stock locks (one advisory lock per `(warehouse, item)`, ascending item order, ADR-0007) and checks, all-or-nothing:
 
 - (a) item-level available-to-promise: usable physical stock minus every active commitment of any type covers the whole transfer for each item;
-- (b) the usable stock in each exact bucket named by the lines covers the lines in it;
+- (b) the usable stock in each exact bucket named by the lines, **less the active commitments already held on that exact bucket**, covers the lines in it (so two transfers cannot reserve the same batch, and a serial number cannot be reserved twice);
 - (c) for lines pinned to a funding source or project, that funded stock minus the commitments pinned to the same funding source/project covers the lines.
 
-A refusal (`BA030`) writes nothing. A commitment is a reservation: **no `inventory_entries` row is written and no stock moves in this slice**. Because requisition approval and issue posting already count every active commitment regardless of type, a transfer reservation reduces requisition available-to-promise and an issue cannot consume stock a transfer has reserved. Both directions are tested.
+A refusal (`BA030`) writes nothing. A commitment is a reservation: **no `inventory_entries` row is written and no stock moves in this slice**. Because requisition approval and issue posting already count every active commitment regardless of type, a transfer reservation reduces requisition available-to-promise and an issue cannot consume stock a transfer has reserved at item level. Both directions are tested.
+
+Item-level checks pass whenever another bucket of the same item holds stock, so an issue could still drain the exact batch a transfer reserved. Migration 0022 therefore re-creates `boa_issue_post` with a fifth check (e): after the issue, each exact bucket must still cover the TRANSFER commitments pinned to it. Requisition commitments are not bucket-pinned and are unaffected. The same gap exists in other consumers that read stock without commitments; slice 2 dispatch must apply the same exact-bucket rule.
+
+Approval also re-validates, under share locks, that both warehouses, every item, location, funding source and project are still active, so a reference deactivated after the draft was made blocks the reservation.
 
 ### 4. Evidence
 
@@ -54,13 +58,20 @@ No regional or federal rule text was located for this slice; the controlled docu
 - **T5 Cancellation after approval** needs the approver permission. Whether the original requester may withdraw an approved transfer is open.
 - **T6 Reservation expiry.** An approved transfer that is never dispatched holds its reservation until cancelled. No automatic expiry in slice 1; stale reservations are a reconciliation item (`boa-transfer-reconciliation`).
 
+- **T7 Source location.** A line with no source location means stock held with no location, matched exactly like any other bucket (the same rule as M6 issue lines). A line that names no location while the stock sits in a bin can be created but never approved; the error says the bucket must match exactly. Requiring a location at creation, or defining "no location" as "any location", is an owner/process choice.
+- **T8 Unsolicited incoming transfers.** Any preparer may create a transfer into any active warehouse, which then appears in that warehouse's list. Destination consent (T4) would address this.
+
+## Lock order (for slice 2; record in ADR-0007)
+
+Cancel takes only the transfer row lock, which is safe because releasing a reservation only raises available-to-promise. Approve takes the transfer row, then one advisory lock per `(warehouse, item)` in ascending item order. Issue post takes the issue row, then the same advisory locks. Dispatch must take the transfer row `FOR UPDATE` before its advisory locks, so a dispatch racing a cancel serialises on the transfer row and never half-consumes a commitment. No deadlock cycle exists among the current functions.
+
 ## Failure modes and tests
 
-`tests/transfers.test.ts` (26 tests) covers: role contents and the separation-of-duties rule; direct-write prohibition and function ACLs; create validation (malformed JSON, unknown fields, precision, tracking, inactive items, foreign locations, inactive or equal destinations); client-reference idempotency and conflict; submit needing the request reference and the right permission; the reserved bucket and no physical movement; maker-checker for both preparer and submitter; scope; reference and stale-version checks; refusal leaving nothing written; exact-bucket and funding-pinned checks; the two-way competition with requisitions and the issue-versus-transfer protection; a two-approver race for the last stock; cancel releasing and re-freeing stock; visibility to source and destination only; and immutability of lines, identity and commitments.
+`tests/transfers.test.ts` (32 tests) covers: role contents and the separation-of-duties rule; direct-write prohibition and function ACLs; create validation (malformed JSON, unknown fields, precision, tracking, inactive items, foreign locations, inactive or equal destinations); client-reference idempotency and conflict; submit needing the request reference and the right permission; the reserved bucket and no physical movement; maker-checker for both preparer and submitter; scope; reference and stale-version checks; refusal leaving nothing written; exact-bucket and funding-pinned checks; the two-way competition with requisitions and the issue-versus-transfer protection; a two-approver race for the last stock; cancel releasing and re-freeing stock; visibility to source and destination only; immutability of lines, identity, commitment buckets and terminal commitments; the two-transfer same-batch and same-serial double reservation; an issue draining a transfer-reserved batch; references deactivated before approval; and one generic answer for an unavailable destination (no warehouse enumeration).
 
 ## Consequences and next slices
 
 - Slice 2: dispatch (`WAREHOUSE → IN_TRANSIT`, consuming the commitment atomically, exact-bucket and ATP checks that treat the transfer's own commitment as secured, idempotent post) and destination receipt (`IN_TRANSIT → WAREHOUSE`, condition at receipt, discrepancy rows that stay open until resolved), plus dispatch/receipt hard-copy references. It also closes the open DEVELOPMENT_STATE item on ledger-leg visibility: `IN_TRANSIT` entries carry no warehouse, so destination users cannot yet see in-transit stock under the current entry policy.
 - Slice 3: HTTP API with idempotent create/dispatch/receive and the new SQLSTATE mappings (`BA029`, `BA030`).
 - Slice 4: screens (admin and the storekeeper app, offline class B) and reports (open and in-transit transfers, discrepancies).
-- Migration 0021 (tables, commitment link) and 0022 (security and functions) are not applied to any database. Rollback before any use: drop the two transfer tables, the `transfer_line_id` column and the three functions; restore `boa_enforce_role_separation` and `boa_guard_commitment_update` from 0020 and 0016. After a transfer exists, rollback is a forward fix, not a drop.
+- Migration 0021 (tables, commitment link) and 0022 (security and functions) are not applied to any database. Rollback before any use: drop the triggers and functions `boa_transfer_*`, `boa_can_read_transfer`, `boa_guard_transfer_header`, `boa_guard_transfer_line` and `boa_audit_transfer`; drop the two transfer tables and the `transfer_line_id` column; restore the `inventory_commitments_requisition_link` and `inventory_commitments_type_valid` constraints from 0015; restore `boa_enforce_role_separation`, `boa_guard_commitment_update` and `boa_issue_post` from their earlier definitions (0020, 0016, 0020); delete the transfer roles and permissions. After a transfer exists, rollback is a forward fix, not a drop.
