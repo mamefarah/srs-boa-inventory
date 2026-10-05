@@ -48,7 +48,8 @@ before(async () => {
   pool = appPool();
   fx = await ensureFixtures(admin);
   app = buildTestApp(pool).app;
-  uomId = (await admin.query(`INSERT INTO uoms (code, name, decimal_places) VALUES ('ISS-EA', 'Issue test unit (2 decimals)', 2) RETURNING id`)).rows[0].id;
+  const existingUom = await admin.query(`SELECT id FROM uoms WHERE code = 'ISS-EA'`);
+  uomId = existingUom.rowCount ? existingUom.rows[0].id : (await admin.query(`INSERT INTO uoms (code, name, decimal_places) VALUES ('ISS-EA', 'Issue test unit (2 decimals)', 2) RETURNING id`)).rows[0].id;
   categoryId = (await admin.query(`SELECT id FROM item_categories WHERE code = 'TST-CAT'`)).rows[0].id;
   locationId = (await admin.query(`SELECT l.id FROM warehouse_locations l WHERE l.warehouse_id = $1 AND l.code = 'BIN-1'`, [fx.warehouseA])).rows[0].id;
   custodianId = (await admin.query(`INSERT INTO custodians (custodian_type, display_name) VALUES ('EXTERNAL_PARTY', 'Issue test custodian') RETURNING id`)).rows[0].id;

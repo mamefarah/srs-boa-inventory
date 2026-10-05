@@ -69,7 +69,17 @@ Posting validates the idempotency key (8-100 safe characters) and a 64-hex reque
 
 ## Not in slice 1 (honest scope)
 
-HTTP API and idempotent post wrapper (`Idempotency-Key`, replay), screens (mobile and admin), **FEFO suggestion and override-with-reason (slice 1 is not FEFO-compliant: the caller chooses the exact bucket and nothing flags an earlier-expiring bucket)**, acknowledgement capture, issue reports and bin-card visibility, reversal of a posted issue (M10), closed-period check (M11), and offline behaviour (offline class B, PRD v4.0 Part A).
+screens (mobile and admin), **FEFO suggestion and override-with-reason (slice 1 is not FEFO-compliant: the caller chooses the exact bucket and nothing flags an earlier-expiring bucket)**, acknowledgement capture, issue reports and bin-card visibility, reversal of a posted issue (M10), closed-period check (M11), and offline behaviour (offline class B, PRD v4.0 Part A).
+
+## Slice 2: HTTP API (`server/routes/issues.ts`)
+
+`GET /api/issues`, `GET /api/issues/:id`, `POST /api/issues` (create), `POST /api/issues/:id/documents` (voucher or recipient acknowledgement), `POST /api/issues/:id/cancel`, `POST /api/issues/:id/post`.
+
+- Permissions: reads need any of `READ_ISSUES`, `PREPARE_ISSUES`, `POST_ISSUES`; create, documents need `PREPARE_ISSUES`; cancel needs prepare or post; post needs `POST_ISSUES`. Warehouse scope is enforced by RLS and the functions; another warehouse reads as not found.
+- **Create** is idempotent on an optional `clientRef`: the same reference with the same content returns the original issue (HTTP 200, `replayed: true`); different content is `409 IDEMPOTENCY_CONFLICT`. Parallel retries produce exactly one issue.
+- **Post** requires an `Idempotency-Key`. The key is claimed in `idempotency_records` in the same transaction as the posting, so a retry after a lost response replays the stored result (200) and never posts twice; the same key for different content is `409 IDEMPOTENCY_KEY_CONFLICT`; a refused post leaves no claim and no ledger row. `effectiveAt` is optional and defaults to the database clock, so application-server clock skew cannot cause a rejection.
+- Database codes map to stable errors: `BA026 → 422 ISSUE_INVALID`, `BA027 → 409 ISSUE_STOCK_CONFLICT`, `BA028 → 409 IDEMPOTENCY_CONFLICT`.
+- The API never computes stock; it validates shape, derives canonical request hashes and calls the functions.
 
 ## Migration and rollback
 
@@ -83,7 +93,7 @@ HTTP API and idempotent post wrapper (`Idempotency-Key`, replay), screens (mobil
 
 ## Verification
 
-`tests/issues.test.ts` (29 tests) and the existing 249: direct-write prohibition, function ACLs, create validation, idempotent create, voucher requirement, balanced posting, commitment consumption, partial issues, own-commitment rule, reserved-stock protection, exact-bucket stock, INTERNAL_CUSTODY, serial/batch/expiry, stale version, cancelled requisition, scope, immutability, cancellation and a concurrency race for the last stock.
+`tests/issues.test.ts` (29 database tests), `tests/http-issues.test.ts` (11 API tests) and the existing 249: direct-write prohibition, function ACLs, create validation, idempotent create, voucher requirement, balanced posting, commitment consumption, partial issues, own-commitment rule, reserved-stock protection, exact-bucket stock, INTERNAL_CUSTODY, serial/batch/expiry, stale version, cancelled requisition, scope, immutability, cancellation and a concurrency race for the last stock.
 
 ## Supersedes / Superseded by
 

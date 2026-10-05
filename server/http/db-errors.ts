@@ -28,6 +28,7 @@ const UNIQUE_CODES: Record<string, [string, string]> = {
   document_references_entity_type_number_unique: ['DUPLICATE_DOCUMENT_REFERENCE', 'This document reference is already recorded for this transaction'],
   supplier_return_lines_receipt_line_unique: ['DUPLICATE_RETURN_LINE', 'This receipt line is already included in this supplier return'],
   item_categories_code_unique: ['DUPLICATE_CATEGORY_CODE', 'A category with this code already exists'],
+  issue_headers_client_ref_unique: ['DUPLICATE_CLIENT_REF', 'This client reference was already used for another issue'],
 };
 
 /** Check-constraint names → client messages (constraint names are never echoed). */
@@ -64,6 +65,12 @@ const CHECK_MESSAGES: Record<string, string> = {
   receipt_lines_outcomes_finite: 'Inspection outcome quantities must be finite numbers',
   receipt_lines_outcomes_scale: 'Inspection outcome quantities may have at most 6 decimal places and are never rounded',
   document_references_entity_id_not_blank: 'Document entity reference is required',
+  issue_headers_recipient_not_blank: 'Recipient name is required',
+  issue_headers_custody_requires_custodian: 'Handing property to internal custody requires a named custodian',
+  issue_lines_quantity_positive: 'Issue quantity must be greater than zero',
+  issue_lines_quantity_finite: 'Issue quantity must be a finite number',
+  issue_lines_quantity_scale: 'Issue quantity may have at most 6 decimal places and is never rounded',
+  issue_lines_quantity_range: 'Issue quantity is too large',
   document_references_document_type_not_blank: 'Document type is required',
   document_references_document_number_not_blank: 'Document number/reference is required',
   receipt_headers_source_party_not_blank: 'Supplier/source name is required',
@@ -137,6 +144,12 @@ export function mapDbError(err: unknown): unknown {
       return new HttpError(422, 'REQUISITION_INVALID', controlMessage(e, 'The requisition is not valid for this action'));
     case 'BA025':
       return new HttpError(409, 'INSUFFICIENT_AVAILABLE_TO_PROMISE', controlMessage(e, 'The approved quantity exceeds available-to-promise stock'));
+    case 'BA026':
+      return new HttpError(422, 'ISSUE_INVALID', controlMessage(e, 'The issue is not valid for this action'));
+    case 'BA027':
+      return new HttpError(409, 'ISSUE_STOCK_CONFLICT', controlMessage(e, 'The issue exceeds the approved quantity, the commitment or the usable stock available'));
+    case 'BA028':
+      return new HttpError(409, 'IDEMPOTENCY_CONFLICT', controlMessage(e, 'This reference was already used with different content'));
     case '23505': {
       const known = e.constraint ? UNIQUE_CODES[e.constraint] : undefined;
       return known ? new HttpError(409, known[0], known[1]) : new HttpError(409, 'DUPLICATE', 'A record with these values already exists');
