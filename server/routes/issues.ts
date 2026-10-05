@@ -264,6 +264,25 @@ export function issueRoutes({ db, logger, authenticated }: RouteDeps) {
     }
   });
 
+  // Active custodians for the INTERNAL_CUSTODY handoff picker (read-only reference data).
+  router.get('/issues/custodians', ...authenticated, canRead, async (_req, res, next) => {
+    try {
+      const rows = await run(
+        res,
+        (tx) =>
+          tx
+            .select({ id: custodians.id, custodianType: custodians.custodianType, displayName: custodians.displayName })
+            .from(custodians)
+            .where(eq(custodians.isActive, true))
+            .orderBy(asc(custodians.displayName)),
+        { readOnly: true },
+      );
+      res.json({ data: rows });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get('/issues/:id', ...authenticated, canRead, async (req, res, next) => {
     try {
       const id = idOf(req.params);
