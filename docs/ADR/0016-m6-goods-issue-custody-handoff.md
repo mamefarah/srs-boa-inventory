@@ -69,7 +69,17 @@ Posting validates the idempotency key (8-100 safe characters) and a 64-hex reque
 
 ## Not in slice 1 (honest scope)
 
-HTTP API and idempotent post wrapper (`Idempotency-Key`, replay), screens (mobile and admin), **FEFO suggestion and override-with-reason (slice 1 is not FEFO-compliant: the caller chooses the exact bucket and nothing flags an earlier-expiring bucket)**, acknowledgement capture, issue reports and bin-card visibility, reversal of a posted issue (M10), closed-period check (M11), and offline behaviour (offline class B, PRD v4.0 Part A).
+screens (mobile and admin), **FEFO suggestion and override-with-reason (slice 1 is not FEFO-compliant: the caller chooses the exact bucket and nothing flags an earlier-expiring bucket)**, acknowledgement capture, issue reports and bin-card visibility, reversal of a posted issue (M10), closed-period check (M11), and offline behaviour (offline class B, PRD v4.0 Part A).
+
+## Slice 2: HTTP API (`server/routes/issues.ts`)
+
+`GET /api/issues`, `GET /api/issues/:id`, `POST /api/issues` (create), `POST /api/issues/:id/documents` (voucher or recipient acknowledgement), `POST /api/issues/:id/cancel`, `POST /api/issues/:id/post`.
+
+- Permissions: reads need any of `READ_ISSUES`, `PREPARE_ISSUES`, `POST_ISSUES`; create, documents need `PREPARE_ISSUES`; cancel needs prepare or post; post needs `POST_ISSUES`. Warehouse scope is enforced by RLS and the functions; another warehouse reads as not found.
+- **Create** is idempotent on an optional `clientRef`: the same reference with the same content returns the original issue (HTTP 200, `replayed: true`); different content is `409 IDEMPOTENCY_CONFLICT`. Parallel retries produce exactly one issue.
+- **Post** requires an `Idempotency-Key`. The key is claimed in `idempotency_records` in the same transaction as the posting, so a retry after a lost response replays the stored result (200) and never posts twice; the same key for different content is `409 IDEMPOTENCY_KEY_CONFLICT`; a refused post leaves no claim and no ledger row. `effectiveAt` is optional and defaults to the database clock, so application-server clock skew cannot cause a rejection.
+- Database codes map to stable errors: `BA026 → 422 ISSUE_INVALID`, `BA027 → 409 ISSUE_STOCK_CONFLICT`, `BA028 → 409 IDEMPOTENCY_CONFLICT`.
+- The API never computes stock; it validates shape, derives canonical request hashes and calls the functions.
 
 ## Migration and rollback
 
@@ -83,8 +93,26 @@ HTTP API and idempotent post wrapper (`Idempotency-Key`, replay), screens (mobil
 
 ## Verification
 
-`tests/issues.test.ts` (29 tests) and the existing 249: direct-write prohibition, function ACLs, create validation, idempotent create, voucher requirement, balanced posting, commitment consumption, partial issues, own-commitment rule, reserved-stock protection, exact-bucket stock, INTERNAL_CUSTODY, serial/batch/expiry, stale version, cancelled requisition, scope, immutability, cancellation and a concurrency race for the last stock.
+`tests/issues.test.ts` (29 database tests), `tests/http-issues.test.ts` (11 API tests) and the existing 249: direct-write prohibition, function ACLs, create validation, idempotent create, voucher requirement, balanced posting, commitment consumption, partial issues, own-commitment rule, reserved-stock protection, exact-bucket stock, INTERNAL_CUSTODY, serial/batch/expiry, stale version, cancelled requisition, scope, immutability, cancellation and a concurrency race for the last stock.
 
 ## Supersedes / Superseded by
 
 None.
+
+## Slice 3: admin screens (`frontend/src/Issues.tsx`)
+
+Implemented: issue list with status filter; create from a DECIDED requisition (approved / remaining-to-issue / quantity-now per line, remaining computed with exact decimal arithmetic from the open commitment); EXTERNAL or INTERNAL_CUSTODY destination with a custodian picker (`GET /api/issues/custodians`, read-only, issue permission holders only); detail with lines, hard-copy references, add-voucher, confirm-then-post (Idempotency-Key kept across a retry after a network failure and the issue reloaded so the true outcome is shown), cancel with reason, add recipient acknowledgement after posting, and a visible "acknowledgement pending" notice. States are distinguished by icon, label and border shape, never colour alone. Create sends a stable `clientRef`.
+
+Deliberately not in this slice: FEFO suggestion and override reason, the mobile storekeeper app screens (PRD v4.0 offline class B), and the pending-acknowledgement report. FEFO needs the per-bucket availability read that slice 4 adds with bin-card visibility; the mobile queue needs the offline command envelope and is a separate milestone track. The server remains the only enforcement point; the UI cannot widen access.
+
+## Slice 4: stock card, FEFO buckets, pending-acknowledgement report
+
+All read-only; no migration and no new write path.
+
+- `GET /api/stock/card?warehouseId&itemId` (READ_LEDGER + warehouse scope): every posted entry in warehouse custody for one item in time order, with a running balance computed by the database and never stored. It needs READ_LEDGER because `inventory_transactions` row-level security already requires it; the policy was deliberately not widened for storekeepers.
+- `GET /api/stock/buckets?warehouseId&itemId` (READ_STOCK + scope): issuable on-hand per exact bucket (location, batch, expiry, serial, funding, project), earliest expiry first, no expiry last, empty buckets omitted. Decision support only: `boa_issue_post` still validates the exact bucket it is given.
+- `GET /api/issues/pending-acknowledgement`: POSTED issues with no recipient-acknowledgement reference, oldest first, scope-filtered, with days since posting.
+- The issue form now lists the FEFO-ordered buckets per line, defaults to the first, and requires a reason (recorded in the line notes as `FEFO override: ...`) when a later bucket is chosen. Quantity is checked against the chosen bucket. If buckets cannot be read, the form falls back to the previous behaviour and the server decides.
+- A Stock card tab shows the bin card; the Issues tab can filter to issues awaiting acknowledgement.
+
+Limits: the FEFO override reason is stored in free-text notes, not a structured column; a structured field would need a migration and an owner decision on whether FEFO is mandatory for the Bureau (not found in the controlled documents). The mobile storekeeper screens (offline class B) remain a separate track.

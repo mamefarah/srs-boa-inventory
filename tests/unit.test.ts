@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import { ConfigError, loadConfig, parseCorsOrigins } from '../server/config.ts';
 import { createTestVerifier } from '../server/auth/test-verifier.ts';
 import { canonicalJson, requestHash } from '../server/idempotency/idempotency.ts';
+import { scaled, unscaled } from '../frontend/src/decimal.ts';
 import { assertSafeTestDatabase, UnsafeTestDatabaseError } from '../scripts/test-db-guard.ts';
 
 const baseEnv = {
@@ -98,5 +99,15 @@ describe('canonical request hashing', () => {
   });
   it('rejects non-finite numbers', () => {
     assert.throws(() => canonicalJson({ q: Number.NaN }));
+  });
+});
+
+describe('frontend exact decimal helpers (issue remaining quantity)', () => {
+  it('subtracts quantity strings exactly without floating point error', () => {
+    assert.equal(unscaled(scaled('0.3') - scaled('0.1')), '0.2');
+    assert.equal(unscaled(scaled('10') - scaled('2.5')), '7.5');
+    assert.equal(unscaled(scaled('5') - scaled('5')), '0');
+    assert.equal(unscaled(scaled('100.000001') - scaled('0.000001')), '100');
+    assert.equal(unscaled(scaled('1') - scaled('2')), '-1');
   });
 });

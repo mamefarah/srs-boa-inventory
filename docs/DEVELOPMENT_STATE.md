@@ -19,7 +19,7 @@
 | Warehouse-admin directory fix | MERGED (PR #17) | Local dev port fix + `SYSTEM_ADMIN` warehouse-tab lockout fix (INV-029) |
 | M5 Requisition + approval + optional commitment | MERGED (PR #19) | Complete; see ADR-0010 |
 | Post-M5 fix | MERGED (PR #20) | One decision per line (DB + API); committed/ATP on `/api/stock`; migration 0017 |
-| **M6 Issue + custody handoff** | **IN PROGRESS: slice 1 (database layer)** | Migrations 0019/0020, `boa_issue_create/cancel/post`, 29 new tests; API, screens and reports are later slices; see ADR-0016 |
+| **M6 Issue + custody handoff** | **IN PROGRESS: slices 1-4 (database layer, HTTP API, admin screens, stock card/FEFO/pending-ack reads)** | Migrations 0019/0020, `boa_issue_*`, `/api/issues`, 40 new tests; mobile storekeeper screens and further reports are later; see ADR-0016 |
 | M7–M16 | Planned | One milestone branch at a time |
 
 ## Current main baseline
