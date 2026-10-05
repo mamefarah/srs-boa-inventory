@@ -68,6 +68,9 @@ export const USERS = {
   reqApproverA: { uid: 'req-approver-a', roles: ['REQUISITION_APPROVER'], warehouses: ['TWH-A'], active: true },
   reqApproverB: { uid: 'req-approver-b', roles: ['REQUISITION_APPROVER'], warehouses: ['TWH-B'], active: true },
   reqBothA: { uid: 'req-both-a', roles: ['REQUESTER', 'REQUISITION_APPROVER'], warehouses: ['TWH-A'], active: true },
+  // M6 issues (technical role; carries no approval authority).
+  issueOpA: { uid: 'issue-op-a', roles: ['ISSUE_OPERATOR'], warehouses: ['TWH-A'], active: true },
+  issueOpB: { uid: 'issue-op-b', roles: ['ISSUE_OPERATOR'], warehouses: ['TWH-B'], active: true },
 } as const;
 
 export interface Fixture {

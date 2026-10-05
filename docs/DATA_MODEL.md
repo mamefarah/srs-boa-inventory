@@ -141,8 +141,9 @@ Commitments reduce available-to-promise but do not change physical on-hand.
 - requisition_lines (`approved_quantity` is written only by the decide function)
 - inventory_commitments
 - requisition_approvals (not implemented in M5; reserved for multi-level approval if a controlling procedure requires it)
-- issues
-- issue_lines
+- issue_headers (M6 slice 1: DRAFT/POSTED/CANCELLED; destination EXTERNAL or INTERNAL_CUSTODY; custodian, recipient, handover location; written only by `boa_issue_*` functions)
+- issue_lines (one requisition line each; item/UOM copied from it; exact stock bucket dimensions)
+- document_references with entity type `ISSUE` (hard-copy issue voucher and recipient acknowledgement details)
 
 ## Transfer
 - transfers
